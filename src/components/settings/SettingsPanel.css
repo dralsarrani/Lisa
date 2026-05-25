@@ -1,0 +1,155 @@
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  max-height: 100%;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-section-label {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 2px;
+}
+
+/* ─── Mode grid ─────────────────────────────────────────────────────────────────── */
+.settings-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+
+.settings-mode-btn {
+  padding: 5px 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.settings-mode-btn:hover {
+  border-color: var(--border-bright);
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+}
+
+.settings-mode-active {
+  border-color: var(--color-accent) !important;
+  color: var(--color-accent) !important;
+  background: var(--color-accent-dim) !important;
+}
+
+/* ─── Mode detail ───────────────────────────────────────────────────────────────── */
+.settings-mode-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.settings-field-label {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+
+.settings-field-value {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.settings-field-desc {
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+
+/* ─── Toggles ───────────────────────────────────────────────────────────────────── */
+.settings-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.settings-toggle-row:last-child {
+  border-bottom: none;
+}
+
+.settings-toggle-row-disabled {
+  opacity: 0.35;
+}
+
+.settings-toggle-label {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+.settings-toggle {
+  padding: 2px 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 3px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  letter-spacing: 0.06em;
+}
+
+.settings-toggle-on {
+  background: rgba(34,197,94,0.12);
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+
+.settings-coming-soon {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--text-dim);
+  letter-spacing: 0.06em;
+}
+
+/* ─── Build info ────────────────────────────────────────────────────────────────── */
+.settings-build-info {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}

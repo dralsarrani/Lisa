@@ -1,0 +1,116 @@
+.runtime-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 0;
+}
+
+.runtime-hint {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.runtime-health {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ─── Grid fields ───────────────────────────────────────────────────────────────── */
+.runtime-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.runtime-field {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.runtime-field-wide {
+  grid-column: 1 / -1;
+}
+
+.runtime-field-label {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.runtime-field-value {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+.runtime-field-mono {
+  font-size: 0.6rem;
+}
+
+.runtime-ok      { color: var(--color-success) !important; }
+.runtime-offline { color: var(--color-warning) !important; }
+
+/* ─── Services ──────────────────────────────────────────────────────────────────── */
+.runtime-services {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.runtime-services-label {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.runtime-service-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+}
+
+.runtime-service-row:last-child {
+  border-bottom: none;
+}
+
+.runtime-service-name {
+  flex: 1;
+  color: var(--text-secondary);
+}
+
+.runtime-service-status {
+  color: var(--text-muted);
+  font-size: 0.6rem;
+}
+
+/* ─── Footer ────────────────────────────────────────────────────────────────────── */
+.runtime-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.runtime-refresh-btn {
+  padding: 4px 10px;
+  font-size: 0.58rem;
+}

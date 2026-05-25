@@ -1,0 +1,149 @@
+.command-input-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.command-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.command-form:focus-within {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-glow), 0 0 12px var(--color-accent-dim);
+}
+
+.command-prefix {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.command-prefix-text {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--color-accent);
+  opacity: 0.7;
+}
+
+.command-prefix-chevron {
+  font-size: 1.2rem;
+  color: var(--color-accent);
+  opacity: 0.5;
+  line-height: 1;
+}
+
+.command-field {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  padding: 8px 0;
+}
+
+.command-field::placeholder {
+  color: var(--text-muted);
+  font-weight: 300;
+}
+
+.command-field:disabled {
+  opacity: 0.5;
+}
+
+.command-submit {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+}
+
+.command-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--color-accent);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Response ─────────────────────────────────────────────────────────────────── */
+.command-response {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  animation: fadeInUp 0.15s ease forwards;
+}
+
+.command-response-emergency {
+  border-left-color: var(--color-critical);
+  background: rgba(220, 38, 38, 0.08);
+  color: var(--color-critical);
+}
+
+.command-response-icon {
+  color: var(--color-accent);
+  font-size: 1rem;
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+
+.command-response-emergency .command-response-icon {
+  color: var(--color-critical);
+}
+
+/* ─── Suggestions ──────────────────────────────────────────────────────────────── */
+.command-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.command-suggestion-chip {
+  padding: 3px 10px;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.command-suggestion-chip:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: var(--color-accent-glow);
+}
+
+.command-suggestion-chip:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}

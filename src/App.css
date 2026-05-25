@@ -1,0 +1,241 @@
+/* ─── App loading ───────────────────────────────────────────────────────────────── */
+.app-loading {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  background: var(--bg-base);
+}
+
+.app-loading-orb {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #60c8ff, #0050a0);
+  box-shadow: 0 0 30px rgba(26,159,255,0.5);
+  animation: orb-breathe 2s ease-in-out infinite;
+}
+
+.app-loading-text {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* ─── Root layout ───────────────────────────────────────────────────────────────── */
+.app-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-base);
+  overflow: hidden;
+  transition: background 0.3s ease;
+}
+
+.app-emergency {
+  background: #06020a;
+}
+
+/* ─── Body: two-column layout ───────────────────────────────────────────────────── */
+.app-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 12px;
+  padding: 12px;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ─── Left column ────────────────────────────────────────────────────────────────── */
+.app-left-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ─── Orb panel ──────────────────────────────────────────────────────────────────── */
+.app-orb-panel {
+  flex-shrink: 0;
+}
+
+.app-orb-body {
+  padding: 28px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  min-height: 280px;
+}
+
+.orb-mode-label {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+/* ─── Emergency overlay ──────────────────────────────────────────────────────────── */
+.emergency-overlay {
+  position: absolute;
+  bottom: 16px;
+  left: 0; right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  pointer-events: none;
+}
+
+.emergency-overlay-text {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: var(--color-critical);
+  animation: pulse 0.5s ease-in-out infinite;
+}
+
+.emergency-overlay-sub {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: rgba(239,68,68,0.6);
+  letter-spacing: 0.06em;
+}
+
+.emergency-overlay-hint {
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+  margin-top: 4px;
+}
+
+/* ─── Command panel ──────────────────────────────────────────────────────────────── */
+.app-command-panel {
+  flex-shrink: 0;
+}
+
+.app-command-body {
+  overflow: visible;
+}
+
+/* ─── Pending approvals alert ────────────────────────────────────────────────────── */
+.app-pending-alert {
+  flex-shrink: 0;
+  border-color: rgba(245,158,11,0.3) !important;
+  background: rgba(245,158,11,0.04) !important;
+}
+
+.pending-alert-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+}
+
+.pending-alert-icon {
+  color: var(--color-warning);
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.pending-alert-text {
+  flex: 1;
+  font-size: 0.72rem;
+  color: var(--color-warning);
+}
+
+.pending-alert-btn {
+  padding: 4px 12px;
+  font-size: 0.6rem;
+}
+
+/* ─── Right column / tab panel ───────────────────────────────────────────────────── */
+.app-right-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-tab-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ─── Tabs ────────────────────────────────────────────────────────────────────────── */
+.app-tabs {
+  display: flex;
+  gap: 1px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.app-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.app-tab:hover:not(.app-tab-active) {
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+}
+
+.app-tab-active {
+  color: var(--color-accent);
+  border-bottom-color: var(--color-accent);
+  background: var(--bg-panel);
+}
+
+.app-tab-badge {
+  background: var(--color-warning);
+  color: #000;
+  border-radius: 3px;
+  font-size: 0.55rem;
+  padding: 1px 4px;
+  font-weight: 700;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.app-tab-count {
+  background: var(--border-subtle);
+  color: var(--text-dim);
+  border-radius: 3px;
+  font-size: 0.55rem;
+  padding: 1px 4px;
+}
+
+/* ─── Tab content ────────────────────────────────────────────────────────────────── */
+.app-tab-content {
+  flex: 1;
+  padding: 12px;
+  overflow-y: auto;
+  min-height: 0;
+}
