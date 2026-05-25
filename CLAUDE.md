@@ -2,6 +2,26 @@
 
 
 
+\## ECC Discipline Layer
+
+
+
+This project may use ECC for Claude Code workflow discipline, planning, review, security checks, and verification.
+
+
+
+Read `.claude/ECC\_LISA\_USAGE.md` before using ECC workflows.
+
+
+
+ECC is subordinate to Lisa's PRD, Lisa safety rules, and this CLAUDE.md. If ECC guidance conflicts with Lisa's product/safety model, Lisa rules win.
+
+
+
+Do not install ECC full/manual profiles into this project after the plugin is installed. Do not duplicate hooks or skills. Use only project-local selected ECC rules unless explicitly approved.
+
+
+
 \## Project Identity
 
 
