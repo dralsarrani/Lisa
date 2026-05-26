@@ -1,4 +1,4 @@
-/* ─── App loading ───────────────────────────────────────────────────────────────── */
+/* ── Loading ──────────────────────────────────────────────────────────────── */
 .app-loading {
   height: 100%;
   display: flex;
@@ -10,54 +10,61 @@
 }
 
 .app-loading-orb {
-  width: 64px;
-  height: 64px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #60c8ff, #0050a0);
-  box-shadow: 0 0 30px rgba(26,159,255,0.5);
+  background: radial-gradient(circle at 35% 30%, #60c8ff, #0050a0);
+  box-shadow: 0 0 40px rgba(26,159,255,0.55);
   animation: orb-breathe 2s ease-in-out infinite;
+}
+
+@keyframes orb-breathe {
+  0%, 100% { transform: scale(0.95); }
+  50%       { transform: scale(1.05); }
 }
 
 .app-loading-text {
   font-family: var(--font-mono);
-  font-size: 0.65rem;
-  letter-spacing: 0.2em;
+  font-size: 0.6rem;
+  letter-spacing: 0.24em;
   color: var(--text-muted);
   text-transform: uppercase;
-  animation: pulse 1.5s ease-in-out infinite;
+  animation: pulse 2s ease-in-out infinite;
 }
 
-/* ─── Root layout ───────────────────────────────────────────────────────────────── */
+/* ── Root layout ──────────────────────────────────────────────────────────── */
 .app-root {
   display: flex;
   flex-direction: column;
   height: 100%;
   background:
-    radial-gradient(ellipse 55% 45% at 22% 55%, rgba(8, 25, 70, 0.55) 0%, transparent 70%),
-    radial-gradient(ellipse 40% 35% at 78% 45%, rgba(5, 15, 50, 0.40) 0%, transparent 70%),
+    radial-gradient(ellipse 55% 50% at 18% 62%, rgba(6, 22, 72, 0.72) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 35% at 82% 38%, rgba(4, 14, 54, 0.52) 0%, transparent 70%),
+    radial-gradient(ellipse 25% 22% at 50% 100%, rgba(2, 6, 24, 0.92) 0%, transparent 60%),
     var(--bg-base);
   overflow: hidden;
-  transition: background 0.4s ease;
+  transition: background 0.5s ease;
 }
 
 .app-emergency {
   background:
-    radial-gradient(ellipse 50% 40% at 22% 55%, rgba(40, 5, 5, 0.50) 0%, transparent 70%),
-    #04020c;
+    radial-gradient(ellipse 52% 42% at 20% 58%, rgba(40, 4, 4, 0.58) 0%, transparent 70%),
+    radial-gradient(ellipse 30% 25% at 80% 40%, rgba(24, 2, 2, 0.38) 0%, transparent 70%),
+    #030108;
 }
 
-/* ─── Body: two-column layout ───────────────────────────────────────────────────── */
+/* ── Body: presence | workspace ───────────────────────────────────────────── */
 .app-body {
   flex: 1;
   display: grid;
-  grid-template-columns: 340px 1fr;
+  grid-template-columns: 352px 1fr;
   gap: 12px;
-  padding: 12px;
+  padding: 10px 14px 14px;
   overflow: hidden;
   min-height: 0;
 }
 
-/* ─── Left column ────────────────────────────────────────────────────────────────── */
+/* ── Left column — Lisa presence ──────────────────────────────────────────── */
 .app-left-col {
   display: flex;
   flex-direction: column;
@@ -66,32 +73,57 @@
   min-height: 0;
 }
 
-/* ─── Orb panel ──────────────────────────────────────────────────────────────────── */
-.app-orb-panel {
+/* ── Orb chamber — frameless presence surface ─────────────────────────────── */
+.orb-chamber {
   flex-shrink: 0;
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(ellipse 85% 62% at 50% 44%, rgba(16, 55, 155, 0.055) 0%, transparent 72%),
+    rgba(5, 9, 21, 0.68);
+  border: 1px solid rgba(38, 88, 178, 0.14);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.52), inset 0 1px 0 rgba(255,255,255,0.028);
+  position: relative;
+  overflow: hidden;
 }
 
+.orb-chamber::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255,255,255,0.022) 0%, transparent 38%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.orb-chamber-mode {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.49rem;
+  letter-spacing: 0.22em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  padding: 12px 0 0;
+}
+
+/* ── Orb body ─────────────────────────────────────────────────────────────── */
 .app-orb-body {
-  padding: 28px 20px 24px;
+  position: relative;
+  z-index: 1;
+  padding: 18px 20px 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  position: relative;
-  min-height: 280px;
-  /* Subtle radial glow — orb illuminates its container */
-  background: radial-gradient(ellipse 70% 55% at 50% 45%, rgba(26, 100, 255, 0.035) 0%, transparent 70%);
+  min-height: 268px;
+  background: radial-gradient(ellipse 62% 48% at 50% 42%, rgba(18, 85, 220, 0.038) 0%, transparent 70%);
 }
 
-.orb-mode-label {
-  font-family: var(--font-mono);
-  font-size: 0.55rem;
-  letter-spacing: 0.1em;
-  color: var(--text-muted);
-  text-transform: uppercase;
-}
-
-/* ─── Emergency overlay — flows below orb, no absolute positioning ───────────────── */
+/* ── Emergency overlay ────────────────────────────────────────────────────── */
 .emergency-overlay {
   display: flex;
   flex-direction: column;
@@ -103,69 +135,81 @@
 
 .emergency-overlay-text {
   font-family: var(--font-mono);
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.18em;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
   color: var(--color-critical);
-  text-shadow: 0 0 12px rgba(220, 38, 38, 0.5);
+  text-shadow: 0 0 18px rgba(220, 38, 38, 0.65);
 }
 
 .emergency-overlay-sub {
   font-family: var(--font-mono);
-  font-size: 0.60rem;
-  color: rgba(239, 68, 68, 0.55);
-  letter-spacing: 0.07em;
+  font-size: 0.57rem;
+  color: rgba(239, 68, 68, 0.48);
+  letter-spacing: 0.06em;
 }
 
 .emergency-overlay-hint {
   font-family: var(--font-mono);
-  font-size: 0.56rem;
+  font-size: 0.52rem;
   color: var(--text-muted);
   letter-spacing: 0.04em;
   margin-top: 5px;
+  opacity: 0.65;
 }
 
-/* ─── Command panel ──────────────────────────────────────────────────────────────── */
-.app-command-panel {
+/* ── Command rail — primary interaction surface ───────────────────────────── */
+.command-rail {
   flex-shrink: 0;
+  background: rgba(4, 8, 18, 0.90);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  padding: 14px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.022);
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
 }
 
-.app-command-body {
-  overflow: visible;
+.command-rail:focus-within {
+  border-color: rgba(26, 159, 255, 0.38);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.42), 0 0 0 1px rgba(26,159,255,0.07), inset 0 1px 0 rgba(255,255,255,0.022);
 }
 
-/* ─── Pending approvals alert ────────────────────────────────────────────────────── */
+/* ── Pending approval alert ───────────────────────────────────────────────── */
 .app-pending-alert {
   flex-shrink: 0;
-  border-color: rgba(245,158,11,0.3) !important;
-  background: rgba(245,158,11,0.04) !important;
+  border-color: rgba(245,158,11,0.22) !important;
+  background: rgba(245,158,11,0.038) !important;
 }
 
 .pending-alert-content {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 14px;
+  padding: 9px 14px;
 }
 
 .pending-alert-icon {
   color: var(--color-warning);
-  font-size: 0.9rem;
+  font-size: 0.82rem;
   flex-shrink: 0;
 }
 
 .pending-alert-text {
   flex: 1;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   color: var(--color-warning);
+  font-family: var(--font-mono);
+  letter-spacing: 0.03em;
 }
 
 .pending-alert-btn {
   padding: 4px 12px;
-  font-size: 0.6rem;
+  font-size: 0.57rem;
 }
 
-/* ─── Right column / tab panel ───────────────────────────────────────────────────── */
+/* ── Right column — workspace ─────────────────────────────────────────────── */
 .app-right-col {
   display: flex;
   flex-direction: column;
@@ -173,37 +217,44 @@
   overflow: hidden;
 }
 
+/* ── Tab panel — workspace surface ───────────────────────────────────────── */
 .app-tab-panel {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-panel);
 }
 
-/* ─── Tabs ────────────────────────────────────────────────────────────────────────── */
+/* ── Tab bar ──────────────────────────────────────────────────────────────── */
 .app-tabs {
   display: flex;
   gap: 0;
-  background: rgba(7, 12, 24, 0.90);
+  background: linear-gradient(180deg, rgba(255,255,255,0.016) 0%, transparent 100%);
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
-  padding: 0 4px;
+  padding: 0 6px;
 }
 
 .app-tab {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 11px 18px;
+  padding: 10px 15px;
   background: transparent;
   border: none;
   color: var(--text-dim);
   font-family: var(--font-mono);
-  font-size: 0.63rem;
-  letter-spacing: 0.08em;
+  font-size: 0.59rem;
+  letter-spacing: 0.10em;
   text-transform: uppercase;
   cursor: pointer;
-  border-bottom: 2px solid transparent;
+  border-bottom: 1.5px solid transparent;
   margin-bottom: -1px;
   transition: all var(--transition-fast);
   white-space: nowrap;
@@ -211,21 +262,20 @@
 
 .app-tab:hover:not(.app-tab-active) {
   color: var(--text-secondary);
-  background: rgba(255,255,255,0.025);
+  background: rgba(255,255,255,0.018);
 }
 
 .app-tab-active {
   color: var(--color-accent);
   border-bottom-color: var(--color-accent);
-  background: rgba(26, 159, 255, 0.04);
-  text-shadow: 0 0 20px rgba(26,159,255,0.4);
+  background: rgba(26, 159, 255, 0.038);
 }
 
 .app-tab-badge {
   background: var(--color-warning);
   color: #000;
   border-radius: 3px;
-  font-size: 0.55rem;
+  font-size: 0.5rem;
   padding: 1px 4px;
   font-weight: 700;
   animation: pulse 1.5s ease-in-out infinite;
@@ -235,14 +285,14 @@
   background: var(--border-subtle);
   color: var(--text-dim);
   border-radius: 3px;
-  font-size: 0.55rem;
+  font-size: 0.5rem;
   padding: 1px 4px;
 }
 
-/* ─── Tab content ────────────────────────────────────────────────────────────────── */
+/* ── Tab content ──────────────────────────────────────────────────────────── */
 .app-tab-content {
   flex: 1;
-  padding: 12px;
+  padding: 14px;
   overflow-y: auto;
   min-height: 0;
 }

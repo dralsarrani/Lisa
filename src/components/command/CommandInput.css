@@ -1,29 +1,31 @@
+/* ── Command container ─────────────────────────────────────────────────────── */
 .command-input-container {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 9px;
 }
 
+/* ── Command form — primary interaction rail ───────────────────────────────── */
 .command-form {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 4px 4px 14px;
-  background: rgba(12, 21, 36, 0.85);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
+  padding: 5px 5px 5px 14px;
+  background: rgba(8, 14, 28, 0.90);
+  border: 1px solid rgba(28, 98, 200, 0.28);
+  border-radius: var(--radius-md);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-  backdrop-filter: blur(6px);
 }
 
 .command-form:focus-within {
-  border-color: var(--color-accent);
+  border-color: rgba(26, 159, 255, 0.52);
   box-shadow:
-    0 0 0 1px rgba(26,159,255,0.15),
-    0 0 18px rgba(26,159,255,0.12),
-    inset 0 0 12px rgba(26,159,255,0.04);
+    0 0 0 1px rgba(26,159,255,0.10),
+    0 0 20px rgba(26,159,255,0.10),
+    inset 0 0 14px rgba(26,159,255,0.03);
 }
 
+/* ── Prompt prefix ─────────────────────────────────────────────────────────── */
 .command-prefix {
   display: flex;
   align-items: center;
@@ -33,20 +35,21 @@
 
 .command-prefix-text {
   font-family: var(--font-mono);
-  font-size: 0.6rem;
+  font-size: 0.58rem;
   font-weight: 600;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   color: var(--color-accent);
-  opacity: 0.7;
+  opacity: 0.65;
 }
 
 .command-prefix-chevron {
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   color: var(--color-accent);
-  opacity: 0.5;
+  opacity: 0.45;
   line-height: 1;
 }
 
+/* ── Input field ───────────────────────────────────────────────────────────── */
 .command-field {
   flex: 1;
   background: transparent;
@@ -54,32 +57,44 @@
   outline: none;
   color: var(--text-primary);
   font-family: var(--font-mono);
-  font-size: 0.82rem;
-  padding: 8px 0;
+  font-size: 0.84rem;
+  padding: 9px 0;
+  letter-spacing: 0.01em;
 }
 
 .command-field::placeholder {
   color: var(--text-muted);
   font-weight: 300;
+  font-size: 0.78rem;
 }
 
-.command-field:disabled {
-  opacity: 0.5;
-}
+.command-field:disabled { opacity: 0.45; }
 
+/* ── Send button ───────────────────────────────────────────────────────────── */
 .command-submit {
   flex-shrink: 0;
-  padding: 6px 14px;
-  font-size: 0.6rem;
-  letter-spacing: 0.12em;
+  padding: 7px 16px;
+  font-size: 0.59rem;
+  letter-spacing: 0.14em;
+  border-radius: var(--radius-md);
+  background: var(--color-accent-dim);
+  border-color: rgba(26,159,255,0.45);
+  color: var(--color-accent);
 }
 
+.command-submit:hover:not(:disabled) {
+  background: rgba(26,159,255,0.20);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 10px rgba(26,159,255,0.12);
+}
+
+/* ── Spinner ───────────────────────────────────────────────────────────────── */
 .command-spinner {
   display: inline-block;
   width: 10px;
   height: 10px;
-  border: 2px solid var(--color-accent);
-  border-top-color: transparent;
+  border: 1.5px solid rgba(26,159,255,0.3);
+  border-top-color: var(--color-accent);
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
 }
@@ -88,40 +103,40 @@
   to { transform: rotate(360deg); }
 }
 
-/* ─── Response ─────────────────────────────────────────────────────────────────── */
+/* ── Response banner ───────────────────────────────────────────────────────── */
 .command-response {
   display: flex;
   align-items: flex-start;
   gap: 8px;
   padding: 8px 12px;
-  background: var(--bg-elevated);
+  background: rgba(10, 18, 34, 0.85);
   border: 1px solid var(--border-subtle);
-  border-left: 3px solid var(--color-accent);
+  border-left: 2px solid var(--color-accent);
   border-radius: var(--radius-md);
   font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: 0.74rem;
   color: var(--text-secondary);
   animation: fadeInUp 0.15s ease forwards;
+  line-height: 1.5;
 }
 
 .command-response-emergency {
   border-left-color: var(--color-critical);
-  background: rgba(220, 38, 38, 0.08);
-  color: var(--color-critical);
+  background: rgba(28, 4, 4, 0.85);
+  color: #ff6060;
 }
 
 .command-response-icon {
   color: var(--color-accent);
   font-size: 1rem;
-  line-height: 1.2;
+  line-height: 1.25;
   flex-shrink: 0;
+  opacity: 0.7;
 }
 
-.command-response-emergency .command-response-icon {
-  color: var(--color-critical);
-}
+.command-response-emergency .command-response-icon { color: var(--color-critical); }
 
-/* ─── Suggestions ──────────────────────────────────────────────────────────────── */
+/* ── Suggestion chips ──────────────────────────────────────────────────────── */
 .command-suggestions {
   display: flex;
   flex-wrap: wrap;
@@ -132,22 +147,23 @@
   padding: 3px 10px;
   background: transparent;
   border: 1px solid var(--border-subtle);
-  border-radius: 3px;
+  border-radius: 20px;
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 0.6rem;
+  font-size: 0.57rem;
   cursor: pointer;
   transition: all var(--transition-fast);
   white-space: nowrap;
+  letter-spacing: 0.02em;
 }
 
 .command-suggestion-chip:hover:not(:disabled) {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
-  background: var(--color-accent-glow);
+  border-color: rgba(26,159,255,0.35);
+  color: rgba(26,159,255,0.8);
+  background: rgba(26,159,255,0.05);
 }
 
 .command-suggestion-chip:disabled {
-  opacity: 0.25;
+  opacity: 0.20;
   cursor: not-allowed;
 }

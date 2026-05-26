@@ -119,15 +119,9 @@ function App() {
       <div className="app-body">
         {/* LEFT COLUMN: Orb + Command */}
         <div className="app-left-col">
-          {/* Orb panel */}
-          <div className="panel app-orb-panel">
-            <div className="panel-header">
-              <span className="panel-title">
-                <span className="panel-title-dot" />
-                Lisa
-              </span>
-              <span className="orb-mode-label">{getModeDisplayName(state.activeMode)}</span>
-            </div>
+          {/* Orb chamber — frameless presence surface */}
+          <div className="orb-chamber">
+            <div className="orb-chamber-mode">{getModeDisplayName(state.activeMode)}</div>
             <div className="app-orb-body">
               <LisaOrb state={state.orbState} size="large" mode={state.activeMode} />
               {isEmergencyStopped && (
@@ -142,17 +136,9 @@ function App() {
             </div>
           </div>
 
-          {/* Command input panel */}
-          <div className="panel app-command-panel">
-            <div className="panel-header">
-              <span className="panel-title">
-                <span className="panel-title-dot" />
-                Command Input
-              </span>
-            </div>
-            <div className="panel-body app-command-body">
-              <CommandInput />
-            </div>
+          {/* Command rail — primary interaction surface */}
+          <div className="command-rail">
+            <CommandInput />
           </div>
 
           {/* Pending approvals quick-action */}
@@ -176,7 +162,7 @@ function App() {
 
         {/* RIGHT COLUMN: Tab panel */}
         <div className="app-right-col">
-          <div className="panel app-tab-panel">
+          <div className="app-tab-panel">
             {/* Tab navigation */}
             <div className="app-tabs">
               {TABS.map((tab) => (

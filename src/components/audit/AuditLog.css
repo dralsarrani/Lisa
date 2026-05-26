@@ -1,4 +1,4 @@
-/* ─── Wrapper ────────────────────────────────────────────────────────────────────── */
+/* ── Wrapper ───────────────────────────────────────────────────────────────── */
 .audit-log-wrapper {
   display: flex;
   flex-direction: column;
@@ -6,43 +6,43 @@
   min-height: 0;
 }
 
-/* ─── Toolbar ────────────────────────────────────────────────────────────────────── */
+/* ── Toolbar ──────────────────────────────────────────────────────────────── */
 .audit-toolbar {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 4px 6px;
+  padding: 0 0 8px;
   flex-shrink: 0;
   flex-wrap: wrap;
 }
 
 .audit-filter-tabs {
   display: flex;
-  gap: 2px;
+  gap: 3px;
   flex: 1;
 }
 
 .audit-filter-tab {
-  padding: 2px 8px;
-  background: var(--bg-elevated);
+  padding: 3px 9px;
+  background: transparent;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
-  color: var(--text-muted);
+  color: var(--text-dim);
   font-family: var(--font-mono);
-  font-size: 0.58rem;
+  font-size: 0.56rem;
   cursor: pointer;
   transition: all var(--transition-fast);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
 }
 
-.audit-filter-tab:hover { color: var(--text-secondary); }
-.audit-filter-active { border-color: var(--color-accent); color: var(--color-accent); background: var(--color-accent-dim); }
-.audit-filter-warning { color: var(--severity-warning); }
-.audit-filter-error   { color: var(--severity-error); }
+.audit-filter-tab:hover { color: var(--text-muted); border-color: var(--border-default); }
+.audit-filter-active   { border-color: var(--color-accent); color: var(--color-accent); background: var(--color-accent-dim); }
+.audit-filter-warning  { color: var(--severity-warning); }
+.audit-filter-error    { color: var(--severity-error); }
 .audit-filter-critical { color: var(--severity-critical); }
 
-/* ─── Clear control (dev/demo only) ─────────────────────────────────────────────── */
+/* ── Clear control ────────────────────────────────────────────────────────── */
 .audit-clear-area {
   display: flex;
   align-items: center;
@@ -51,74 +51,78 @@
 }
 
 .audit-clear-btn {
-  padding: 2px 8px;
-  font-size: 0.58rem;
+  padding: 3px 9px;
+  font-size: 0.56rem;
   font-family: var(--font-mono);
-  background: var(--bg-elevated);
+  background: transparent;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
-  color: var(--text-muted);
+  color: var(--text-dim);
   cursor: pointer;
   transition: all var(--transition-fast);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
-.audit-clear-btn:hover { border-color: var(--border-bright); color: var(--text-secondary); }
+.audit-clear-btn:hover { border-color: var(--border-default); color: var(--text-muted); }
 
 .audit-clear-warning {
   font-family: var(--font-mono);
-  font-size: 0.58rem;
+  font-size: 0.56rem;
   color: var(--color-warning);
   letter-spacing: 0.04em;
 }
 
-/* ─── Log ────────────────────────────────────────────────────────────────────────── */
+/* ── Log list ─────────────────────────────────────────────────────────────── */
 .audit-log {
   display: flex;
   flex-direction: column-reverse;
-  gap: 2px;
+  gap: 1px;
   overflow-y: auto;
   flex: 1;
   min-height: 0;
-  padding: 4px 0;
+  padding: 2px 0;
   font-family: var(--font-mono);
-  font-size: 0.65rem;
+  font-size: 0.64rem;
 }
 
+/* ── Event row ────────────────────────────────────────────────────────────── */
 .audit-row {
   display: grid;
-  grid-template-columns: 12px 62px 100px 1fr;
+  grid-template-columns: 10px 60px 96px 1fr;
   align-items: baseline;
   gap: 6px;
-  padding: 3px 4px;
+  padding: 4px 6px;
   border-radius: var(--radius-sm);
   line-height: 1.4;
   transition: background var(--transition-fast);
+  border-left: 2px solid transparent;
 }
 
-.audit-row:hover {
-  background: var(--bg-hover);
-}
+.audit-row:hover { background: var(--bg-hover); }
 
-/* ─── Severity ──────────────────────────────────────────────────────────────────── */
+/* ── Severity ─────────────────────────────────────────────────────────────── */
 .audit-severity-info     .audit-icon { color: var(--severity-info); }
 .audit-severity-warning  .audit-icon { color: var(--severity-warning); }
 .audit-severity-error    .audit-icon { color: var(--severity-error); }
 .audit-severity-critical .audit-icon { color: var(--severity-critical); }
 
-.audit-severity-warning  { background: rgba(245,158,11,0.03); }
-.audit-severity-error    { background: rgba(239,68,68,0.04); }
-.audit-severity-critical { background: rgba(220,38,38,0.07); border-left: 2px solid var(--color-critical); }
+.audit-severity-warning  { background: rgba(245,158,11,0.025); }
+.audit-severity-error    { background: rgba(239,68,68,0.030); border-left-color: rgba(239,68,68,0.3); }
+.audit-severity-critical { background: rgba(220,38,38,0.055); border-left-color: var(--color-critical); }
 
 .audit-icon {
   text-align: center;
-  font-size: 0.55rem;
+  font-size: 0.52rem;
   flex-shrink: 0;
+  opacity: 0.85;
 }
 
 .audit-time {
   color: var(--text-dim);
   white-space: nowrap;
-  font-size: 0.6rem;
+  font-size: 0.57rem;
+  letter-spacing: 0.02em;
 }
 
 .audit-source {
@@ -126,7 +130,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 0.6rem;
+  font-size: 0.58rem;
 }
 
 .audit-summary {
@@ -137,8 +141,9 @@
 .audit-details {
   grid-column: 4;
   color: var(--text-dim);
-  font-size: 0.58rem;
+  font-size: 0.56rem;
   cursor: help;
+  line-height: 1.35;
 }
 
 .audit-severity-critical .audit-summary { color: var(--color-critical); font-weight: 500; }
