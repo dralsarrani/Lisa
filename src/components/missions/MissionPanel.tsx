@@ -1,5 +1,6 @@
 import React from "react";
 import type { Mission, MissionStatus, MissionStep, MissionStepStatus } from "../../core/types";
+import { useLisa } from "../../app/useLisa";
 import "./MissionPanel.css";
 
 interface MissionPanelProps {
@@ -94,6 +95,8 @@ function MissionCard({ mission }: { mission: Mission }) {
 }
 
 export const MissionPanel: React.FC<MissionPanelProps> = ({ missions }) => {
+  const { dispatch } = useLisa();
+
   const active = missions.filter(
     (m) =>
       m.status === "running" ||
@@ -131,7 +134,16 @@ export const MissionPanel: React.FC<MissionPanelProps> = ({ missions }) => {
           )}
           {history.length > 0 && (
             <div className="mission-section">
-              <div className="mission-section-label">History</div>
+              <div className="mission-section-label">
+                History
+                <button
+                  className="mission-clear-btn"
+                  onClick={() => dispatch({ type: "CLEAR_MISSION_HISTORY" })}
+                  title="Remove all completed, failed, cancelled, and paused missions from history"
+                >
+                  Clear
+                </button>
+              </div>
               {history.map((m) => (
                 <MissionCard key={m.id} mission={m} />
               ))}

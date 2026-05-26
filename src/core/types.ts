@@ -142,6 +142,7 @@ export type AuditEventType =
   | "runtime_health_checked"
   | "emergency_stop_activated"
   | "emergency_stop_cleared"
+  | "audit_log_cleared"
   | "error_occurred"
   | "persistence_saved"
   | "persistence_loaded"

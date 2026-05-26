@@ -1,9 +1,10 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useLisa } from "../../app/useLisa";
 import { routeCommand } from "../../core/command-router";
 import { createTestMission, applyApprovalDecision } from "../../core/mission-store";
+import { createAuditEvent } from "../../core/audit-store";
 import { getModeDisplayName } from "../../core/mode-store";
-import type { RuntimeHealth } from "../../core/types";
+import { fetchRuntimeHealth } from "../../core/runtime-health";
 import "./CommandInput.css";
 
 const SUGGESTIONS = [
@@ -15,16 +16,45 @@ const SUGGESTIONS = [
   "Lisa, wake up",
 ];
 
+const RESPONSE_DISMISS_MS = 8_000;
+const MAX_HISTORY = 50;
+
 export const CommandInput: React.FC = () => {
   const { state, dispatch, addAudit } = useLisa();
   const [value, setValue] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const historyRef = useRef<string[]>([]);
+  const historyIndexRef = useRef(-1);
+  const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Auto-dismiss commandResponse after RESPONSE_DISMISS_MS,
+  // unless it is an emergency-stop message (that persists until wake).
+  useEffect(() => {
+    if (!state.commandResponse) return;
+    const isEmergencyMessage =
+      state.orbState === "emergency_stopped" ||
+      state.commandResponse.startsWith("EMERGENCY STOP");
+    if (isEmergencyMessage) return;
+
+    if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
+    dismissTimerRef.current = setTimeout(() => {
+      dispatch({ type: "SET_COMMAND_RESPONSE", payload: null });
+    }, RESPONSE_DISMISS_MS);
+
+    return () => {
+      if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
+    };
+  }, [state.commandResponse, state.orbState, dispatch]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const raw = value.trim();
     if (!raw || isProcessing) return;
+
+    // Prepend to history, cap at MAX_HISTORY.
+    historyRef.current = [raw, ...historyRef.current].slice(0, MAX_HISTORY);
+    historyIndexRef.current = -1;
 
     setValue("");
     setIsProcessing(true);
@@ -80,15 +110,31 @@ export const CommandInput: React.FC = () => {
         });
         break;
 
-      case "wake":
-        dispatch({ type: "SET_ORB_STATE", payload: "idle" });
-        addAudit({
-          eventType: "orb_state_changed",
-          source: "command_input",
-          summary: "Lisa woke from sleep or paused state.",
-          severity: "info",
-        });
+      case "wake": {
+        const clearedAt = new Date().toISOString();
+        if (state.orbState === "emergency_stopped") {
+          // Emergency clear path: orb unlocked, stopped missions set to paused
+          // with an explanation step. The audit event is embedded in the action
+          // payload so the reducer can prepend it atomically.
+          const auditEvent = createAuditEvent({
+            eventType: "emergency_stop_cleared",
+            source: "command_input",
+            summary:
+              "Emergency lock cleared via wake command. All stopped missions set to paused — explicit restart required.",
+            severity: "warning",
+          });
+          dispatch({ type: "CLEAR_EMERGENCY", payload: { clearedAt, auditEvent } });
+        } else {
+          dispatch({ type: "SET_ORB_STATE", payload: "idle" });
+          addAudit({
+            eventType: "orb_state_changed",
+            source: "command_input",
+            summary: "Lisa woke from sleep or paused state.",
+            severity: "info",
+          });
+        }
         break;
+      }
 
       case "mode_change": {
         const modeId = route.payload?.modeId as Parameters<typeof getModeDisplayName>[0];
@@ -115,7 +161,24 @@ export const CommandInput: React.FC = () => {
           summary: "Runtime health check requested.",
           severity: "info",
         });
-        await checkRuntimeHealth(dispatch, addAudit);
+        try {
+          const health = await fetchRuntimeHealth();
+          dispatch({ type: "SET_RUNTIME_HEALTH", payload: health });
+          addAudit({
+            eventType: "runtime_health_checked",
+            source: "runtime_checker",
+            summary: `Runtime: backend=${health.backendReachable ? "ok" : "offline"} ollama=${health.ollamaStatus} docker=${health.dockerStatus}`,
+            severity: health.backendReachable ? "info" : "warning",
+          });
+        } catch (err) {
+          addAudit({
+            eventType: "error_occurred",
+            source: "runtime_checker",
+            summary: "Runtime health check failed.",
+            details: String(err),
+            severity: "error",
+          });
+        }
         dispatch({ type: "SET_ORB_STATE", payload: "idle" });
         break;
       }
@@ -160,7 +223,10 @@ export const CommandInput: React.FC = () => {
               missionId: mission.id,
               severity: "info",
             });
-            dispatch({ type: "SET_COMMAND_RESPONSE", payload: `Approval granted. Mission "${mission.title}" completed.` });
+            dispatch({
+              type: "SET_COMMAND_RESPONSE",
+              payload: `Approval granted. Mission "${mission.title}" completed.`,
+            });
           }
         } else {
           dispatch({ type: "SET_COMMAND_RESPONSE", payload: "No pending approval found." });
@@ -186,7 +252,10 @@ export const CommandInput: React.FC = () => {
               missionId: mission.id,
               severity: "warning",
             });
-            dispatch({ type: "SET_COMMAND_RESPONSE", payload: `Approval rejected. Mission "${mission.title}" cancelled.` });
+            dispatch({
+              type: "SET_COMMAND_RESPONSE",
+              payload: `Approval rejected. Mission "${mission.title}" cancelled.`,
+            });
           }
         } else {
           dispatch({ type: "SET_COMMAND_RESPONSE", payload: "No pending approval found." });
@@ -202,8 +271,30 @@ export const CommandInput: React.FC = () => {
     inputRef.current?.focus();
   }
 
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const next = historyIndexRef.current + 1;
+      if (next < historyRef.current.length) {
+        historyIndexRef.current = next;
+        setValue(historyRef.current[next]);
+      }
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const next = historyIndexRef.current - 1;
+      if (next < 0) {
+        historyIndexRef.current = -1;
+        setValue("");
+      } else {
+        historyIndexRef.current = next;
+        setValue(historyRef.current[next]);
+      }
+    }
+  }
+
   function handleSuggestion(s: string) {
     setValue(s);
+    historyIndexRef.current = -1;
     inputRef.current?.focus();
   }
 
@@ -221,7 +312,11 @@ export const CommandInput: React.FC = () => {
           className="command-field"
           type="text"
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => {
+            setValue(e.target.value);
+            historyIndexRef.current = -1;
+          }}
+          onKeyDown={handleKeyDown}
           placeholder={
             isEmergencyStopped
               ? "Emergency stopped — type 'Lisa, wake up' to clear"
@@ -270,69 +365,5 @@ export const CommandInput: React.FC = () => {
     </div>
   );
 };
-
-async function checkRuntimeHealth(
-  dispatch: ReturnType<typeof useLisa>["dispatch"],
-  addAudit: ReturnType<typeof useLisa>["addAudit"]
-) {
-  try {
-    const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-    let health: RuntimeHealth;
-
-    if (isTauri) {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const raw = await invoke<{
-        backend_reachable: boolean;
-        app_version: string;
-        os_type: string;
-        os_version: string;
-        arch: string;
-        timestamp: string;
-        ollama_status: string;
-        docker_status: string;
-      }>("get_runtime_health");
-      health = {
-        backendReachable: raw.backend_reachable,
-        appVersion: raw.app_version,
-        osType: raw.os_type,
-        osVersion: raw.os_version,
-        arch: raw.arch,
-        timestamp: raw.timestamp,
-        ollamaStatus: raw.ollama_status as RuntimeHealth["ollamaStatus"],
-        dockerStatus: raw.docker_status as RuntimeHealth["dockerStatus"],
-        lastChecked: new Date().toISOString(),
-      };
-    } else {
-      // Browser/dev fallback.
-      health = {
-        backendReachable: false,
-        appVersion: "0.1.0-dev",
-        osType: navigator.platform || "browser",
-        osVersion: navigator.userAgent.slice(0, 80),
-        arch: "unknown",
-        timestamp: new Date().toISOString(),
-        ollamaStatus: "not_configured",
-        dockerStatus: "not_configured",
-        lastChecked: new Date().toISOString(),
-      };
-    }
-
-    dispatch({ type: "SET_RUNTIME_HEALTH", payload: health });
-    addAudit({
-      eventType: "runtime_health_checked",
-      source: "runtime_checker",
-      summary: `Runtime health: backend=${health.backendReachable ? "ok" : "offline"} ollama=${health.ollamaStatus} docker=${health.dockerStatus}`,
-      severity: health.backendReachable ? "info" : "warning",
-    });
-  } catch (err) {
-    addAudit({
-      eventType: "error_occurred",
-      source: "runtime_checker",
-      summary: "Runtime health check failed.",
-      details: String(err),
-      severity: "error",
-    });
-  }
-}
 
 export default CommandInput;

@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lisa Orb — Animated SVG Energy Core</title>
+  <style>
+    :root {
+      --a: #52fff4;
+      --b: #d9fffb;
+      --c: #0b7d82;
+      --bg: #010706;
+      --speed: 1;
+      --pulse: 1;
+      --label: "IDLE";
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 50% 43%, color-mix(in srgb, var(--a) 18%, transparent), transparent 28%),
+        radial-gradient(circle at 50% 60%, color-mix(in srgb, var(--c) 28%, transparent), transparent 46%),
+        linear-gradient(180deg, #000302 0%, #04100f 48%, #000000 100%);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      transition: background 500ms ease;
+    }
+
+    .stage {
+      width: min(94vmin, 760px);
+      aspect-ratio: 1;
+      display: grid;
+      place-items: center;
+      position: relative;
+      isolation: isolate;
+    }
+
+    .orb-frame {
+      width: min(78vmin, 610px);
+      aspect-ratio: 1;
+      position: relative;
+      display: grid;
+      place-items: center;
+      animation: orbFloat calc(4.8s / var(--speed)) ease-in-out infinite;
+      filter:
+        drop-shadow(0 18px 28px rgba(0, 0, 0, .42))
+        drop-shadow(0 0 28px color-mix(in srgb, var(--a) 24%, transparent));
+      transition: filter 500ms ease;
+    }
+
+    .orb-frame::before {
+      content: "";
+      position: absolute;
+      width: 72%;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle, color-mix(in srgb, var(--a) 32%, transparent), color-mix(in srgb, var(--c) 10%, transparent) 46%, transparent 72%);
+      filter: blur(44px);
+      opacity: .58;
+      animation: auraPulse calc(3.4s / var(--pulse)) ease-in-out infinite;
+      z-index: -2;
+    }
+
+    .orb-svg {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    .shell {
+      fill: url(#bodyGradient);
+      stroke: color-mix(in srgb, var(--b) 72%, transparent);
+      stroke-width: 1.15;
+      filter: url(#softGlow);
+      opacity: .92;
+      transition: stroke 500ms ease;
+    }
+
+    .rim-primary {
+      fill: none;
+      stroke: url(#rimGradient);
+      stroke-width: 2;
+      opacity: .62;
+      filter: url(#softGlow);
+      stroke-dasharray: 480 210 90 120;
+      animation: dashFlow calc(9s / var(--speed)) linear infinite;
+    }
+
+    .rim-secondary {
+      fill: none;
+      stroke: color-mix(in srgb, var(--a) 44%, transparent);
+      stroke-width: .75;
+      opacity: .26;
+      stroke-dasharray: 18 24;
+      animation: dashFlowReverse calc(15s / var(--speed)) linear infinite;
+    }
+
+    .ribbon-wide {
+      fill: none;
+      stroke: url(#ribbonGradient);
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      mix-blend-mode: screen;
+      filter: url(#ribbonBlur);
+      opacity: .18;
+      stroke-width: 34;
+      stroke-dasharray: 460 260;
+      animation: dashFlow calc(7s / var(--speed)) linear infinite;
+    }
+
+    .ribbon-edge {
+      fill: none;
+      stroke: url(#edgeGradient);
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      mix-blend-mode: screen;
+      filter: url(#softGlow);
+      opacity: .46;
+      stroke-width: 1.65;
+      stroke-dasharray: 84 56 16 110;
+      animation: dashFlow calc(4.8s / var(--speed)) linear infinite;
+    }
+
+    .ribbon-edge.alt,
+    .ribbon-wide.alt {
+      animation-name: dashFlowReverse;
+      animation-duration: calc(6.4s / var(--speed));
+    }
+
+    .ribbon-set-a { transform-origin: 300px 300px; animation: rotateA calc(10s / var(--speed)) ease-in-out infinite; }
+    .ribbon-set-b { transform-origin: 300px 300px; animation: rotateB calc(12s / var(--speed)) ease-in-out infinite; }
+    .ribbon-set-c { transform-origin: 300px 300px; animation: rotateC calc(15s / var(--speed)) ease-in-out infinite; }
+
+    .flow-line {
+      fill: none;
+      stroke: url(#edgeGradient);
+      stroke-width: 2.05;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      opacity: .54;
+      mix-blend-mode: screen;
+      filter: url(#softGlow);
+      stroke-dasharray: 9 34 42 42;
+      animation: flowInside calc(1.25s / var(--speed)) linear infinite, lineBreathe calc(2.4s / var(--pulse)) ease-in-out infinite;
+    }
+
+    .flow-line.thick {
+      stroke: url(#ribbonGradient);
+      stroke-width: 7.2;
+      opacity: .16;
+      filter: url(#ribbonBlur);
+      stroke-dasharray: 38 76 74 54;
+      animation: flowInsideFast calc(1.8s / var(--speed)) linear infinite reverse, lineBreathe calc(2.2s / var(--pulse)) ease-in-out infinite;
+    }
+
+    .flow-line.alt {
+      animation-direction: reverse, normal;
+      animation-duration: calc(1.15s / var(--speed)), calc(2.4s / var(--pulse));
+      opacity: .66;
+    }
+
+    .inner-flow-a { transform-origin: 300px 300px; animation: innerDriftA calc(4.2s / var(--speed)) ease-in-out infinite; }
+    .inner-flow-b { transform-origin: 300px 300px; animation: innerDriftB calc(5.2s / var(--speed)) ease-in-out infinite; }
+
+    .core-star {
+      fill: url(#coreGradient);
+      filter: url(#softGlow);
+      transform-origin: 300px 300px;
+      animation: corePulse calc(1.8s / var(--pulse)) ease-in-out infinite;
+    }
+
+    .node {
+      fill: color-mix(in srgb, var(--b) 82%, transparent);
+      filter: url(#softGlow);
+      opacity: .55;
+      transform-origin: 300px 300px;
+      animation: nodePulse calc(2.5s / var(--pulse)) ease-in-out infinite;
+    }
+
+    .highlight {
+      fill: url(#highlightGradient);
+      opacity: .42;
+      mix-blend-mode: screen;
+      animation: highlightDrift calc(9s / var(--speed)) ease-in-out infinite;
+    }
+
+    .hud-ring {
+      position: absolute;
+      width: 84%;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      pointer-events: none;
+      border: 1px solid color-mix(in srgb, var(--a) 16%, transparent);
+      background: repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--a) 34%, transparent) 0deg 0.7deg, transparent 0.7deg 12deg);
+      mask: radial-gradient(circle, transparent 68%, black 69.5%, black 70.8%, transparent 72.2%);
+      opacity: .30;
+      animation: hudRotate calc(34s / var(--speed)) linear infinite;
+    }
+
+    .orb-shadow {
+      position: absolute;
+      width: 42%;
+      height: 8%;
+      bottom: 19%;
+      border-radius: 50%;
+      background: radial-gradient(ellipse, rgba(0,0,0,.58), transparent 70%);
+      filter: blur(12px);
+      opacity: .55;
+      animation: shadowFloat calc(4.8s / var(--speed)) ease-in-out infinite;
+      z-index: -1;
+    }
+
+    .label {
+      position: absolute;
+      bottom: 9.5%;
+      color: var(--b);
+      text-transform: uppercase;
+      letter-spacing: .34em;
+      font-size: clamp(11px, 2vmin, 16px);
+      font-weight: 700;
+      text-shadow: 0 0 16px var(--a), 0 0 30px color-mix(in srgb, var(--a) 58%, transparent);
+      opacity: .92;
+      transition: color 500ms ease;
+    }
+
+    .label::before {
+      content: "";
+      display: inline-block;
+      width: .62em;
+      height: .62em;
+      margin-right: .8em;
+      border-radius: 999px;
+      background: var(--a);
+      box-shadow: 0 0 14px var(--a), 0 0 28px var(--a);
+      animation: dotPulse calc(1.5s / var(--pulse)) ease-in-out infinite;
+      vertical-align: .05em;
+    }
+
+    .caption {
+      position: fixed;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: color-mix(in srgb, var(--b) 74%, transparent);
+      font-weight: 800;
+      font-size: 12px;
+      letter-spacing: .42em;
+      text-transform: uppercase;
+      text-shadow: 0 0 18px var(--a);
+      z-index: 10;
+    }
+
+    .state-controls {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(980px, 94vw);
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      z-index: 20;
+    }
+
+    button {
+      border: 1px solid color-mix(in srgb, var(--a) 28%, transparent);
+      background: rgba(1, 18, 18, .58);
+      color: rgba(224, 255, 252, .72);
+      border-radius: 999px;
+      padding: 8px 12px;
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      backdrop-filter: blur(12px);
+      box-shadow: inset 0 0 14px color-mix(in srgb, var(--a) 7%, transparent);
+    }
+
+    button.active {
+      color: white;
+      border-color: color-mix(in srgb, var(--b) 82%, transparent);
+      background: color-mix(in srgb, var(--c) 44%, rgba(2, 18, 18, .58));
+      box-shadow: 0 0 18px color-mix(in srgb, var(--a) 30%, transparent), inset 0 0 16px color-mix(in srgb, var(--a) 14%, transparent);
+    }
+
+    @keyframes orbFloat {
+      0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+      25% { transform: translate3d(5px, -14px, 0) scale(1.012); }
+      50% { transform: translate3d(0, -22px, 0) scale(1.026); }
+      75% { transform: translate3d(-5px, -12px, 0) scale(1.01); }
+    }
+
+    @keyframes auraPulse {
+      0%, 100% { transform: scale(.92); opacity: .38; }
+      50% { transform: scale(1.08); opacity: .68; }
+    }
+
+    @keyframes shadowFloat {
+      0%, 100% { transform: translateY(0) scaleX(.96); opacity: .38; }
+      50% { transform: translateY(18px) scaleX(1.08); opacity: .24; }
+    }
+      50% { transform: scale(1.16); opacity: 1; }
+    }
+
+    @keyframes hudRotate { to { transform: rotate(360deg); } }
+    @keyframes dashFlow { to { stroke-dashoffset: -720; } }
+    @keyframes dashFlowReverse { to { stroke-dashoffset: 720; } }
+
+    @keyframes flowInside {
+      0% { stroke-dashoffset: 0; }
+      100% { stroke-dashoffset: -220; }
+    }
+
+    @keyframes flowInsideFast {
+      0% { stroke-dashoffset: 0; }
+      100% { stroke-dashoffset: -360; }
+    }
+
+    @keyframes lineBreathe {
+      0%, 100% { opacity: .28; }
+      50% { opacity: .82; }
+    }
+
+    @keyframes innerDriftA {
+      0% { transform: rotate(-14deg) scale(.95) translate(-8px, 4px); }
+      33% { transform: rotate(18deg) scale(1.08) translate(10px, -10px); }
+      66% { transform: rotate(-4deg) scale(1.02) translate(3px, 9px); }
+      100% { transform: rotate(-14deg) scale(.95) translate(-8px, 4px); }
+    }
+
+    @keyframes innerDriftB {
+      0% { transform: rotate(22deg) scale(1.08) translate(7px, -3px); }
+      33% { transform: rotate(-26deg) scale(.94) translate(-12px, 8px); }
+      66% { transform: rotate(6deg) scale(1.03) translate(5px, 11px); }
+      100% { transform: rotate(22deg) scale(1.08) translate(7px, -3px); }
+    }
+
+    @keyframes rotateA {
+      0%, 100% { transform: rotate(0deg) scale(1); }
+      50% { transform: rotate(18deg) scale(1.035); }
+    }
+    @keyframes rotateB {
+      0%, 100% { transform: rotate(0deg) scale(1.02); }
+      50% { transform: rotate(-24deg) scale(.985); }
+    }
+    @keyframes rotateC {
+      0%, 100% { transform: rotate(0deg); }
+      50% { transform: rotate(34deg); }
+    }
+
+    @keyframes corePulse {
+      0%, 100% { transform: scale(.82); opacity: .55; }
+      50% { transform: scale(1.26); opacity: 1; }
+    }
+
+    @keyframes nodePulse {
+      0%, 100% { transform: scale(.75); opacity: .34; }
+      50% { transform: scale(1.3); opacity: .94; }
+    }
+
+    @keyframes highlightDrift {
+      0%, 100% { transform: translate(-6px, -4px) scale(.96); opacity: .26; }
+      50% { transform: translate(10px, 7px) scale(1.05); opacity: .48; }
+    }
+
+    @keyframes dotPulse {
+      0%, 100% { transform: scale(.68); opacity: .58; }
+      50% { transform: scale(1.2); opacity: 1; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { animation-duration: 999s !important; animation-iteration-count: 1 !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="caption" id="caption">Lisa Core · Idle</div>
+  <main class="stage">
+    <section class="orb-frame" aria-label="Lisa animated orb">
+      <div class="hud-ring"></div>
+      <div class="orb-shadow"></div>
+      <svg class="orb-svg" viewBox="0 0 600 600" role="img" aria-label="Premium animated Lisa energy orb">
+        <defs>
+          <radialGradient id="bodyGradient" cx="38%" cy="28%" r="74%">
+            <stop offset="0%" stop-color="#ffffff" stop-opacity="0.16"/>
+            <stop offset="18%" stop-color="var(--b)" stop-opacity="0.11"/>
+            <stop offset="38%" stop-color="var(--a)" stop-opacity="0.075"/>
+            <stop offset="68%" stop-color="var(--c)" stop-opacity="0.16"/>
+            <stop offset="100%" stop-color="#000706" stop-opacity="0.68"/>
+          </radialGradient>
+          <radialGradient id="coreGradient" cx="48%" cy="50%" r="55%">
+            <stop offset="0%" stop-color="#ffffff" stop-opacity="0.72"/>
+            <stop offset="22%" stop-color="var(--b)" stop-opacity="0.52"/>
+            <stop offset="68%" stop-color="var(--a)" stop-opacity="0.12"/>
+            <stop offset="100%" stop-color="var(--a)" stop-opacity="0"/>
+          </radialGradient>
+          <radialGradient id="highlightGradient" cx="32%" cy="20%" r="48%">
+            <stop offset="0%" stop-color="#ffffff" stop-opacity="0.18"/>
+            <stop offset="32%" stop-color="var(--b)" stop-opacity="0.055"/>
+            <stop offset="100%" stop-color="var(--b)" stop-opacity="0"/>
+          </radialGradient>
+          <linearGradient id="ribbonGradient" x1="120" y1="120" x2="480" y2="480" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="var(--c)" stop-opacity="0.15"/>
+            <stop offset="44%" stop-color="var(--a)" stop-opacity="0.56"/>
+            <stop offset="72%" stop-color="var(--b)" stop-opacity="0.22"/>
+            <stop offset="100%" stop-color="var(--c)" stop-opacity="0.10"/>
+          </linearGradient>
+          <linearGradient id="edgeGradient" x1="120" y1="420" x2="500" y2="140" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="var(--a)" stop-opacity="0.12"/>
+            <stop offset="48%" stop-color="var(--b)" stop-opacity="0.92"/>
+            <stop offset="100%" stop-color="var(--a)" stop-opacity="0.20"/>
+          </linearGradient>
+          <linearGradient id="rimGradient" x1="120" y1="120" x2="480" y2="480" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="var(--b)" stop-opacity="0.72"/>
+            <stop offset="42%" stop-color="var(--a)" stop-opacity="0.34"/>
+            <stop offset="70%" stop-color="var(--c)" stop-opacity="0.20"/>
+            <stop offset="100%" stop-color="var(--b)" stop-opacity="0.48"/>
+          </linearGradient>
+          <filter id="softGlow" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="4" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="strongGlow" x="-120%" y="-120%" width="340%" height="340%">
+            <feGaussianBlur stdDeviation="8" result="blur"/>
+            <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1.8 0" result="glow"/>
+            <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="ribbonBlur" x="-80%" y="-80%" width="260%" height="260%">
+            <feGaussianBlur stdDeviation="7"/>
+          </filter>
+          <clipPath id="sphereClip">
+            <circle cx="300" cy="300" r="176"/>
+          </clipPath>
+        </defs>
+
+        <circle class="shell" cx="300" cy="300" r="176"/>
+        <ellipse cx="247" cy="220" rx="66" ry="34" fill="#fff" opacity=".045" transform="rotate(-22 247 220)"/>
+
+        <g clip-path="url(#sphereClip)">
+          <g class="ribbon-set-a">
+            <path class="ribbon-wide" d="M128 304 C182 118 324 154 390 250 C478 378 394 456 264 412 C152 374 144 290 238 230 C334 169 445 210 470 310"/>
+            <path class="ribbon-edge" d="M128 304 C182 118 324 154 390 250 C478 378 394 456 264 412 C152 374 144 290 238 230 C334 169 445 210 470 310"/>
+          </g>
+          <g class="ribbon-set-b">
+            <path class="ribbon-wide alt" d="M176 420 C112 278 204 170 330 194 C466 220 500 342 394 410 C312 464 204 420 202 302 C200 210 284 132 392 174"/>
+            <path class="ribbon-edge alt" d="M176 420 C112 278 204 170 330 194 C466 220 500 342 394 410 C312 464 204 420 202 302 C200 210 284 132 392 174"/>
+          </g>
+          <g class="ribbon-set-c">
+            <path class="ribbon-wide" d="M122 252 C226 316 210 430 324 444 C456 458 484 306 410 224 C326 130 198 148 164 262 C136 356 232 388 318 324"/>
+            <path class="ribbon-edge" d="M122 252 C226 316 210 430 324 444 C456 458 484 306 410 224 C326 130 198 148 164 262 C136 356 232 388 318 324"/>
+          </g>
+          <g class="inner-flow-a">
+            <path class="flow-line thick" d="M134 316 C190 202 292 228 344 280 C410 346 474 284 462 210">
+              <animate attributeName="d" dur="2.9s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.5;1" keySplines=".45 0 .55 1;.45 0 .55 1" values="M134 316 C190 202 292 228 344 280 C410 346 474 284 462 210;M118 292 C210 176 308 252 368 310 C440 380 492 262 430 182;M134 316 C190 202 292 228 344 280 C410 346 474 284 462 210"/>
+            </path>
+            <path class="flow-line" d="M142 326 C216 244 278 242 346 302 C406 356 452 330 492 262">
+              <animate attributeName="d" dur="2.2s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.5;1" keySplines=".42 0 .58 1;.42 0 .58 1" values="M142 326 C216 244 278 242 346 302 C406 356 452 330 492 262;M126 342 C212 204 308 272 362 246 C432 212 458 356 506 300;M142 326 C216 244 278 242 346 302 C406 356 452 330 492 262"/>
+            </path>
+            <path class="flow-line alt" d="M160 250 C224 332 308 346 384 286 C430 250 458 252 488 286">
+              <animate attributeName="d" dur="2.5s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.5;1" keySplines=".42 0 .58 1;.42 0 .58 1" values="M160 250 C224 332 308 346 384 286 C430 250 458 252 488 286;M144 224 C244 300 290 384 366 330 C448 270 444 210 502 248;M160 250 C224 332 308 346 384 286 C430 250 458 252 488 286"/>
+            </path>
+          </g>
+          <g class="inner-flow-b">
+            <path class="flow-line thick alt" d="M205 438 C188 336 236 278 326 242 C422 204 432 144 392 102">
+              <animate attributeName="d" dur="3.1s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.5;1" keySplines=".45 0 .55 1;.45 0 .55 1" values="M205 438 C188 336 236 278 326 242 C422 204 432 144 392 102;M176 420 C238 338 196 246 304 216 C440 178 390 126 430 96;M205 438 C188 336 236 278 326 242 C422 204 432 144 392 102"/>
+            </path>
+            <path class="flow-line" d="M196 420 C240 350 322 342 376 270 C420 212 382 166 326 142">
+              <animate attributeName="d" dur="2.35s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.5;1" keySplines=".42 0 .58 1;.42 0 .58 1" values="M196 420 C240 350 322 342 376 270 C420 212 382 166 326 142;M218 440 C208 332 348 380 404 292 C454 212 334 184 300 122;M196 420 C240 350 322 342 376 270 C420 212 382 166 326 142"/>
+            </path>
+            <path class="flow-line alt" d="M130 290 C220 284 258 206 340 194 C426 182 482 240 476 326">
+              <animate attributeName="d" dur="2.7s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.5;1" keySplines=".42 0 .58 1;.42 0 .58 1" values="M130 290 C220 284 258 206 340 194 C426 182 482 240 476 326;M124 252 C198 334 278 172 360 218 C446 268 480 204 492 304;M130 290 C220 284 258 206 340 194 C426 182 482 240 476 326"/>
+            </path>
+          </g>
+          <circle class="core-star" cx="300" cy="300" r="78"/>
+          <circle class="node" cx="178" cy="318" r="6" style="animation-delay:-.4s"/>
+          <circle class="node" cx="410" cy="238" r="4.5" style="animation-delay:-1.1s"/>
+          <circle class="node" cx="376" cy="398" r="5.5" style="animation-delay:-1.7s"/>
+        </g>
+
+        <circle class="rim-primary" cx="300" cy="300" r="177"/>
+        <circle class="rim-secondary" cx="300" cy="300" r="185"/>
+        <circle class="highlight" cx="300" cy="300" r="176"/>
+      </svg>
+      <div class="label" id="label">IDLE</div>
+    </section>
+  </main>
+  <nav class="state-controls" id="controls"></nav>
+
+  <script>
+    const STATES = {
+      idle: { label: 'IDLE', caption: 'Lisa Core · Idle', a:'#52fff4', b:'#d9fffb', c:'#0b7d82', speed:1, pulse:1 },
+      listening: { label: 'LISTENING', caption: 'Lisa Core · Listening', a:'#37fff8', b:'#ffffff', c:'#0bb7bc', speed:1.55, pulse:1.7 },
+      thinking: { label: 'THINKING', caption: 'Lisa Core · Thinking', a:'#78d8ff', b:'#f0fdff', c:'#684cff', speed:1.85, pulse:1.25 },
+      speaking: { label: 'SPEAKING', caption: 'Lisa Core · Speaking', a:'#34ffd0', b:'#effff8', c:'#008cff', speed:1.7, pulse:2.1 },
+      acting: { label: 'ACTING', caption: 'Lisa Core · Acting', a:'#55bfff', b:'#ffffff', c:'#0055ff', speed:2.05, pulse:1.55 },
+      waiting_approval: { label: 'AWAITING APPROVAL', caption: 'Lisa Core · Awaiting Approval', a:'#ffbd46', b:'#fff2b0', c:'#ff6b12', speed:1.15, pulse:1.4 },
+      paused: { label: 'PAUSED', caption: 'Lisa Core · Paused', a:'#7aa9bf', b:'#c7f0ff', c:'#27495a', speed:.35, pulse:.45 },
+      error: { label: 'ERROR', caption: 'Lisa Core · Error', a:'#ff5c37', b:'#ffd3c4', c:'#ff1808', speed:1.1, pulse:1.65 },
+      emergency_stopped: { label: 'EMERGENCY STOPPED', caption: 'Lisa Core · Emergency Stopped', a:'#ff2632', b:'#ffd2d5', c:'#6d0006', speed:.2, pulse:.25 },
+      focus: { label: 'FOCUS MODE', caption: 'Lisa Core · Focus Mode', a:'#4ebcff', b:'#c7efff', c:'#123d91', speed:.75, pulse:.7 },
+      cyber: { label: 'CYBER MODE', caption: 'Lisa Core · Cyber Mode', a:'#35ff91', b:'#d8ffe8', c:'#006d38', speed:1.65, pulse:1.2 },
+      design: { label: 'DESIGN MODE', caption: 'Lisa Core · Design Mode', a:'#d66bff', b:'#ffe6ff', c:'#5d20c9', speed:1.35, pulse:1.2 },
+      gaming: { label: 'GAMING MODE', caption: 'Lisa Core · Gaming Mode', a:'#427dff', b:'#d7e7ff', c:'#071e83', speed:1.1, pulse:.9 }
+    };
+
+    const root = document.documentElement;
+    const controls = document.getElementById('controls');
+    const label = document.getElementById('label');
+    const caption = document.getElementById('caption');
+
+    function setState(key) {
+      const s = STATES[key];
+      root.style.setProperty('--a', s.a);
+      root.style.setProperty('--b', s.b);
+      root.style.setProperty('--c', s.c);
+      root.style.setProperty('--speed', s.speed);
+      root.style.setProperty('--pulse', s.pulse);
+      label.textContent = s.label;
+      caption.textContent = s.caption;
+      document.querySelectorAll('button').forEach(btn => btn.classList.toggle('active', btn.dataset.state === key));
+    }
+
+    Object.keys(STATES).forEach(key => {
+      const btn = document.createElement('button');
+      btn.dataset.state = key;
+      btn.textContent = STATES[key].label;
+      btn.onclick = () => setState(key);
+      controls.appendChild(btn);
+    });
+
+    setState('idle');
+  </script>
+</body>
+</html>

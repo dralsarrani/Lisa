@@ -1,19 +1,8 @@
 /* ─────────────────────────────────────────────────────────────────────────────
-   Lisa Orb — Animated HUD Core
+   Lisa Orb — SVG Energy Core
+   Ported from design-prototypes/approved-lisa-orb-prototype.html
+   Colors injected as --a / --b / --c / --speed / --pulse on .orb-container.
    ───────────────────────────────────────────────────────────────────────────── */
-
-/* ─── Orb state color variables ─────────────────────────────────────────────── */
-:root {
-  --orb-idle: #1a9fff;
-  --orb-listening: #00e5ff;
-  --orb-thinking: #a78bfa;
-  --orb-speaking: #34d399;
-  --orb-acting: #60a5fa;
-  --orb-waiting-approval: #f59e0b;
-  --orb-paused: #6b7280;
-  --orb-error: #f87171;
-  --orb-emergency: #ef4444;
-}
 
 /* ─── Container ───────────────────────────────────────────────────────────────── */
 .orb-container {
@@ -26,255 +15,349 @@
   cursor: default;
 }
 
-.orb-container[role="button"] {
-  cursor: pointer;
-}
+.orb-container[role="button"] { cursor: pointer; }
 
 .orb-container[role="button"]:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 8px;
+  outline: 2px solid var(--a, var(--color-accent));
+  outline-offset: 14px;
   border-radius: 50%;
 }
 
-/* ─── Sizes ───────────────────────────────────────────────────────────────────── */
+/* ─── Sizes — orb-frame width matches orb-diameter ──────────────────────────── */
 .orb-size-small  { --orb-diameter: 120px; }
 .orb-size-medium { --orb-diameter: 200px; }
 .orb-size-large  { --orb-diameter: 280px; }
 
-/* ─── Ambient glow ────────────────────────────────────────────────────────────── */
-.orb-ambient {
-  position: absolute;
-  width: calc(var(--orb-diameter) * 1.5);
-  height: calc(var(--orb-diameter) * 1.5);
-  border-radius: 50%;
-  background: radial-gradient(circle, currentColor 0%, transparent 70%);
-  opacity: 0.04;
-  animation: orb-breathe 4s ease-in-out infinite;
-  pointer-events: none;
-}
+/* ─── Color binding — currentColor for focus-visible and any legacy use ──────── */
+.orb-state-idle              { color: var(--a, #52fff4); }
+.orb-state-listening         { color: var(--a, #37fff8); }
+.orb-state-thinking          { color: var(--a, #78d8ff); }
+.orb-state-speaking          { color: var(--a, #34ffd0); }
+.orb-state-acting            { color: var(--a, #55bfff); }
+.orb-state-waiting_approval  { color: var(--a, #ffbd46); }
+.orb-state-paused            { color: var(--a, #7aa9bf); }
+.orb-state-error             { color: var(--a, #ff5c37); }
+.orb-state-emergency_stopped { color: var(--a, #ff2632); }
 
-.orb-state-listening  .orb-ambient { animation: orb-breathe-fast 1.5s ease-in-out infinite; opacity: 0.08; }
-.orb-state-thinking   .orb-ambient { animation: orb-breathe 2.5s ease-in-out infinite; opacity: 0.06; }
-.orb-state-speaking   .orb-ambient { animation: orb-breathe-fast 0.8s ease-in-out infinite; opacity: 0.07; }
-.orb-state-acting     .orb-ambient { animation: orb-breathe 2s ease-in-out infinite; opacity: 0.07; }
-.orb-state-waiting_approval .orb-ambient { animation: orb-breathe-fast 1.2s ease-in-out infinite; opacity: 0.1; }
-.orb-state-paused     .orb-ambient { animation: none; opacity: 0.03; }
-.orb-state-error      .orb-ambient { animation: orb-breathe-fast 0.6s ease-in-out infinite; opacity: 0.12; }
-.orb-state-emergency_stopped .orb-ambient { animation: orb-flash 0.5s ease-in-out 3; opacity: 0; }
-
-/* ─── HUD Rings ───────────────────────────────────────────────────────────────── */
-.orb-ring {
-  position: absolute;
+/* ─── Orb frame — floats, hosts aura, SVG, hud-ring, shadow ─────────────────── */
+.orb-frame {
   width: var(--orb-diameter);
-  height: var(--orb-diameter);
-  pointer-events: none;
-}
-
-.orb-ring-svg {
-  width: 100%;
-  height: 100%;
-}
-
-.orb-ring-outer {
-  width: calc(var(--orb-diameter) * 1.0);
-  height: calc(var(--orb-diameter) * 1.0);
-  opacity: 0.6;
-}
-
-.orb-ring-mid {
-  width: calc(var(--orb-diameter) * 0.82);
-  height: calc(var(--orb-diameter) * 0.82);
-  opacity: 0.5;
-}
-
-.orb-ring-spin {
-  animation: orb-spin 8s linear infinite;
-}
-
-.orb-ring-spin-reverse {
-  animation: orb-spin-reverse 5s linear infinite;
-}
-
-.orb-state-paused .orb-ring,
-.orb-state-emergency_stopped .orb-ring,
-.orb-state-sleep .orb-ring {
-  opacity: 0.2;
-}
-
-/* ─── Core sphere ─────────────────────────────────────────────────────────────── */
-.orb-core {
+  aspect-ratio: 1;
   position: relative;
-  width: calc(var(--orb-diameter) * 0.62);
-  height: calc(var(--orb-diameter) * 0.62);
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #1e3a5f, #060c18);
-  box-shadow:
-    0 0 calc(var(--orb-diameter) * 0.12) currentColor,
-    inset 0 0 calc(var(--orb-diameter) * 0.08) rgba(0, 200, 255, 0.08),
-    0 0 0 1px rgba(255,255,255,0.05);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  transition: box-shadow 0.4s ease;
+  display: grid;
+  place-items: center;
+  isolation: isolate;
+  animation: orbFloat calc(4.8s / var(--speed, 1)) ease-in-out infinite;
+  filter:
+    drop-shadow(0 18px 28px rgba(0, 0, 0, .42))
+    drop-shadow(0 0 28px color-mix(in srgb, var(--a, #52fff4) 24%, transparent));
+  transition: filter 500ms ease;
 }
 
-/* ─── Energy inner glow ───────────────────────────────────────────────────────── */
-.orb-energy {
+/* Aura — positioned behind the SVG */
+.orb-frame::before {
+  content: "";
   position: absolute;
-  width: 40%;
-  height: 40%;
+  width: 72%;
+  aspect-ratio: 1;
   border-radius: 50%;
-  background: radial-gradient(circle, currentColor, transparent 70%);
-  opacity: 0.4;
-  animation: orb-breathe 3s ease-in-out infinite;
-}
-
-.orb-energy-pulse {
-  animation: orb-breathe-fast 1s ease-in-out infinite !important;
-  opacity: 0.7 !important;
-}
-
-/* ─── Neural overlay ──────────────────────────────────────────────────────────── */
-.orb-neural {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background:
+    radial-gradient(
+      circle,
+      color-mix(in srgb, var(--a, #52fff4) 32%, transparent),
+      color-mix(in srgb, var(--c, #0b7d82) 10%, transparent) 46%,
+      transparent 72%
+    );
+  filter: blur(44px);
+  opacity: .58;
+  animation: auraPulse calc(3.4s / var(--pulse, 1)) ease-in-out infinite;
+  z-index: -2;
   pointer-events: none;
 }
 
-.orb-neural-svg {
-  width: 100%;
-  height: 100%;
-}
-
-/* ─── Waveform ────────────────────────────────────────────────────────────────── */
-.orb-waveform {
+/* ─── HUD ring ─────────────────────────────────────────────────────────────────── */
+.hud-ring {
   position: absolute;
-  bottom: 22%;
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 20%;
-}
-
-.orb-wave-bar {
-  display: block;
-  width: calc(var(--orb-diameter) * 0.025);
-  min-width: 2px;
-  max-width: 5px;
-  background: currentColor;
-  border-radius: 2px;
-  animation: orb-wave 0.7s ease-in-out infinite alternate;
-  opacity: 0.8;
-}
-
-/* ─── Approval pulse ──────────────────────────────────────────────────────────── */
-.orb-approval-pulse {
-  position: absolute;
-  width: 30%;
-  height: 30%;
+  width: 84%;
+  aspect-ratio: 1;
   border-radius: 50%;
-  border: 2px solid var(--orb-waiting-approval);
-  animation: orb-approval-ring 1.4s ease-out infinite;
   pointer-events: none;
+  border: 1px solid color-mix(in srgb, var(--a, #52fff4) 16%, transparent);
+  background: repeating-conic-gradient(
+    from 0deg,
+    color-mix(in srgb, var(--a, #52fff4) 34%, transparent) 0deg 0.7deg,
+    transparent 0.7deg 12deg
+  );
+  mask: radial-gradient(circle, transparent 68%, black 69.5%, black 70.8%, transparent 72.2%);
+  -webkit-mask: radial-gradient(circle, transparent 68%, black 69.5%, black 70.8%, transparent 72.2%);
+  opacity: .30;
+  animation: hudRotate calc(34s / var(--speed, 1)) linear infinite;
 }
 
-/* ─── Emergency indicator ─────────────────────────────────────────────────────── */
-.orb-emergency-indicator {
+/* ─── Ground shadow ────────────────────────────────────────────────────────────── */
+.orb-shadow {
   position: absolute;
-  inset: 0;
-  background: radial-gradient(circle, rgba(239,68,68,0.25), transparent 70%);
-  animation: orb-flash 0.3s ease-in-out infinite alternate;
+  width: 42%;
+  height: 8%;
+  bottom: 19%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(0, 0, 0, .58), transparent 70%);
+  filter: blur(12px);
+  opacity: .55;
+  animation: shadowFloat calc(4.8s / var(--speed, 1)) ease-in-out infinite;
+  z-index: -1;
   pointer-events: none;
 }
 
-/* ─── State label ─────────────────────────────────────────────────────────────── */
+/* ─── SVG element classes (ported verbatim from prototype) ───────────────────── */
+
+.orb-svg { overflow: visible; }
+
+.shell {
+  fill: url(#bodyGradient);
+  stroke: color-mix(in srgb, var(--b, #d9fffb) 72%, transparent);
+  stroke-width: 1.15;
+  filter: url(#softGlow);
+  opacity: .92;
+  transition: stroke 500ms ease;
+}
+
+.rim-primary {
+  fill: none;
+  stroke: url(#rimGradient);
+  stroke-width: 2;
+  opacity: .62;
+  filter: url(#softGlow);
+  stroke-dasharray: 480 210 90 120;
+  animation: dashFlow calc(9s / var(--speed, 1)) linear infinite;
+}
+
+.rim-secondary {
+  fill: none;
+  stroke: color-mix(in srgb, var(--a, #52fff4) 44%, transparent);
+  stroke-width: .75;
+  opacity: .26;
+  stroke-dasharray: 18 24;
+  animation: dashFlowReverse calc(15s / var(--speed, 1)) linear infinite;
+}
+
+.ribbon-wide {
+  fill: none;
+  stroke: url(#ribbonGradient);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  mix-blend-mode: screen;
+  filter: url(#ribbonBlur);
+  opacity: .18;
+  stroke-width: 34;
+  stroke-dasharray: 460 260;
+  animation: dashFlow calc(7s / var(--speed, 1)) linear infinite;
+}
+
+.ribbon-edge {
+  fill: none;
+  stroke: url(#edgeGradient);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  mix-blend-mode: screen;
+  filter: url(#softGlow);
+  opacity: .46;
+  stroke-width: 1.65;
+  stroke-dasharray: 84 56 16 110;
+  animation: dashFlow calc(4.8s / var(--speed, 1)) linear infinite;
+}
+
+.ribbon-edge.alt,
+.ribbon-wide.alt {
+  animation-name: dashFlowReverse;
+  animation-duration: calc(6.4s / var(--speed, 1));
+}
+
+.ribbon-set-a { transform-origin: 300px 300px; animation: rotateA calc(10s / var(--speed, 1)) ease-in-out infinite; }
+.ribbon-set-b { transform-origin: 300px 300px; animation: rotateB calc(12s / var(--speed, 1)) ease-in-out infinite; }
+.ribbon-set-c { transform-origin: 300px 300px; animation: rotateC calc(15s / var(--speed, 1)) ease-in-out infinite; }
+
+.flow-line {
+  fill: none;
+  stroke: url(#edgeGradient);
+  stroke-width: 2.05;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: .54;
+  mix-blend-mode: screen;
+  filter: url(#softGlow);
+  stroke-dasharray: 9 34 42 42;
+  animation:
+    flowInside calc(1.25s / var(--speed, 1)) linear infinite,
+    lineBreathe calc(2.4s / var(--pulse, 1)) ease-in-out infinite;
+}
+
+.flow-line.thick {
+  stroke: url(#ribbonGradient);
+  stroke-width: 7.2;
+  opacity: .16;
+  filter: url(#ribbonBlur);
+  stroke-dasharray: 38 76 74 54;
+  animation:
+    flowInsideFast calc(1.8s / var(--speed, 1)) linear infinite reverse,
+    lineBreathe calc(2.2s / var(--pulse, 1)) ease-in-out infinite;
+}
+
+.flow-line.alt {
+  animation-direction: reverse, normal;
+  animation-duration: calc(1.15s / var(--speed, 1)), calc(2.4s / var(--pulse, 1));
+  opacity: .66;
+}
+
+.inner-flow-a { transform-origin: 300px 300px; animation: innerDriftA calc(4.2s / var(--speed, 1)) ease-in-out infinite; }
+.inner-flow-b { transform-origin: 300px 300px; animation: innerDriftB calc(5.2s / var(--speed, 1)) ease-in-out infinite; }
+
+.core-star {
+  fill: url(#coreGradient);
+  filter: url(#softGlow);
+  transform-origin: 300px 300px;
+  animation: corePulse calc(1.8s / var(--pulse, 1)) ease-in-out infinite;
+}
+
+.node {
+  fill: color-mix(in srgb, var(--b, #d9fffb) 82%, transparent);
+  filter: url(#softGlow);
+  opacity: .55;
+  transform-origin: 300px 300px;
+  animation: nodePulse calc(2.5s / var(--pulse, 1)) ease-in-out infinite;
+}
+
+.highlight {
+  fill: url(#highlightGradient);
+  opacity: .42;
+  mix-blend-mode: screen;
+  animation: highlightDrift calc(9s / var(--speed, 1)) ease-in-out infinite;
+}
+
+/* ─── State label ──────────────────────────────────────────────────────────────── */
 .orb-label {
   margin-top: 12px;
   font-family: var(--font-mono);
-  font-size: 0.6rem;
-  letter-spacing: 0.15em;
+  font-size: 0.62rem;
+  letter-spacing: 0.28em;
   text-transform: uppercase;
-  opacity: 0.8;
+  color: var(--b, #d9fffb);
+  text-shadow: 0 0 16px var(--a, #52fff4), 0 0 30px color-mix(in srgb, var(--a, #52fff4) 58%, transparent);
+  opacity: .92;
   display: flex;
   align-items: center;
-  gap: 5px;
-  transition: color 0.3s ease;
+  gap: 6px;
+  transition: color 500ms ease;
+  pointer-events: none;
 }
 
-.orb-size-small .orb-label {
-  font-size: 0.5rem;
-  margin-top: 8px;
-}
+.orb-size-small .orb-label { font-size: 0.52rem; margin-top: 8px; }
 
 .orb-label-dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: currentColor;
-  animation: orb-blink 2s ease-in-out infinite;
+  display: inline-block;
+  width: .58em;
+  height: .58em;
+  border-radius: 999px;
+  background: var(--a, #52fff4);
+  box-shadow: 0 0 14px var(--a, #52fff4), 0 0 28px var(--a, #52fff4);
+  animation: dotPulse calc(1.5s / var(--pulse, 1)) ease-in-out infinite;
+  flex-shrink: 0;
+  vertical-align: middle;
 }
 
-.orb-state-emergency_stopped .orb-label-dot {
-  animation: orb-blink-fast 0.5s ease-in-out infinite;
+/* ─── Keyframes (ported verbatim from prototype) ─────────────────────────────── */
+
+@keyframes orbFloat {
+  0%,  100% { transform: translate3d(0, 0, 0)    scale(1);     }
+  25%        { transform: translate3d(5px, -14px, 0)  scale(1.012); }
+  50%        { transform: translate3d(0, -22px, 0)    scale(1.026); }
+  75%        { transform: translate3d(-5px, -12px, 0) scale(1.01);  }
 }
 
-/* ─── Keyframes ───────────────────────────────────────────────────────────────── */
-@keyframes orb-breathe {
-  0%, 100% { transform: scale(1); opacity: 0.4; }
-  50% { transform: scale(1.08); opacity: 0.65; }
+@keyframes auraPulse {
+  0%,  100% { transform: scale(.92); opacity: .38; }
+  50%        { transform: scale(1.08); opacity: .68; }
 }
 
-@keyframes orb-breathe-fast {
-  0%, 100% { transform: scale(1); opacity: 0.45; }
-  50% { transform: scale(1.15); opacity: 0.8; }
+@keyframes shadowFloat {
+  0%,  100% { transform: translateY(0)    scaleX(.96); opacity: .38; }
+  50%        { transform: translateY(18px) scaleX(1.08); opacity: .24; }
 }
 
-@keyframes orb-spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+@keyframes hudRotate { to { transform: rotate(360deg); } }
+
+@keyframes dashFlow        { to { stroke-dashoffset: -720; } }
+@keyframes dashFlowReverse { to { stroke-dashoffset:  720; } }
+
+@keyframes flowInside {
+  0%   { stroke-dashoffset: 0;    }
+  100% { stroke-dashoffset: -220; }
 }
 
-@keyframes orb-spin-reverse {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(-360deg); }
+@keyframes flowInsideFast {
+  0%   { stroke-dashoffset: 0;    }
+  100% { stroke-dashoffset: -360; }
 }
 
-@keyframes orb-wave {
-  0%   { height: 15%; }
-  100% { height: 85%; }
+@keyframes lineBreathe {
+  0%,  100% { opacity: .28; }
+  50%        { opacity: .82; }
 }
 
-@keyframes orb-approval-ring {
-  0%   { transform: scale(1);   opacity: 0.8; }
-  100% { transform: scale(2.5); opacity: 0; }
+@keyframes innerDriftA {
+  0%   { transform: rotate(-14deg) scale(.95)  translate(-8px,  4px); }
+  33%  { transform: rotate(18deg)  scale(1.08) translate(10px, -10px); }
+  66%  { transform: rotate(-4deg)  scale(1.02) translate(3px,   9px); }
+  100% { transform: rotate(-14deg) scale(.95)  translate(-8px,  4px); }
 }
 
-@keyframes orb-flash {
-  0%   { opacity: 0.2; }
-  100% { opacity: 0.9; }
+@keyframes innerDriftB {
+  0%   { transform: rotate(22deg)  scale(1.08) translate(7px,   -3px); }
+  33%  { transform: rotate(-26deg) scale(.94)  translate(-12px,  8px); }
+  66%  { transform: rotate(6deg)   scale(1.03) translate(5px,   11px); }
+  100% { transform: rotate(22deg)  scale(1.08) translate(7px,   -3px); }
 }
 
-@keyframes orb-blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.2; }
+@keyframes rotateA {
+  0%,  100% { transform: rotate(0deg)  scale(1);     }
+  50%        { transform: rotate(18deg) scale(1.035); }
 }
 
-@keyframes orb-blink-fast {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
+@keyframes rotateB {
+  0%,  100% { transform: rotate(0deg)   scale(1.02); }
+  50%        { transform: rotate(-24deg) scale(.985); }
 }
 
-/* ─── Color binding — currentColor from container ───────────────────────────── */
-.orb-state-idle            { color: var(--orb-idle); }
-.orb-state-listening       { color: var(--orb-listening); }
-.orb-state-thinking        { color: var(--orb-thinking); }
-.orb-state-speaking        { color: var(--orb-speaking); }
-.orb-state-acting          { color: var(--orb-acting); }
-.orb-state-waiting_approval { color: var(--orb-waiting-approval); }
-.orb-state-paused          { color: var(--orb-paused); }
-.orb-state-error           { color: var(--orb-error); }
-.orb-state-emergency_stopped { color: var(--orb-emergency); }
+@keyframes rotateC {
+  0%,  100% { transform: rotate(0deg);  }
+  50%        { transform: rotate(34deg); }
+}
+
+@keyframes corePulse {
+  0%,  100% { transform: scale(.82); opacity: .55; }
+  50%        { transform: scale(1.26); opacity: 1;  }
+}
+
+@keyframes nodePulse {
+  0%,  100% { transform: scale(.75); opacity: .34; }
+  50%        { transform: scale(1.3);  opacity: .94; }
+}
+
+@keyframes highlightDrift {
+  0%,  100% { transform: translate(-6px, -4px) scale(.96); opacity: .26; }
+  50%        { transform: translate(10px,  7px) scale(1.05); opacity: .48; }
+}
+
+@keyframes dotPulse {
+  0%,  100% { transform: scale(.68); opacity: .58; }
+  50%        { transform: scale(1.2);  opacity: 1;  }
+}
+
+/* ─── Reduced motion ───────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .orb-frame,
+  .orb-frame * {
+    animation-duration: 999s !important;
+    animation-iteration-count: 1 !important;
+  }
+}

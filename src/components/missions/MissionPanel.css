@@ -13,12 +13,34 @@
 }
 
 .mission-section-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   font-family: var(--font-mono);
   font-size: 0.58rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-dim);
   padding: 0 2px;
+}
+
+.mission-clear-btn {
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.mission-clear-btn:hover {
+  border-color: var(--border-bright);
+  color: var(--text-muted);
 }
 
 /* ─── Mission card ─────────────────────────────────────────────────────────────── */

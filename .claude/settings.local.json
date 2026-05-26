@@ -5,7 +5,13 @@
       "Bash(cargo --version)",
       "Bash(rustup --version)",
       "Bash(npm run *)",
-      "Bash(npx tauri *)"
+      "Bash(npx tauri *)",
+      "Bash(npm install *)",
+      "Bash(npm test *)",
+      "Bash(cargo check *)",
+      "Bash(dir *)",
+      "Bash(npx tsc *)",
+      "Bash(del *)"
     ]
   }
 }

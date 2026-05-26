@@ -72,6 +72,21 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
       </div>
 
       <div className="settings-section">
+        <div className="settings-section-label">Orb Size</div>
+        <div style={{ display: "flex", gap: "5px" }}>
+          {(["small", "medium", "large"] as const).map((s) => (
+            <button
+              key={s}
+              className={`settings-mode-btn ${settings.orbSize === s ? "settings-mode-active" : ""}`}
+              onClick={() => dispatch({ type: "SET_SETTINGS", payload: { orbSize: s } })}
+            >
+              {s.charAt(0).toUpperCase() + s.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="settings-section">
         <div className="settings-section-label">Phase 0 Flags</div>
         <div className="settings-toggle-row">
           <span className="settings-toggle-label">Developer Mode</span>
@@ -81,6 +96,18 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
             aria-pressed={settings.developerMode}
           >
             {settings.developerMode ? "ON" : "OFF"}
+          </button>
+        </div>
+        <div className="settings-toggle-row">
+          <span className="settings-toggle-label">Persist Audit Log</span>
+          <button
+            className={`settings-toggle ${settings.persistAuditLog ? "settings-toggle-on" : ""}`}
+            onClick={() =>
+              dispatch({ type: "SET_SETTINGS", payload: { persistAuditLog: !settings.persistAuditLog } })
+            }
+            aria-pressed={settings.persistAuditLog}
+          >
+            {settings.persistAuditLog ? "ON" : "OFF"}
           </button>
         </div>
         <div className="settings-toggle-row settings-toggle-row-disabled">

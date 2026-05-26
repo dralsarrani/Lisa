@@ -32,13 +32,18 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--bg-base);
+  background:
+    radial-gradient(ellipse 55% 45% at 22% 55%, rgba(8, 25, 70, 0.55) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 35% at 78% 45%, rgba(5, 15, 50, 0.40) 0%, transparent 70%),
+    var(--bg-base);
   overflow: hidden;
-  transition: background 0.3s ease;
+  transition: background 0.4s ease;
 }
 
 .app-emergency {
-  background: #06020a;
+  background:
+    radial-gradient(ellipse 50% 40% at 22% 55%, rgba(40, 5, 5, 0.50) 0%, transparent 70%),
+    #04020c;
 }
 
 /* ─── Body: two-column layout ───────────────────────────────────────────────────── */
@@ -67,13 +72,15 @@
 }
 
 .app-orb-body {
-  padding: 28px 20px 20px;
+  padding: 28px 20px 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   position: relative;
   min-height: 280px;
+  /* Subtle radial glow — orb illuminates its container */
+  background: radial-gradient(ellipse 70% 55% at 50% 45%, rgba(26, 100, 255, 0.035) 0%, transparent 70%);
 }
 
 .orb-mode-label {
@@ -84,40 +91,38 @@
   text-transform: uppercase;
 }
 
-/* ─── Emergency overlay ──────────────────────────────────────────────────────────── */
+/* ─── Emergency overlay — flows below orb, no absolute positioning ───────────────── */
 .emergency-overlay {
-  position: absolute;
-  bottom: 16px;
-  left: 0; right: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
+  margin-top: 10px;
   pointer-events: none;
 }
 
 .emergency-overlay-text {
   font-family: var(--font-mono);
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.15em;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
   color: var(--color-critical);
-  animation: pulse 0.5s ease-in-out infinite;
+  text-shadow: 0 0 12px rgba(220, 38, 38, 0.5);
 }
 
 .emergency-overlay-sub {
   font-family: var(--font-mono);
-  font-size: 0.58rem;
-  color: rgba(239,68,68,0.6);
-  letter-spacing: 0.06em;
+  font-size: 0.60rem;
+  color: rgba(239, 68, 68, 0.55);
+  letter-spacing: 0.07em;
 }
 
 .emergency-overlay-hint {
   font-family: var(--font-mono);
   font-size: 0.56rem;
-  color: var(--text-dim);
+  color: var(--text-muted);
   letter-spacing: 0.04em;
-  margin-top: 4px;
+  margin-top: 5px;
 }
 
 /* ─── Command panel ──────────────────────────────────────────────────────────────── */
@@ -178,23 +183,24 @@
 /* ─── Tabs ────────────────────────────────────────────────────────────────────────── */
 .app-tabs {
   display: flex;
-  gap: 1px;
-  background: var(--bg-surface);
+  gap: 0;
+  background: rgba(7, 12, 24, 0.90);
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
+  padding: 0 4px;
 }
 
 .app-tab {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 10px 16px;
+  padding: 11px 18px;
   background: transparent;
   border: none;
-  color: var(--text-muted);
+  color: var(--text-dim);
   font-family: var(--font-mono);
-  font-size: 0.65rem;
-  letter-spacing: 0.06em;
+  font-size: 0.63rem;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   cursor: pointer;
   border-bottom: 2px solid transparent;
@@ -205,13 +211,14 @@
 
 .app-tab:hover:not(.app-tab-active) {
   color: var(--text-secondary);
-  background: var(--bg-hover);
+  background: rgba(255,255,255,0.025);
 }
 
 .app-tab-active {
   color: var(--color-accent);
   border-bottom-color: var(--color-accent);
-  background: var(--bg-panel);
+  background: rgba(26, 159, 255, 0.04);
+  text-shadow: 0 0 20px rgba(26,159,255,0.4);
 }
 
 .app-tab-badge {

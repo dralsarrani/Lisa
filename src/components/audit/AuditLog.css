@@ -1,9 +1,84 @@
+/* ─── Wrapper ────────────────────────────────────────────────────────────────────── */
+.audit-log-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+/* ─── Toolbar ────────────────────────────────────────────────────────────────────── */
+.audit-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 6px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.audit-filter-tabs {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+}
+
+.audit-filter-tab {
+  padding: 2px 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.audit-filter-tab:hover { color: var(--text-secondary); }
+.audit-filter-active { border-color: var(--color-accent); color: var(--color-accent); background: var(--color-accent-dim); }
+.audit-filter-warning { color: var(--severity-warning); }
+.audit-filter-error   { color: var(--severity-error); }
+.audit-filter-critical { color: var(--severity-critical); }
+
+/* ─── Clear control (dev/demo only) ─────────────────────────────────────────────── */
+.audit-clear-area {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.audit-clear-btn {
+  padding: 2px 8px;
+  font-size: 0.58rem;
+  font-family: var(--font-mono);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.audit-clear-btn:hover { border-color: var(--border-bright); color: var(--text-secondary); }
+
+.audit-clear-warning {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--color-warning);
+  letter-spacing: 0.04em;
+}
+
+/* ─── Log ────────────────────────────────────────────────────────────────────────── */
 .audit-log {
   display: flex;
   flex-direction: column-reverse;
   gap: 2px;
   overflow-y: auto;
-  max-height: 100%;
+  flex: 1;
+  min-height: 0;
   padding: 4px 0;
   font-family: var(--font-mono);
   font-size: 0.65rem;

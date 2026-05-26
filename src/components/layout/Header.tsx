@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import type { OrbState, LisaModeId } from "../../core/types";
 import { getModeDisplayName } from "../../core/mode-store";
 import { useLisa } from "../../app/useLisa";
@@ -27,7 +27,12 @@ export const Header: React.FC<HeaderProps> = ({ orbState, activeMode, onEmergenc
   const pendingApprovalCount = state.approvals.filter((a) => a.status === "pending").length;
   const isEmergencyStopped = orbState === "emergency_stopped";
 
-  const now = new Date();
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+
   const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   const dateStr = now.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
 
@@ -67,7 +72,7 @@ export const Header: React.FC<HeaderProps> = ({ orbState, activeMode, onEmergenc
         <button
           className="btn btn-emergency header-emergency-btn"
           onClick={onEmergencyStop}
-          title="Emergency Stop — immediately halt all active operations"
+          title="Emergency Stop — immediately halt all active operations (Ctrl+Shift+.)"
           aria-label="Emergency Stop"
         >
           ⬛ STOP

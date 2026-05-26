@@ -129,7 +129,7 @@ function App() {
               <span className="orb-mode-label">{getModeDisplayName(state.activeMode)}</span>
             </div>
             <div className="app-orb-body">
-              <LisaOrb state={state.orbState} size="large" />
+              <LisaOrb state={state.orbState} size="large" mode={state.activeMode} />
               {isEmergencyStopped && (
                 <div className="emergency-overlay">
                   <div className="emergency-overlay-text">EMERGENCY STOPPED</div>

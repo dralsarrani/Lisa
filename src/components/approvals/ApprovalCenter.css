@@ -144,3 +144,21 @@
   border-top: 1px solid var(--border-subtle);
   background: var(--bg-panel);
 }
+
+.approval-show-more {
+  align-self: center;
+  padding: 4px 12px;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.approval-show-more:hover {
+  border-color: var(--border-bright);
+  color: var(--text-secondary);
+}

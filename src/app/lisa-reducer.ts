@@ -2,6 +2,7 @@ import type {
   OrbState,
   LisaModeId,
   Mission,
+  MissionStep,
   ApprovalRequest,
   AuditEvent,
   LisaSettings,
@@ -49,6 +50,9 @@ export type LisaAction =
   | { type: "SET_RUNTIME_HEALTH"; payload: RuntimeHealth }
   | { type: "SET_COMMAND_RESPONSE"; payload: string | null }
   | { type: "EMERGENCY_STOP" }
+  | { type: "CLEAR_EMERGENCY"; payload: { clearedAt: string; auditEvent: AuditEvent } }
+  | { type: "CLEAR_AUDIT_LOG"; payload: AuditEvent }
+  | { type: "CLEAR_MISSION_HISTORY" }
   | {
       type: "LOAD_STATE";
       payload: {
@@ -125,6 +129,53 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
         missions: stoppedMissions,
         approvals: cancelledApprovals,
         commandResponse: "EMERGENCY STOP ACTIVATED. All active operations halted. System is safe.",
+      };
+    }
+
+    case "CLEAR_EMERGENCY": {
+      const { clearedAt, auditEvent } = action.payload;
+      const pausedMissions = state.missions.map((m): Mission => {
+        if (m.status !== "emergency_stopped") return m;
+        const explanationStep: MissionStep = {
+          id: crypto.randomUUID(),
+          label: "Emergency Cleared",
+          description:
+            "Emergency state cleared by wake command; mission remains paused and requires explicit user action to continue.",
+          status: "skipped",
+          startedAt: clearedAt,
+          completedAt: clearedAt,
+          notes: "Cleared via 'Lisa, wake up' command.",
+        };
+        return {
+          ...m,
+          status: "paused",
+          steps: [...m.steps, explanationStep],
+        };
+      });
+      return {
+        ...state,
+        orbState: "idle",
+        missions: pausedMissions,
+        auditEvents: [auditEvent, ...state.auditEvents].slice(0, 500),
+        commandResponse: "Emergency lock cleared. Stopped missions are now paused and require explicit restart.",
+      };
+    }
+
+    case "CLEAR_AUDIT_LOG":
+      // Sentinel event is included as the payload — replace the log with only it.
+      return { ...state, auditEvents: [action.payload] };
+
+    case "CLEAR_MISSION_HISTORY": {
+      const terminalStatuses = new Set([
+        "completed",
+        "failed",
+        "cancelled",
+        "paused",
+        "emergency_stopped",
+      ]);
+      return {
+        ...state,
+        missions: state.missions.filter((m) => !terminalStatuses.has(m.status)),
       };
     }
 

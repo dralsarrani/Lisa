@@ -5,10 +5,12 @@
   padding: 0 20px;
   height: 52px;
   flex-shrink: 0;
-  background: var(--bg-surface);
+  background: rgba(7, 12, 24, 0.92);
   border-bottom: 1px solid var(--border-subtle);
   position: relative;
   z-index: 10;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .header::after {
@@ -16,8 +18,8 @@
   position: absolute;
   bottom: 0; left: 0; right: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
-  opacity: 0.2;
+  background: linear-gradient(90deg, transparent 5%, var(--color-accent) 50%, transparent 95%);
+  opacity: 0.18;
 }
 
 .header-emergency {
@@ -53,8 +55,8 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #60c8ff, #0050a0);
-  box-shadow: 0 0 8px rgba(26,159,255,0.6);
+  background: radial-gradient(circle at 35% 30%, #80d8ff, #0060c0);
+  box-shadow: 0 0 10px rgba(26,159,255,0.70), 0 0 4px rgba(26,159,255,0.40);
   flex-shrink: 0;
 }
 
@@ -64,6 +66,7 @@
   font-weight: 600;
   letter-spacing: 0.22em;
   color: var(--text-primary);
+  text-shadow: 0 0 24px rgba(26, 159, 255, 0.25);
 }
 
 .header-subtitle {
@@ -86,10 +89,11 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-subtle);
+  padding: 4px 12px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--glass-border);
   border-radius: 20px;
+  backdrop-filter: blur(6px);
 }
 
 .header-state-dot {

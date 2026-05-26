@@ -1,19 +1,15 @@
 import type { Mission, MissionStep, ApprovalRequest, LisaModeId } from "./types";
 
-let _missionCounter = 1;
-let _stepCounter = 1;
-let _approvalCounter = 1;
-
 function genMissionId(): string {
-  return `mission_${Date.now()}_${_missionCounter++}`;
+  return crypto.randomUUID();
 }
 
 function genStepId(): string {
-  return `step_${Date.now()}_${_stepCounter++}`;
+  return crypto.randomUUID();
 }
 
 function genApprovalId(): string {
-  return `approval_${Date.now()}_${_approvalCounter++}`;
+  return crypto.randomUUID();
 }
 
 export function createTestMission(activeMode?: LisaModeId): {

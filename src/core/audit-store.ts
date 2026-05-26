@@ -1,9 +1,7 @@
 import type { AuditEvent, AuditEventType, AuditSeverity } from "./types";
 
-let _nextId = 1;
-
 function generateId(): string {
-  return `audit_${Date.now()}_${_nextId++}`;
+  return crypto.randomUUID();
 }
 
 export function createAuditEvent(params: {

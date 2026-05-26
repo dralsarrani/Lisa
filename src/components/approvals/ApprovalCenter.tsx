@@ -105,9 +105,14 @@ function ApprovalCard({ approval }: { approval: ApprovalRequest }) {
   );
 }
 
+const RESOLVED_PREVIEW = 10;
+
 export const ApprovalCenter: React.FC<ApprovalCenterProps> = ({ approvals }) => {
+  const [showAllResolved, setShowAllResolved] = React.useState(false);
+
   const pending = approvals.filter((a) => a.status === "pending");
   const resolved = approvals.filter((a) => a.status !== "pending");
+  const resolvedVisible = showAllResolved ? resolved : resolved.slice(0, RESOLVED_PREVIEW);
 
   return (
     <div className="approval-center">
@@ -132,9 +137,17 @@ export const ApprovalCenter: React.FC<ApprovalCenterProps> = ({ approvals }) => 
           {resolved.length > 0 && (
             <div className="approval-section">
               <div className="approval-section-label">Resolved</div>
-              {resolved.map((a) => (
+              {resolvedVisible.map((a) => (
                 <ApprovalCard key={a.id} approval={a} />
               ))}
+              {resolved.length > RESOLVED_PREVIEW && !showAllResolved && (
+                <button
+                  className="approval-show-more"
+                  onClick={() => setShowAllResolved(true)}
+                >
+                  Show all ({resolved.length})
+                </button>
+              )}
             </div>
           )}
         </>

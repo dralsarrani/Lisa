@@ -13,28 +13,32 @@ html, body, #root { height: 100%; width: 100%; }
 /* ─── Design tokens ───────────────────────────────────────────────────────────── */
 :root {
   /* Background layers */
-  --bg-base:       #04070f;
-  --bg-surface:    #080e1a;
-  --bg-panel:      #0a1220;
-  --bg-elevated:   #0d1626;
-  --bg-hover:      #111d30;
-  --bg-active:     #142038;
+  --bg-base:       #030610;
+  --bg-surface:    #070c18;
+  --bg-panel:      #09111e;
+  --bg-elevated:   #0c1524;
+  --bg-hover:      #101b2e;
+  --bg-active:     #131f36;
+
+  /* Glass */
+  --glass-bg:     rgba(7, 12, 24, 0.82);
+  --glass-border: rgba(40, 120, 220, 0.14);
 
   /* Border */
-  --border-subtle:  rgba(30, 100, 200, 0.12);
-  --border-default: rgba(30, 120, 220, 0.2);
-  --border-bright:  rgba(30, 160, 255, 0.35);
+  --border-subtle:  rgba(30, 100, 200, 0.14);
+  --border-default: rgba(30, 120, 220, 0.22);
+  --border-bright:  rgba(30, 160, 255, 0.40);
 
   /* Accent */
   --color-accent:       #1a9fff;
-  --color-accent-dim:   rgba(26, 159, 255, 0.15);
-  --color-accent-glow:  rgba(26, 159, 255, 0.08);
+  --color-accent-dim:   rgba(26, 159, 255, 0.14);
+  --color-accent-glow:  rgba(26, 159, 255, 0.06);
 
-  /* Text */
-  --text-primary:   #e2eaf6;
-  --text-secondary: #7a9cc4;
-  --text-muted:     #3d5a7a;
-  --text-dim:       #1e3350;
+  /* Text — improved contrast */
+  --text-primary:   #ecf3ff;
+  --text-secondary: #8ab8d8;
+  --text-muted:     #4a6a8a;
+  --text-dim:       #243a52;
 
   /* Semantic colors */
   --color-success:  #22c55e;
@@ -114,10 +118,12 @@ body {
 
 /* ─── Shared panel ─────────────────────────────────────────────────────────────── */
 .panel {
-  background: var(--bg-panel);
-  border: 1px solid var(--border-subtle);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .panel-header {
@@ -126,7 +132,7 @@ body {
   justify-content: space-between;
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border-subtle);
-  background: var(--bg-elevated);
+  background: rgba(255,255,255,0.018);
 }
 
 .panel-title {
