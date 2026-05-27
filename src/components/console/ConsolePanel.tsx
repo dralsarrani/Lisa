@@ -17,7 +17,7 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [interactions.length]);
+  }, [interactions]);
 
   if (interactions.length === 0) {
     return <EmptyConsole orbState={orbState} settings={settings} />;
@@ -64,6 +64,8 @@ function InteractionCard({ interaction }: { interaction: LisaInteraction }) {
       <div className="console-response">
         {interaction.status === "thinking" ? (
           <ThinkingIndicator model={interaction.model} kind={interaction.kind} />
+        ) : interaction.status === "streaming" ? (
+          <StreamingResponse interaction={interaction} />
         ) : interaction.status === "failed" ? (
           <FailedResponse interaction={interaction} />
         ) : (
@@ -71,6 +73,32 @@ function InteractionCard({ interaction }: { interaction: LisaInteraction }) {
         )}
       </div>
     </div>
+  );
+}
+
+// ─── Streaming response ───────────────────────────────────────────────────────
+
+function StreamingResponse({ interaction }: { interaction: LisaInteraction }) {
+  return (
+    <>
+      <div className="console-streaming-text">
+        {interaction.response}
+        <span className="console-streaming-cursor" />
+      </div>
+      <div className="console-response-meta">
+        <span className={`console-meta-kind console-meta-kind-${interaction.kind}`}>
+          {kindLabel(interaction.kind)}
+        </span>
+        {interaction.model && (
+          <>
+            <span className="console-meta-sep">·</span>
+            <span className="console-meta-model">{interaction.model}</span>
+          </>
+        )}
+        <span className="console-meta-sep">·</span>
+        <span className="console-streaming-indicator">streaming…</span>
+      </div>
+    </>
   );
 }
 

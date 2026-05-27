@@ -56,6 +56,7 @@ export type LisaAction =
   | { type: "CLEAR_EMERGENCY"; payload: { clearedAt: string; auditEvent: AuditEvent } }
   | { type: "ADD_INTERACTION"; payload: LisaInteraction }
   | { type: "UPDATE_INTERACTION"; payload: { id: string } & Partial<Omit<LisaInteraction, "id" | "createdAt">> }
+  | { type: "APPEND_INTERACTION_CONTENT"; payload: { id: string; chunk: string } }
   | { type: "CLEAR_AUDIT_LOG"; payload: AuditEvent }
   | { type: "CLEAR_MISSION_HISTORY" }
   | {
@@ -178,6 +179,16 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
         ...state,
         interactions: state.interactions.map((i) =>
           i.id === id ? { ...i, ...updates } : i
+        ),
+      };
+    }
+
+    case "APPEND_INTERACTION_CONTENT": {
+      const { id, chunk } = action.payload;
+      return {
+        ...state,
+        interactions: state.interactions.map((i) =>
+          i.id === id ? { ...i, response: i.response + chunk } : i
         ),
       };
     }

@@ -60,12 +60,12 @@ export const CommandInput: React.FC = () => {
     };
   }, [state.commandResponse, state.orbState, dispatch]);
 
-  async function handleLlmQuery(
+  async function handleStreamingLlmQuery(
     raw: string,
     model: string,
     maxContextTurns: number,
     interactionId: string
-  ) {
+  ): Promise<void> {
     const isInTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
     if (!isInTauri) {
       const msg = "Local AI is only available in the desktop app (Tauri).";
@@ -87,94 +87,158 @@ export const CommandInput: React.FC = () => {
     isLlmResponseRef.current = false;
 
     addAudit({
-      eventType: "llm_request_sent",
+      eventType: "llm_stream_started",
       source: "command_input",
-      summary: `LLM request sent — model: "${model}"`,
+      summary: `LLM stream started — model: "${model}"`,
       details: `prompt_chars=${raw.length} messages=${messages.length} history_turns=${trimmedHistory.length}`,
       severity: "info",
     });
 
-    try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const result = await invoke<{
-        response: string | null;
-        error: string | null;
-        model: string;
-        latency_ms: number;
-      }>("send_ollama_chat", {
-        model,
-        messages: messages.map((m) => ({ role: m.role, content: m.content })),
-      });
+    const { invoke } = await import("@tauri-apps/api/core");
+    const { listen } = await import("@tauri-apps/api/event");
 
-      if (result.error || !result.response) {
-        const errMsg = result.error ?? "No response received from model.";
-        dispatch({ type: "SET_ORB_STATE", payload: "error" });
-        dispatch({
-          type: "UPDATE_INTERACTION",
-          payload: { id: interactionId, status: "failed", error: errMsg, completedAt: now() },
+    let accumulatedResponse = "";
+    let firstChunk = true;
+    const unsub = { chunk: () => {}, done: () => {}, error: () => {} } as {
+      chunk: () => void;
+      done: () => void;
+      error: () => void;
+    };
+    const cleanup = () => {
+      unsub.chunk();
+      unsub.done();
+      unsub.error();
+    };
+
+    await new Promise<void>((resolve) => {
+      Promise.all([
+        listen<{ id: string; chunk: string }>("lisa-stream-chunk", (ev) => {
+          if (ev.payload.id !== interactionId) return;
+          if (firstChunk) {
+            firstChunk = false;
+            dispatch({ type: "SET_ORB_STATE", payload: "speaking" });
+            dispatch({
+              type: "UPDATE_INTERACTION",
+              payload: { id: interactionId, status: "streaming" },
+            });
+          }
+          accumulatedResponse += ev.payload.chunk;
+          dispatch({
+            type: "APPEND_INTERACTION_CONTENT",
+            payload: { id: interactionId, chunk: ev.payload.chunk },
+          });
+        }),
+        listen<{ id: string; model: string; latency_ms: number }>(
+          "lisa-stream-done",
+          (ev) => {
+            if (ev.payload.id !== interactionId) return;
+            cleanup();
+            dispatch({
+              type: "UPDATE_INTERACTION",
+              payload: {
+                id: interactionId,
+                status: "complete",
+                completedAt: now(),
+                latencyMs: ev.payload.latency_ms,
+              },
+            });
+            if (accumulatedResponse) {
+              isLlmResponseRef.current = true;
+              dispatch({ type: "SET_COMMAND_RESPONSE", payload: accumulatedResponse });
+            }
+            addAudit({
+              eventType: "llm_stream_completed",
+              source: "command_input",
+              summary: `LLM stream completed — model: "${model}" in ${ev.payload.latency_ms}ms`,
+              details: `response_chars=${accumulatedResponse.length} latency_ms=${ev.payload.latency_ms}`,
+              severity: "info",
+            });
+            conversationHistoryRef.current = [
+              ...trimmedHistory,
+              { userInput: raw, assistantResponse: accumulatedResponse, timestamp: now(), model },
+            ];
+            setTimeout(() => dispatch({ type: "SET_ORB_STATE", payload: "idle" }), 3000);
+            resolve();
+          }
+        ),
+        listen<{ id: string; error: string; latency_ms: number }>(
+          "lisa-stream-error",
+          (ev) => {
+            if (ev.payload.id !== interactionId) return;
+            cleanup();
+            dispatch({ type: "SET_ORB_STATE", payload: "error" });
+            dispatch({
+              type: "UPDATE_INTERACTION",
+              payload: {
+                id: interactionId,
+                status: "failed",
+                error: ev.payload.error,
+                completedAt: now(),
+              },
+            });
+            dispatch({
+              type: "SET_COMMAND_RESPONSE",
+              payload: `Lisa could not respond: ${ev.payload.error}`,
+            });
+            addAudit({
+              eventType: "llm_stream_failed",
+              source: "command_input",
+              summary: `LLM stream failed — model: "${model}" in ${ev.payload.latency_ms}ms`,
+              details: ev.payload.error,
+              severity: "error",
+            });
+            setTimeout(() => dispatch({ type: "SET_ORB_STATE", payload: "idle" }), 2000);
+            resolve();
+          }
+        ),
+      ])
+        .then(([unChunk, unDone, unError]) => {
+          unsub.chunk = unChunk;
+          unsub.done = unDone;
+          unsub.error = unError;
+          invoke("stream_ollama_chat", {
+            interactionId,
+            model,
+            messages: messages.map((m) => ({ role: m.role, content: m.content })),
+          }).catch((err: unknown) => {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            cleanup();
+            dispatch({ type: "SET_ORB_STATE", payload: "error" });
+            dispatch({
+              type: "UPDATE_INTERACTION",
+              payload: { id: interactionId, status: "failed", error: errMsg, completedAt: now() },
+            });
+            dispatch({ type: "SET_COMMAND_RESPONSE", payload: `LLM stream failed: ${errMsg}` });
+            addAudit({
+              eventType: "llm_stream_failed",
+              source: "command_input",
+              summary: "LLM stream invoke failed.",
+              details: errMsg,
+              severity: "error",
+            });
+            setTimeout(() => dispatch({ type: "SET_ORB_STATE", payload: "idle" }), 2000);
+            resolve();
+          });
+        })
+        .catch((err: unknown) => {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          dispatch({ type: "SET_ORB_STATE", payload: "error" });
+          dispatch({
+            type: "UPDATE_INTERACTION",
+            payload: { id: interactionId, status: "failed", error: errMsg, completedAt: now() },
+          });
+          dispatch({ type: "SET_COMMAND_RESPONSE", payload: `LLM stream setup failed: ${errMsg}` });
+          addAudit({
+            eventType: "llm_stream_failed",
+            source: "command_input",
+            summary: "LLM stream listener setup failed.",
+            details: errMsg,
+            severity: "error",
+          });
+          setTimeout(() => dispatch({ type: "SET_ORB_STATE", payload: "idle" }), 2000);
+          resolve();
         });
-        dispatch({ type: "SET_COMMAND_RESPONSE", payload: `Lisa could not respond: ${errMsg}` });
-        addAudit({
-          eventType: "llm_request_failed",
-          source: "command_input",
-          summary: `LLM request failed — model: "${model}" in ${result.latency_ms}ms`,
-          details: errMsg,
-          severity: "error",
-        });
-        setTimeout(() => dispatch({ type: "SET_ORB_STATE", payload: "idle" }), 2000);
-        return;
-      }
-
-      dispatch({ type: "SET_ORB_STATE", payload: "speaking" });
-      dispatch({
-        type: "UPDATE_INTERACTION",
-        payload: {
-          id: interactionId,
-          status: "complete",
-          response: result.response,
-          completedAt: now(),
-          latencyMs: result.latency_ms,
-        },
-      });
-      isLlmResponseRef.current = true;
-      dispatch({ type: "SET_COMMAND_RESPONSE", payload: result.response });
-
-      addAudit({
-        eventType: "llm_response_received",
-        source: "command_input",
-        summary: `LLM response received — model: "${model}" in ${result.latency_ms}ms`,
-        details: `response_chars=${result.response.length} latency_ms=${result.latency_ms}`,
-        severity: "info",
-      });
-
-      conversationHistoryRef.current = [
-        ...trimmedHistory,
-        {
-          userInput: raw,
-          assistantResponse: result.response,
-          timestamp: now(),
-          model,
-        },
-      ];
-
-      setTimeout(() => dispatch({ type: "SET_ORB_STATE", payload: "idle" }), 3000);
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      dispatch({ type: "SET_ORB_STATE", payload: "error" });
-      dispatch({
-        type: "UPDATE_INTERACTION",
-        payload: { id: interactionId, status: "failed", error: errMsg, completedAt: now() },
-      });
-      dispatch({ type: "SET_COMMAND_RESPONSE", payload: `LLM request failed: ${errMsg}` });
-      addAudit({
-        eventType: "llm_request_failed",
-        source: "command_input",
-        summary: "LLM request threw an unexpected error.",
-        details: errMsg,
-        severity: "error",
-      });
-      setTimeout(() => dispatch({ type: "SET_ORB_STATE", payload: "idle" }), 2000);
-    }
+    });
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -499,7 +563,7 @@ export const CommandInput: React.FC = () => {
               response: "", model: ollamaModel, createdAt: now(),
             },
           });
-          await handleLlmQuery(raw, ollamaModel, maxContextTurns, interactionId);
+          await handleStreamingLlmQuery(raw, ollamaModel, maxContextTurns, interactionId);
         } else if (enableLocalAi && !ollamaModel) {
           const msg = "Local AI is enabled but no model is selected. Go to Settings → Local AI to choose a model.";
           dispatch({ type: "SET_COMMAND_RESPONSE", payload: msg });

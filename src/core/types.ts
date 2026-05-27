@@ -150,7 +150,11 @@ export type AuditEventType =
   | "llm_request_sent"
   | "llm_response_received"
   | "llm_request_failed"
-  | "llm_disabled_fallback";
+  | "llm_disabled_fallback"
+  | "llm_stream_started"
+  | "llm_stream_completed"
+  | "llm_stream_failed"
+  | "llm_stream_aborted";
 
 export interface AuditEvent {
   id: string;
@@ -242,7 +246,7 @@ export interface CommandRouteResult {
 // ─── Interactions (session-only, not persisted) ───────────────────────────────
 
 export type InteractionKind = "command" | "local_ai" | "error" | "system";
-export type InteractionStatus = "thinking" | "complete" | "failed";
+export type InteractionStatus = "thinking" | "streaming" | "complete" | "failed";
 
 export interface LisaInteraction {
   id: string;

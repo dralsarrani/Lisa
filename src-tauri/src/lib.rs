@@ -1,6 +1,7 @@
+use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 // ─── Ollama endpoint constants ────────────────────────────────────────────────
 // Localhost only. Arbitrary host URLs are never accepted in Phase 1A.
@@ -56,6 +57,33 @@ struct OllamaMessageField {
 #[derive(Debug, Deserialize)]
 struct OllamaRawChatResponse {
     message: Option<OllamaMessageField>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OllamaStreamChunk {
+    message: Option<OllamaMessageField>,
+    done: Option<bool>,
+    error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StreamChunkPayload {
+    pub id: String,
+    pub chunk: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StreamDonePayload {
+    pub id: String,
+    pub model: String,
+    pub latency_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StreamErrorPayload {
+    pub id: String,
+    pub error: String,
+    pub latency_ms: u64,
 }
 
 #[derive(Debug, Serialize)]
@@ -379,6 +407,136 @@ async fn send_ollama_chat(model: String, messages: Vec<OllamaChatMessage>) -> Ol
     }
 }
 
+#[tauri::command]
+async fn stream_ollama_chat(
+    app_handle: tauri::AppHandle,
+    interaction_id: String,
+    model: String,
+    messages: Vec<OllamaChatMessage>,
+) -> Result<(), String> {
+    let start = std::time::Instant::now();
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(OLLAMA_CHAT_TIMEOUT_SECS))
+        .build()
+        .map_err(|e| format!("HTTP client build error: {e}"))?;
+
+    let body = OllamaChatRequest {
+        model: &model,
+        messages: &messages,
+        stream: true,
+        options: OllamaChatOptions {
+            num_predict: 256,
+            temperature: 0.4,
+            top_p: 0.9,
+        },
+    };
+
+    let resp = client
+        .post(OLLAMA_CHAT_URL)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_timeout() {
+                "Local model did not respond before the timeout. First responses can be slow while Ollama loads the model. Try again, choose a smaller model, or restart Ollama.".to_string()
+            } else {
+                format!("Ollama chat failed at {OLLAMA_CHAT_URL}: {}", reqwest_error_detail(&e))
+            }
+        })?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        let body_text = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "Ollama HTTP {status} from {OLLAMA_CHAT_URL}: {body_text}"
+        ));
+    }
+
+    let mut byte_stream = resp.bytes_stream();
+    let mut line_buf = String::new();
+
+    while let Some(item) = byte_stream.next().await {
+        let bytes = match item {
+            Ok(b) => b,
+            Err(e) => {
+                let _ = app_handle.emit(
+                    "lisa-stream-error",
+                    StreamErrorPayload {
+                        id: interaction_id.clone(),
+                        error: format!("Stream read error: {e}"),
+                        latency_ms: start.elapsed().as_millis() as u64,
+                    },
+                );
+                return Ok(());
+            }
+        };
+
+        let text = String::from_utf8_lossy(&bytes);
+        for ch in text.chars() {
+            if ch == '\n' {
+                let line = line_buf.trim().to_string();
+                line_buf.clear();
+                if line.is_empty() {
+                    continue;
+                }
+                match serde_json::from_str::<OllamaStreamChunk>(&line) {
+                    Ok(chunk) => {
+                        if let Some(err_msg) = chunk.error {
+                            let _ = app_handle.emit(
+                                "lisa-stream-error",
+                                StreamErrorPayload {
+                                    id: interaction_id.clone(),
+                                    error: err_msg,
+                                    latency_ms: start.elapsed().as_millis() as u64,
+                                },
+                            );
+                            return Ok(());
+                        }
+                        if let Some(msg) = chunk.message {
+                            if !msg.content.is_empty() {
+                                let _ = app_handle.emit(
+                                    "lisa-stream-chunk",
+                                    StreamChunkPayload {
+                                        id: interaction_id.clone(),
+                                        chunk: msg.content,
+                                    },
+                                );
+                            }
+                        }
+                        if chunk.done.unwrap_or(false) {
+                            let _ = app_handle.emit(
+                                "lisa-stream-done",
+                                StreamDonePayload {
+                                    id: interaction_id.clone(),
+                                    model: model.clone(),
+                                    latency_ms: start.elapsed().as_millis() as u64,
+                                },
+                            );
+                            return Ok(());
+                        }
+                    }
+                    Err(_) => {} // Skip non-JSON lines (e.g. blank lines, headers)
+                }
+            } else {
+                line_buf.push(ch);
+            }
+        }
+    }
+
+    // Stream exhausted without an explicit done marker — emit done anyway.
+    let _ = app_handle.emit(
+        "lisa-stream-done",
+        StreamDonePayload {
+            id: interaction_id,
+            model,
+            latency_ms: start.elapsed().as_millis() as u64,
+        },
+    );
+
+    Ok(())
+}
+
 // ─── App Entry ────────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -393,6 +551,7 @@ pub fn run() {
             write_app_state,
             list_ollama_models,
             send_ollama_chat,
+            stream_ollama_chat,
         ])
         .run(tauri::generate_context!())
         .expect("Error while running Lisa application");
@@ -482,5 +641,32 @@ mod tests {
         let parsed: OllamaRawChatResponse =
             serde_json::from_str(json).expect("must parse even without message field");
         assert!(parsed.message.is_none());
+    }
+
+    #[test]
+    fn stream_chunk_parses_content_token() {
+        let json = r#"{"model":"llama3.2:1b","message":{"role":"assistant","content":"Hello"},"done":false}"#;
+        let chunk: OllamaStreamChunk =
+            serde_json::from_str(json).expect("must parse stream chunk");
+        assert_eq!(chunk.message.unwrap().content, "Hello");
+        assert_eq!(chunk.done, Some(false));
+        assert!(chunk.error.is_none());
+    }
+
+    #[test]
+    fn stream_chunk_parses_done_marker() {
+        let json = r#"{"model":"llama3.2:1b","message":{"role":"assistant","content":""},"done":true,"done_reason":"stop"}"#;
+        let chunk: OllamaStreamChunk =
+            serde_json::from_str(json).expect("must parse done chunk");
+        assert_eq!(chunk.done, Some(true));
+    }
+
+    #[test]
+    fn stream_chunk_parses_error_field() {
+        let json = r#"{"error":"model not found"}"#;
+        let chunk: OllamaStreamChunk =
+            serde_json::from_str(json).expect("must parse error chunk");
+        assert_eq!(chunk.error.as_deref(), Some("model not found"));
+        assert!(chunk.message.is_none());
     }
 }
