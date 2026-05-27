@@ -41,7 +41,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
         const names = result.models.map((m) => m.name);
         setAvailableModels(names);
         setOllamaReachable(true);
-        if (!settings.ollamaModel && names.length > 0) {
+
+        const currentModel = settings.ollamaModel;
+        if (currentModel && !names.includes(currentModel)) {
+          // Previously selected model is no longer installed — auto-select first or clear.
+          dispatch({ type: "SET_SETTINGS", payload: { ollamaModel: names[0] ?? "" } });
+        } else if (!currentModel && names.length > 0) {
           dispatch({ type: "SET_SETTINGS", payload: { ollamaModel: names[0] } });
         }
       }
@@ -76,6 +81,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
   function toggleLocalAi() {
     const next = !settings.enableLocalAi;
     dispatch({ type: "SET_SETTINGS", payload: { enableLocalAi: next } });
+    if (!next) {
+      // Reset detection state so re-enabling shows a fresh probe, not stale data.
+      setOllamaReachable(null);
+      setAvailableModels([]);
+      setModelsError(null);
+    }
   }
 
   const ollamaDisplayStatus = modelsFetching
@@ -210,6 +221,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
                     dispatch({ type: "SET_SETTINGS", payload: { ollamaModel: e.target.value } })
                   }
                 >
+                  {!settings.ollamaModel && (
+                    <option value="" disabled>
+                      — select a model —
+                    </option>
+                  )}
                   {availableModels.map((name) => (
                     <option key={name} value={name}>
                       {name}

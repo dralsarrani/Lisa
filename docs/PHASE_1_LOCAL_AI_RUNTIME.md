@@ -6,12 +6,13 @@ Phase 1A connects Lisa to a locally running Ollama instance so she can answer op
 
 **Added in this phase:**
 - `list_ollama_models` Tauri command — discovers installed models from Ollama `/api/tags`
-- `send_ollama_chat` Tauri command — sends a non-streaming chat request to Ollama `/api/chat`
+- `send_ollama_chat` Tauri command — non-streaming chat request to Ollama `/api/chat`
 - `src/core/llm-context.ts` — system prompt, conversation history builder, history trimmer
 - Settings panel: Ollama status badge, model selector, enable/disable toggle, offline guidance
 - Command router LLM fallback: unknown commands route to the local model when enabled
 - Orb state transitions: thinking → speaking → idle during LLM queries
-- Four new audit event types: `llm_request_sent`, `llm_response_received`, `llm_request_failed`, `llm_disabled_fallback`
+- Console workspace: interaction history with per-entry thinking/complete/failed states
+- Four audit event types: `llm_request_sent`, `llm_response_received`, `llm_request_failed`, `llm_disabled_fallback`
 - Conversation history kept in memory (resets on restart), bounded by `maxContextTurns`
 - `STATE_VERSION` bumped 1 → 2; existing state migrates automatically with safe defaults
 
@@ -20,48 +21,53 @@ Phase 1A connects Lisa to a locally running Ollama instance so she can answer op
 ## Requirements
 
 - [Ollama](https://ollama.com) installed and running on your machine
-- At least one model pulled (e.g. `llama3.2`, `mistral`, `phi3`)
+- At least one model pulled (e.g. `llama3.2:1b`)
 - Lisa desktop app (Tauri build) — LLM integration is not available in a plain browser build
 
 ---
 
-## Setup — Ollama
+## Setup — Ollama on Windows
 
 ### 1. Install Ollama
 
-Download from [ollama.com](https://ollama.com) and install for your OS.
+Download the Windows installer from [ollama.com](https://ollama.com) and run it.
+Ollama installs as a background service and starts automatically.
 
-### 2. Pull a model
+### 2. Verify the API is running
 
-```bash
-ollama pull llama3.2
+Open PowerShell and run:
+
+```powershell
+(Invoke-WebRequest -UseBasicParsing http://127.0.0.1:11434/api/tags).Content
 ```
 
-Other recommended starting models:
+You should see a JSON object with a `models` array. If you get a connection error, run `ollama serve` in a terminal and retry.
 
-```bash
-ollama pull mistral
-ollama pull phi3
-ollama pull gemma2
+### 3. Pull a small model
+
+For testing on CPU hardware, start with the smallest available model:
+
+```powershell
+ollama pull llama3.2:1b
 ```
 
-### 3. Start the Ollama server
+Other recommended small models that work well with Phase 1A:
 
-Ollama usually starts automatically after installation. If not:
+| Model | Size | Notes |
+|---|---|---|
+| `llama3.2:1b` | ~1.3 GB | Best starting point — fast on CPU |
+| `qwen2.5-coder:1.5b` | ~1.0 GB | Good for code and logic questions |
+| `deepseek-r1:1.5b` | ~1.1 GB | Reasoning-focused, shows thinking steps |
 
-```bash
-ollama serve
+Larger models (7B+) work but generation will be slow without a GPU.
+
+### 4. Confirm the model is available
+
+```powershell
+(Invoke-WebRequest -UseBasicParsing http://127.0.0.1:11434/api/tags).Content
 ```
 
-Ollama listens on `http://127.0.0.1:11434`. Lisa connects only to this local address.
-
-### 4. Verify
-
-```bash
-curl http://127.0.0.1:11434/api/tags
-```
-
-You should see a JSON list of installed models.
+The model name should appear in the `models` array.
 
 ---
 
@@ -73,33 +79,34 @@ You should see a JSON list of installed models.
 npm run tauri dev
 ```
 
-### 2. Run a health check
-
-Type in the command bar:
-
-```
-Lisa, status
-```
-
-The Runtime tab and header indicator will show **Ollama: Online** when reachable.
-
-### 3. Enable Local AI and select a model
+### 2. Enable Local AI and select a model
 
 1. Open the **Settings** tab
 2. Scroll to **Local AI Runtime**
 3. Toggle **Enable Local AI** → ON
-4. The model selector populates with your installed models
-5. Select your preferred model (e.g. `llama3.2:latest`)
+4. Click **Refresh Models** if the model list is empty
+5. Select your preferred model (e.g. `llama3.2:1b`)
 
-### 4. Ask a question
+### 3. Ask a question
 
-Type any open-ended question:
+Type any open-ended question in the command bar:
 
 ```
 What is the difference between TCP and UDP?
 ```
 
 The Orb enters **thinking** → **speaking** → **idle** as the response arrives.
+The Console tab shows the interaction with a local-thinking indicator while waiting.
+
+### 4. About first-response latency
+
+**The first response after launching Lisa (or after Ollama restarts) can take 20–60 seconds.**
+Ollama must load the model weights into memory before generating. Subsequent responses in the same session are faster.
+
+The Console will show:
+> *Thinking locally with llama3.2:1b… first response may take a while while Ollama loads the model.*
+
+The request timeout is **180 seconds** — enough headroom for cold model loads on most hardware.
 
 ---
 
@@ -116,17 +123,20 @@ Phase 0 deterministic commands always take priority over the LLM fallback:
 | 5 | Runtime health | `status`, `check health` |
 | 6 | **Local AI fallback** | Any unrecognized input (if enabled + Ollama online) |
 
+These deterministic commands **never** route to the LLM. They always resolve immediately.
+
 ---
 
 ## Offline / Degraded Behavior
 
 | Condition | Lisa Response |
 |---|---|
-| Ollama offline | "Local AI runtime is not available. Start Ollama and select a model in Settings." |
-| Local AI disabled | Phase 0 "not implemented yet" message as before |
-| No model selected | "No model selected. Go to Settings → Local AI to choose a model." |
-| Model returns error | Error displayed; Orb briefly enters error state then returns to idle |
-| Request timeout (60s) | Timeout surfaces as error message |
+| Ollama offline | Error shown in Console and Audit Log; Orb briefly enters error state |
+| Local AI disabled | Phase 0 "not implemented yet" message |
+| No model selected | "Local AI is enabled but no model is selected. Go to Settings → Local AI to choose a model." |
+| Model removed from Ollama | Settings auto-selects the next available model on refresh |
+| Model returns error | Error visible in Console; Audit Log records `llm_request_failed` |
+| Request timeout (180s) | "Local model did not respond before the timeout. First responses can be slow while Ollama loads the model. Try again, choose a smaller model, or restart Ollama." |
 
 Emergency stop always works regardless of LLM state.
 
@@ -138,18 +148,65 @@ Emergency stop always works regardless of LLM state.
 - Bounded by `maxContextTurns` setting (default: 20 turns)
 - Trimmed from the oldest end when the limit is reached
 - The system prompt is prepended to every request regardless of history
+- Persistent conversation history is a Phase 1B+ concern
+
+---
+
+## Interaction History (Console)
+
+- Interactions are **session-only** — they are not persisted between restarts
+- Each command or LLM request creates one entry in the Console
+- The same entry updates in place on completion or failure — no duplicates
+- History is capped at `INTERACTION_CAP` (25) entries; oldest are dropped
+- Failed responses are visible in both the Console and the Audit Log
+
+---
+
+## Capability Boundaries
+
+Lisa's system prompt explicitly declares what she can and cannot do in Phase 1A.
+
+**She can:**
+- Answer questions and explain concepts
+- Help plan tasks and reason through problems
+- Respond to text commands in the Lisa command center
+
+**She cannot (and will say so honestly):**
+- Control the desktop, move the mouse, or press keyboard keys
+- Read or see what is on the screen
+- Browse, read, or write files
+- Store, retrieve, or ask for passwords, API keys, or credentials
+- Make requests to external servers or browse the internet
+- Execute code or run programs autonomously
+- Listen to or process voice input — voice is not yet implemented
+- Take autonomous background actions without explicit user approval
+
+If asked to do something outside these boundaries, Lisa explains the limitation and suggests a safe manual next step. She does not pretend to execute actions she cannot perform.
+
+---
+
+## Audit Events
+
+| Event | When fired | Key fields in details |
+|---|---|---|
+| `llm_request_sent` | Before calling Ollama | `prompt_chars`, `messages`, `history_turns` |
+| `llm_response_received` | On successful response | `response_chars`, `latency_ms` |
+| `llm_request_failed` | On error or timeout | error text, `latency_ms` where available |
+| `llm_disabled_fallback` | Input unknown, Local AI off or no model | — |
+
+Full prompt and response content are **not** logged by default to avoid noisy or sensitive audit entries.
 
 ---
 
 ## Current Limitations
 
-- **No streaming.** Responses arrive all at once. On CPU inference, this may take 10–60 seconds.
-- **No abort/cancel.** Once sent, a request runs to completion or times out at 60 seconds.
+- **No streaming.** Responses arrive all at once. On CPU inference, this may take 10–60 seconds on first load. Phase 1B will add streaming.
+- **No abort/cancel.** Once sent, a request runs to completion or times out at 180 seconds.
 - **No voice.** Voice input/output is not implemented in Phase 1A.
 - **No screen awareness.** Lisa cannot see or read the screen.
 - **No desktop control.** Lisa cannot control the mouse, keyboard, or applications.
 - **No file access.** Lisa cannot read or write files beyond her own state store.
-- **No cloud providers.** Only localhost Ollama is supported. No OpenAI, Anthropic, or other cloud APIs are connected.
+- **No cloud providers.** Only localhost Ollama is supported.
 - **Conversation resets on restart.** Persistent history is a Phase 1B+ concern.
 - **Localhost only.** The Rust backend hardcodes `127.0.0.1:11434`. Arbitrary URLs are rejected.
 
@@ -162,21 +219,25 @@ User types unknown command
     ↓
 CommandInput.tsx — default switch case
     ↓
-enableLocalAi && ollamaModel && ollamaOnline?
+enableLocalAi && ollamaModel?
     ↓ yes
+ADD_INTERACTION (status: "thinking")     ← Console shows loading indicator immediately
+    ↓
 handleLlmQuery(raw, model, maxContextTurns)
-    ├── trimConversationHistory()      — bound history to maxContextTurns-1
-    ├── buildOllamaMessages()          — system prompt + history + current input
+    ├── trimConversationHistory()         — bound history to maxContextTurns-1
+    ├── buildOllamaMessages()             — system prompt + history + current input
     ├── dispatch SET_ORB_STATE("thinking")
+    ├── audit: llm_request_sent (prompt_chars, messages, history_turns)
     ├── invoke("send_ollama_chat")
     │       ↓
     │   Rust: POST http://127.0.0.1:11434/api/chat
-    │         { model, messages, stream: false }
-    │         timeout: 60s
+    │         { model, messages, stream: false,
+    │           options: { num_predict: 256, temperature: 0.4, top_p: 0.9 } }
+    │         timeout: 180s
     │         ↓
     │   Returns OllamaChatResult { response, error, model, latency_ms }
-    ├── On success → SET_ORB_STATE("speaking") → show response → idle after 3s
-    └── On error   → SET_ORB_STATE("error")   → show error    → idle after 2s
+    ├── On success → UPDATE_INTERACTION (complete) → audit: llm_response_received
+    └── On error   → UPDATE_INTERACTION (failed)  → audit: llm_request_failed
 ```
 
 **Key files:**
@@ -185,9 +246,10 @@ handleLlmQuery(raw, model, maxContextTurns)
 |---|---|
 | `src-tauri/src/lib.rs` | `list_ollama_models`, `send_ollama_chat` Rust commands |
 | `src/core/llm-context.ts` | System prompt, message builder, history trimmer |
-| `src/core/types.ts` | New `LisaSettings` fields, new `AuditEventType` values, `STATE_VERSION = 2` |
+| `src/core/types.ts` | `LisaSettings` fields, `AuditEventType` values, `INTERACTION_CAP`, `STATE_VERSION = 2` |
 | `src/components/command/CommandInput.tsx` | LLM fallback in the `default` switch case |
 | `src/components/settings/SettingsPanel.tsx` | Local AI section: status, model picker, guidance |
+| `src/components/console/ConsolePanel.tsx` | Interaction history with thinking/complete/failed states |
 
 ---
 
@@ -199,14 +261,15 @@ npm run lint
 npm test
 npm run build
 cd src-tauri && cargo check
+cd src-tauri && cargo test
 ```
 
 ---
 
 ## What's Next — Phase 1B Candidates
 
-- **Streaming responses** — tokens appear as they arrive via Tauri event emit
+- **Streaming responses** — tokens appear as they arrive via Tauri event emit; no more waiting for the full response
 - **Abort/cancel** — interrupt a slow request mid-generation
-- **Persistent conversation** — survive app restarts
+- **Persistent conversation** — conversation history survives app restarts
 - **Voice shell** — STT (Whisper) + TTS wired to the LLM pipeline
 - **SQLite migration** — replace localStorage + JSON file with a proper database

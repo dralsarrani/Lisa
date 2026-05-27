@@ -40,6 +40,14 @@ describe("buildLisaSystemPrompt — capability boundaries", () => {
   it("instructs Lisa not to pretend to execute unavailable actions", () => {
     expect(buildLisaSystemPrompt().toLowerCase()).toContain("do not pretend");
   });
+
+  it("declares voice input is not yet implemented", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("voice");
+  });
+
+  it("declares Lisa cannot execute code or run programs autonomously", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("execute code");
+  });
 });
 
 // ─── trimConversationHistory ──────────────────────────────────────────────────

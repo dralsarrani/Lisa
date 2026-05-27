@@ -90,7 +90,7 @@ export const CommandInput: React.FC = () => {
       eventType: "llm_request_sent",
       source: "command_input",
       summary: `LLM request sent — model: "${model}"`,
-      details: `messages=${messages.length} history_turns=${trimmedHistory.length}`,
+      details: `prompt_chars=${raw.length} messages=${messages.length} history_turns=${trimmedHistory.length}`,
       severity: "info",
     });
 
@@ -117,7 +117,7 @@ export const CommandInput: React.FC = () => {
         addAudit({
           eventType: "llm_request_failed",
           source: "command_input",
-          summary: `LLM request failed — model: "${model}"`,
+          summary: `LLM request failed — model: "${model}" in ${result.latency_ms}ms`,
           details: errMsg,
           severity: "error",
         });
