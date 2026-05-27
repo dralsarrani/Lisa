@@ -7,8 +7,9 @@ import type {
   AuditEvent,
   LisaSettings,
   RuntimeHealth,
+  LisaInteraction,
 } from "../core/types";
-import { DEFAULT_SETTINGS } from "../core/types";
+import { DEFAULT_SETTINGS, INTERACTION_CAP } from "../core/types";
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -22,6 +23,7 @@ export interface LisaState {
   runtimeHealth: RuntimeHealth | null;
   isLoaded: boolean;
   commandResponse: string | null;
+  interactions: LisaInteraction[];
 }
 
 export const initialState: LisaState = {
@@ -34,6 +36,7 @@ export const initialState: LisaState = {
   runtimeHealth: null,
   isLoaded: false,
   commandResponse: null,
+  interactions: [],
 };
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
@@ -51,6 +54,8 @@ export type LisaAction =
   | { type: "SET_COMMAND_RESPONSE"; payload: string | null }
   | { type: "EMERGENCY_STOP" }
   | { type: "CLEAR_EMERGENCY"; payload: { clearedAt: string; auditEvent: AuditEvent } }
+  | { type: "ADD_INTERACTION"; payload: LisaInteraction }
+  | { type: "UPDATE_INTERACTION"; payload: { id: string } & Partial<Omit<LisaInteraction, "id" | "createdAt">> }
   | { type: "CLEAR_AUDIT_LOG"; payload: AuditEvent }
   | { type: "CLEAR_MISSION_HISTORY" }
   | {
@@ -158,6 +163,22 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
         missions: pausedMissions,
         auditEvents: [auditEvent, ...state.auditEvents].slice(0, 500),
         commandResponse: "Emergency lock cleared. Stopped missions are now paused and require explicit restart.",
+      };
+    }
+
+    case "ADD_INTERACTION":
+      return {
+        ...state,
+        interactions: [...state.interactions, action.payload].slice(-INTERACTION_CAP),
+      };
+
+    case "UPDATE_INTERACTION": {
+      const { id, ...updates } = action.payload;
+      return {
+        ...state,
+        interactions: state.interactions.map((i) =>
+          i.id === id ? { ...i, ...updates } : i
+        ),
       };
     }
 

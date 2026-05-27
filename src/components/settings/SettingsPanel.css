@@ -146,6 +146,83 @@
   border-radius: 3px;
 }
 
+/* ── Local AI ──────────────────────────────────────────────────────────────── */
+.ai-status-badge {
+  font-family: var(--font-mono);
+  font-size: 0.54rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 3px;
+  border: 1px solid var(--border-subtle);
+}
+
+.ai-status-online   { color: var(--color-success); border-color: rgba(34,197,94,0.40); background: rgba(34,197,94,0.07); }
+.ai-status-offline  { color: var(--text-dim); border-color: var(--border-subtle); }
+.ai-status-checking { color: var(--color-info); border-color: rgba(26,159,255,0.35); }
+.ai-status-error    { color: var(--color-error); border-color: rgba(239,68,68,0.40); background: rgba(239,68,68,0.07); }
+
+.ai-model-section {
+  padding: 8px 0 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ai-model-select {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  padding: 3px 8px;
+  cursor: pointer;
+  min-width: 140px;
+}
+
+.ai-model-select:focus { outline: none; border-color: var(--color-accent); }
+
+.ai-offline-guidance {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.ai-guidance-line { font-size: 0.68rem; color: var(--text-muted); line-height: 1.5; }
+
+.ai-guidance-code {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  color: var(--color-accent);
+  background: rgba(26,159,255,0.08);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.ai-refresh-btn {
+  margin-top: 6px;
+  padding: 4px 12px;
+  font-size: 0.62rem;
+  letter-spacing: 0.07em;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  transition: all var(--transition-fast);
+}
+
+.ai-refresh-btn:hover:not(:disabled) { border-color: var(--color-accent); color: var(--color-accent); }
+.ai-refresh-btn:disabled { opacity: 0.45; cursor: default; }
+
 /* ── Build info ────────────────────────────────────────────────────────────── */
 .settings-build-info {
   background: var(--bg-elevated);

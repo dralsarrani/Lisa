@@ -11,7 +11,8 @@
       "Bash(cargo check *)",
       "Bash(dir *)",
       "Bash(npx tsc *)",
-      "Bash(del *)"
+      "Bash(del *)",
+      "Bash(cargo test *)"
     ]
   }
 }

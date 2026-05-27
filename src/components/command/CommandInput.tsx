@@ -5,6 +5,8 @@ import { createTestMission, applyApprovalDecision } from "../../core/mission-sto
 import { createAuditEvent } from "../../core/audit-store";
 import { getModeDisplayName } from "../../core/mode-store";
 import { fetchRuntimeHealth } from "../../core/runtime-health";
+import { buildOllamaMessages, trimConversationHistory } from "../../core/llm-context";
+import type { LisaConversationTurn } from "../../core/llm-context";
 import "./CommandInput.css";
 
 const SUGGESTIONS = [
@@ -17,7 +19,16 @@ const SUGGESTIONS = [
 ];
 
 const RESPONSE_DISMISS_MS = 8_000;
+const LLM_RESPONSE_DISMISS_MS = 30_000;
 const MAX_HISTORY = 50;
+
+function makeId(): string {
+  return crypto.randomUUID();
+}
+
+function now(): string {
+  return new Date().toISOString();
+}
 
 export const CommandInput: React.FC = () => {
   const { state, dispatch, addAudit } = useLisa();
@@ -26,10 +37,10 @@ export const CommandInput: React.FC = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const historyRef = useRef<string[]>([]);
   const historyIndexRef = useRef(-1);
+  const conversationHistoryRef = useRef<LisaConversationTurn[]>([]);
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isLlmResponseRef = useRef(false);
 
-  // Auto-dismiss commandResponse after RESPONSE_DISMISS_MS,
-  // unless it is an emergency-stop message (that persists until wake).
   useEffect(() => {
     if (!state.commandResponse) return;
     const isEmergencyMessage =
@@ -38,21 +49,139 @@ export const CommandInput: React.FC = () => {
     if (isEmergencyMessage) return;
 
     if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
+    const delay = isLlmResponseRef.current ? LLM_RESPONSE_DISMISS_MS : RESPONSE_DISMISS_MS;
     dismissTimerRef.current = setTimeout(() => {
+      isLlmResponseRef.current = false;
       dispatch({ type: "SET_COMMAND_RESPONSE", payload: null });
-    }, RESPONSE_DISMISS_MS);
+    }, delay);
 
     return () => {
       if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
     };
   }, [state.commandResponse, state.orbState, dispatch]);
 
+  async function handleLlmQuery(
+    raw: string,
+    model: string,
+    maxContextTurns: number,
+    interactionId: string
+  ) {
+    const isInTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    if (!isInTauri) {
+      const msg = "Local AI is only available in the desktop app (Tauri).";
+      dispatch({ type: "SET_COMMAND_RESPONSE", payload: msg });
+      dispatch({
+        type: "UPDATE_INTERACTION",
+        payload: { id: interactionId, status: "failed", error: msg, completedAt: now() },
+      });
+      return;
+    }
+
+    const trimmedHistory = trimConversationHistory(
+      conversationHistoryRef.current,
+      Math.max(0, maxContextTurns - 1)
+    );
+    const messages = buildOllamaMessages(trimmedHistory, raw);
+
+    dispatch({ type: "SET_ORB_STATE", payload: "thinking" });
+    isLlmResponseRef.current = false;
+
+    addAudit({
+      eventType: "llm_request_sent",
+      source: "command_input",
+      summary: `LLM request sent — model: "${model}"`,
+      details: `messages=${messages.length} history_turns=${trimmedHistory.length}`,
+      severity: "info",
+    });
+
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const result = await invoke<{
+        response: string | null;
+        error: string | null;
+        model: string;
+        latency_ms: number;
+      }>("send_ollama_chat", {
+        model,
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      });
+
+      if (result.error || !result.response) {
+        const errMsg = result.error ?? "No response received from model.";
+        dispatch({ type: "SET_ORB_STATE", payload: "error" });
+        dispatch({
+          type: "UPDATE_INTERACTION",
+          payload: { id: interactionId, status: "failed", error: errMsg, completedAt: now() },
+        });
+        dispatch({ type: "SET_COMMAND_RESPONSE", payload: `Lisa could not respond: ${errMsg}` });
+        addAudit({
+          eventType: "llm_request_failed",
+          source: "command_input",
+          summary: `LLM request failed — model: "${model}"`,
+          details: errMsg,
+          severity: "error",
+        });
+        setTimeout(() => dispatch({ type: "SET_ORB_STATE", payload: "idle" }), 2000);
+        return;
+      }
+
+      dispatch({ type: "SET_ORB_STATE", payload: "speaking" });
+      dispatch({
+        type: "UPDATE_INTERACTION",
+        payload: {
+          id: interactionId,
+          status: "complete",
+          response: result.response,
+          completedAt: now(),
+          latencyMs: result.latency_ms,
+        },
+      });
+      isLlmResponseRef.current = true;
+      dispatch({ type: "SET_COMMAND_RESPONSE", payload: result.response });
+
+      addAudit({
+        eventType: "llm_response_received",
+        source: "command_input",
+        summary: `LLM response received — model: "${model}" in ${result.latency_ms}ms`,
+        details: `response_chars=${result.response.length} latency_ms=${result.latency_ms}`,
+        severity: "info",
+      });
+
+      conversationHistoryRef.current = [
+        ...trimmedHistory,
+        {
+          userInput: raw,
+          assistantResponse: result.response,
+          timestamp: now(),
+          model,
+        },
+      ];
+
+      setTimeout(() => dispatch({ type: "SET_ORB_STATE", payload: "idle" }), 3000);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      dispatch({ type: "SET_ORB_STATE", payload: "error" });
+      dispatch({
+        type: "UPDATE_INTERACTION",
+        payload: { id: interactionId, status: "failed", error: errMsg, completedAt: now() },
+      });
+      dispatch({ type: "SET_COMMAND_RESPONSE", payload: `LLM request failed: ${errMsg}` });
+      addAudit({
+        eventType: "llm_request_failed",
+        source: "command_input",
+        summary: "LLM request threw an unexpected error.",
+        details: errMsg,
+        severity: "error",
+      });
+      setTimeout(() => dispatch({ type: "SET_ORB_STATE", payload: "idle" }), 2000);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const raw = value.trim();
     if (!raw || isProcessing) return;
 
-    // Prepend to history, cap at MAX_HISTORY.
     historyRef.current = [raw, ...historyRef.current].slice(0, MAX_HISTORY);
     historyIndexRef.current = -1;
 
@@ -76,11 +205,21 @@ export const CommandInput: React.FC = () => {
       severity: route.intent === "unknown" ? "warning" : "info",
     });
 
-    dispatch({ type: "SET_COMMAND_RESPONSE", payload: route.response ?? null });
+    if (route.intent !== "unknown") {
+      dispatch({ type: "SET_COMMAND_RESPONSE", payload: route.response ?? null });
+    }
 
     switch (route.intent) {
       case "emergency_stop":
         dispatch({ type: "EMERGENCY_STOP" });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: {
+            id: makeId(), kind: "system", prompt: raw, status: "complete",
+            response: "EMERGENCY STOP ACTIVATED. All active operations halted. System is safe.",
+            createdAt: now(), completedAt: now(),
+          },
+        });
         addAudit({
           eventType: "emergency_stop_activated",
           source: "command_input",
@@ -91,6 +230,14 @@ export const CommandInput: React.FC = () => {
 
       case "stop":
         dispatch({ type: "SET_ORB_STATE", payload: "paused" });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: {
+            id: makeId(), kind: "command", prompt: raw, status: "complete",
+            response: route.response ?? "Active operations paused.",
+            createdAt: now(), completedAt: now(),
+          },
+        });
         addAudit({
           eventType: "mission_paused",
           source: "command_input",
@@ -102,6 +249,14 @@ export const CommandInput: React.FC = () => {
       case "sleep":
         dispatch({ type: "SET_MODE", payload: "sleep" });
         dispatch({ type: "SET_ORB_STATE", payload: "paused" });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: {
+            id: makeId(), kind: "system", prompt: raw, status: "complete",
+            response: route.response ?? "Entering sleep mode.",
+            createdAt: now(), completedAt: now(),
+          },
+        });
         addAudit({
           eventType: "mode_changed",
           source: "command_input",
@@ -111,11 +266,12 @@ export const CommandInput: React.FC = () => {
         break;
 
       case "wake": {
-        const clearedAt = new Date().toISOString();
-        if (state.orbState === "emergency_stopped") {
-          // Emergency clear path: orb unlocked, stopped missions set to paused
-          // with an explanation step. The audit event is embedded in the action
-          // payload so the reducer can prepend it atomically.
+        const clearedAt = now();
+        const isEmergency = state.orbState === "emergency_stopped";
+        const wakeResponse = isEmergency
+          ? "Emergency lock cleared. Stopped missions are now paused and require explicit restart."
+          : "Lisa is awake.";
+        if (isEmergency) {
           const auditEvent = createAuditEvent({
             eventType: "emergency_stop_cleared",
             source: "command_input",
@@ -133,6 +289,13 @@ export const CommandInput: React.FC = () => {
             severity: "info",
           });
         }
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: {
+            id: makeId(), kind: "system", prompt: raw, status: "complete",
+            response: wakeResponse, createdAt: clearedAt, completedAt: clearedAt,
+          },
+        });
         break;
       }
 
@@ -142,10 +305,18 @@ export const CommandInput: React.FC = () => {
           const prevMode = state.activeMode;
           dispatch({ type: "SET_MODE", payload: modeId });
           dispatch({ type: "SET_ORB_STATE", payload: "idle" });
+          const modeResponse = `Mode changed: ${getModeDisplayName(prevMode)} → ${getModeDisplayName(modeId)}`;
+          dispatch({
+            type: "ADD_INTERACTION",
+            payload: {
+              id: makeId(), kind: "command", prompt: raw, status: "complete",
+              response: modeResponse, createdAt: now(), completedAt: now(),
+            },
+          });
           addAudit({
             eventType: "mode_changed",
             source: "command_input",
-            summary: `Mode changed: ${getModeDisplayName(prevMode)} → ${getModeDisplayName(modeId)}`,
+            summary: modeResponse,
             details: `New mode: ${modeId}`,
             severity: "info",
           });
@@ -154,6 +325,15 @@ export const CommandInput: React.FC = () => {
       }
 
       case "runtime_health": {
+        const interactionId = makeId();
+        const createdAt = now();
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: {
+            id: interactionId, kind: "command", prompt: raw,
+            status: "thinking", response: "", createdAt,
+          },
+        });
         dispatch({ type: "SET_ORB_STATE", payload: "acting" });
         addAudit({
           eventType: "runtime_health_checked",
@@ -164,18 +344,28 @@ export const CommandInput: React.FC = () => {
         try {
           const health = await fetchRuntimeHealth();
           dispatch({ type: "SET_RUNTIME_HEALTH", payload: health });
+          const summary = `Runtime: backend=${health.backendReachable ? "ok" : "offline"} · ollama=${health.ollamaStatus} · docker=${health.dockerStatus}`;
+          dispatch({
+            type: "UPDATE_INTERACTION",
+            payload: { id: interactionId, status: "complete", response: summary, completedAt: now() },
+          });
           addAudit({
             eventType: "runtime_health_checked",
             source: "runtime_checker",
-            summary: `Runtime: backend=${health.backendReachable ? "ok" : "offline"} ollama=${health.ollamaStatus} docker=${health.dockerStatus}`,
+            summary,
             severity: health.backendReachable ? "info" : "warning",
           });
         } catch (err) {
+          const errMsg = String(err);
+          dispatch({
+            type: "UPDATE_INTERACTION",
+            payload: { id: interactionId, status: "failed", error: errMsg, completedAt: now() },
+          });
           addAudit({
             eventType: "error_occurred",
             source: "runtime_checker",
             summary: "Runtime health check failed.",
-            details: String(err),
+            details: errMsg,
             severity: "error",
           });
         }
@@ -188,6 +378,14 @@ export const CommandInput: React.FC = () => {
         dispatch({ type: "ADD_MISSION", payload: mission });
         dispatch({ type: "ADD_APPROVAL", payload: approval });
         dispatch({ type: "SET_ORB_STATE", payload: "waiting_approval" });
+        const missionResponse = `Mission created: "${mission.title}" · Approval required.`;
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: {
+            id: makeId(), kind: "command", prompt: raw, status: "complete",
+            response: missionResponse, createdAt: now(), completedAt: now(),
+          },
+        });
         addAudit({
           eventType: "mission_created",
           source: "command_input",
@@ -216,6 +414,15 @@ export const CommandInput: React.FC = () => {
             dispatch({ type: "UPDATE_MISSION", payload: updated });
             dispatch({ type: "UPDATE_APPROVAL", payload: updatedApproval });
             dispatch({ type: "SET_ORB_STATE", payload: "idle" });
+            const approveResponse = `Approval granted. Mission "${mission.title}" completed.`;
+            dispatch({ type: "SET_COMMAND_RESPONSE", payload: approveResponse });
+            dispatch({
+              type: "ADD_INTERACTION",
+              payload: {
+                id: makeId(), kind: "command", prompt: raw, status: "complete",
+                response: approveResponse, createdAt: now(), completedAt: now(),
+              },
+            });
             addAudit({
               eventType: "approval_approved",
               source: "command_input",
@@ -223,13 +430,17 @@ export const CommandInput: React.FC = () => {
               missionId: mission.id,
               severity: "info",
             });
-            dispatch({
-              type: "SET_COMMAND_RESPONSE",
-              payload: `Approval granted. Mission "${mission.title}" completed.`,
-            });
           }
         } else {
-          dispatch({ type: "SET_COMMAND_RESPONSE", payload: "No pending approval found." });
+          const noApprovalMsg = "No pending approval found.";
+          dispatch({ type: "SET_COMMAND_RESPONSE", payload: noApprovalMsg });
+          dispatch({
+            type: "ADD_INTERACTION",
+            payload: {
+              id: makeId(), kind: "command", prompt: raw, status: "complete",
+              response: noApprovalMsg, createdAt: now(), completedAt: now(),
+            },
+          });
         }
         break;
       }
@@ -245,6 +456,15 @@ export const CommandInput: React.FC = () => {
             dispatch({ type: "UPDATE_MISSION", payload: updated });
             dispatch({ type: "UPDATE_APPROVAL", payload: updatedApproval });
             dispatch({ type: "SET_ORB_STATE", payload: "idle" });
+            const rejectResponse = `Approval rejected. Mission "${mission.title}" cancelled.`;
+            dispatch({ type: "SET_COMMAND_RESPONSE", payload: rejectResponse });
+            dispatch({
+              type: "ADD_INTERACTION",
+              payload: {
+                id: makeId(), kind: "command", prompt: raw, status: "complete",
+                response: rejectResponse, createdAt: now(), completedAt: now(),
+              },
+            });
             addAudit({
               eventType: "approval_rejected",
               source: "command_input",
@@ -252,19 +472,69 @@ export const CommandInput: React.FC = () => {
               missionId: mission.id,
               severity: "warning",
             });
-            dispatch({
-              type: "SET_COMMAND_RESPONSE",
-              payload: `Approval rejected. Mission "${mission.title}" cancelled.`,
-            });
           }
         } else {
-          dispatch({ type: "SET_COMMAND_RESPONSE", payload: "No pending approval found." });
+          const noApprovalMsg = "No pending approval found.";
+          dispatch({ type: "SET_COMMAND_RESPONSE", payload: noApprovalMsg });
+          dispatch({
+            type: "ADD_INTERACTION",
+            payload: {
+              id: makeId(), kind: "command", prompt: raw, status: "complete",
+              response: noApprovalMsg, createdAt: now(), completedAt: now(),
+            },
+          });
         }
         break;
       }
 
-      default:
+      default: {
+        const { enableLocalAi, ollamaModel, maxContextTurns } = state.settings;
+
+        if (enableLocalAi && ollamaModel) {
+          const interactionId = makeId();
+          dispatch({
+            type: "ADD_INTERACTION",
+            payload: {
+              id: interactionId, kind: "local_ai", prompt: raw, status: "thinking",
+              response: "", model: ollamaModel, createdAt: now(),
+            },
+          });
+          await handleLlmQuery(raw, ollamaModel, maxContextTurns, interactionId);
+        } else if (enableLocalAi && !ollamaModel) {
+          const msg = "Local AI is enabled but no model is selected. Go to Settings → Local AI to choose a model.";
+          dispatch({ type: "SET_COMMAND_RESPONSE", payload: msg });
+          dispatch({
+            type: "ADD_INTERACTION",
+            payload: {
+              id: makeId(), kind: "error", prompt: raw, status: "failed",
+              response: msg, createdAt: now(), completedAt: now(),
+            },
+          });
+          addAudit({
+            eventType: "llm_disabled_fallback",
+            source: "command_input",
+            summary: "LLM fallback skipped — no model selected.",
+            severity: "warning",
+          });
+        } else {
+          const fallbackMsg = route.response ?? "Command not recognized. Enable Local AI in Settings to ask questions.";
+          dispatch({ type: "SET_COMMAND_RESPONSE", payload: fallbackMsg });
+          dispatch({
+            type: "ADD_INTERACTION",
+            payload: {
+              id: makeId(), kind: "command", prompt: raw, status: "complete",
+              response: fallbackMsg, createdAt: now(), completedAt: now(),
+            },
+          });
+          addAudit({
+            eventType: "llm_disabled_fallback",
+            source: "command_input",
+            summary: `Command not handled — local AI disabled: "${raw}"`,
+            severity: "info",
+          });
+        }
         break;
+      }
     }
 
     setIsProcessing(false);
@@ -322,7 +592,7 @@ export const CommandInput: React.FC = () => {
               ? "Emergency stopped — type 'Lisa, wake up' to clear"
               : isProcessing
               ? "Processing..."
-              : "Type a command… e.g. Lisa, create test mission"
+              : "Type a command or question… e.g. what is quantum entanglement?"
           }
           disabled={isProcessing}
           autoComplete="off"
@@ -334,16 +604,14 @@ export const CommandInput: React.FC = () => {
           className="btn btn-primary command-submit"
           disabled={!value.trim() || isProcessing}
         >
-          {isProcessing ? (
-            <span className="command-spinner" />
-          ) : (
-            "SEND"
-          )}
+          {isProcessing ? <span className="command-spinner" /> : "SEND"}
         </button>
       </form>
 
       {state.commandResponse && (
-        <div className={`command-response ${isEmergencyStopped ? "command-response-emergency" : ""}`}>
+        <div
+          className={`command-response ${isEmergencyStopped ? "command-response-emergency" : ""}`}
+        >
           <span className="command-response-icon">›</span>
           {state.commandResponse}
         </div>

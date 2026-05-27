@@ -117,3 +117,43 @@ describe("saveState + loadState round-trip", () => {
     expect(loaded.settings.orbSize).toBe(DEFAULT_SETTINGS.orbSize);
   });
 });
+
+describe("loadState — v1 to v2 migration", () => {
+  it("adds Phase 1A settings with defaults when migrating from STATE_VERSION 1", async () => {
+    localStorage.setItem(
+      "lisa_state_v1",
+      JSON.stringify({
+        version: 1,
+        settings: { activeMode: "focus", developerMode: true },
+        missions: [],
+        approvals: [],
+        auditEvents: [],
+        savedAt: new Date().toISOString(),
+      })
+    );
+    const state = await loadState();
+    expect(state.version).toBe(STATE_VERSION);
+    expect(state.settings.activeMode).toBe("focus");
+    expect(state.settings.developerMode).toBe(true);
+    expect(state.settings.enableLocalAi).toBe(false);
+    expect(state.settings.ollamaModel).toBe("");
+    expect(state.settings.maxContextTurns).toBe(20);
+  });
+
+  it("preserves missions and audit events across migration", async () => {
+    localStorage.setItem(
+      "lisa_state_v1",
+      JSON.stringify({
+        version: 1,
+        settings: {},
+        missions: [{ id: "m1", title: "Old mission" }],
+        approvals: [],
+        auditEvents: [{ id: "e1", summary: "old event" }],
+        savedAt: new Date().toISOString(),
+      })
+    );
+    const state = await loadState();
+    expect(state.missions).toHaveLength(1);
+    expect(state.auditEvents).toHaveLength(1);
+  });
+});

@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useLisa } from "./app/useLisa";
 import { LisaOrb } from "./components/orb/LisaOrb";
 import { CommandInput } from "./components/command/CommandInput";
@@ -8,13 +8,15 @@ import { AuditLog } from "./components/audit/AuditLog";
 import { RuntimeHealth } from "./components/runtime/RuntimeHealth";
 import { SettingsPanel } from "./components/settings/SettingsPanel";
 import { Header } from "./components/layout/Header";
+import { ConsolePanel } from "./components/console/ConsolePanel";
 import { getModeDisplayName } from "./core/mode-store";
 import type { RuntimeHealth as RuntimeHealthData } from "./core/types";
 import "./App.css";
 
-type TabId = "missions" | "approvals" | "audit" | "runtime" | "settings";
+type TabId = "console" | "missions" | "approvals" | "audit" | "runtime" | "settings";
 
 const TABS: { id: TabId; label: string }[] = [
+  { id: "console",   label: "Console" },
   { id: "missions",  label: "Missions" },
   { id: "approvals", label: "Approvals" },
   { id: "audit",     label: "Audit Log" },
@@ -24,9 +26,17 @@ const TABS: { id: TabId; label: string }[] = [
 
 function App() {
   const { state, dispatch, addAudit } = useLisa();
-  const [activeTab, setActiveTab] = useState<TabId>("missions");
+  const [activeTab, setActiveTab] = useState<TabId>("console");
+  const prevInteractionsLengthRef = useRef(0);
 
   const pendingApprovals = state.approvals.filter((a) => a.status === "pending");
+
+  useEffect(() => {
+    if (state.interactions.length > prevInteractionsLengthRef.current) {
+      prevInteractionsLengthRef.current = state.interactions.length;
+      setActiveTab("console");
+    }
+  }, [state.interactions.length]);
 
   const handleEmergencyStop = useCallback(() => {
     dispatch({ type: "EMERGENCY_STOP" });
@@ -184,6 +194,13 @@ function App() {
 
             {/* Tab content */}
             <div className="app-tab-content">
+              {activeTab === "console" && (
+                <ConsolePanel
+                  interactions={state.interactions}
+                  orbState={state.orbState}
+                  settings={state.settings}
+                />
+              )}
               {activeTab === "missions" && (
                 <MissionPanel missions={state.missions} />
               )}

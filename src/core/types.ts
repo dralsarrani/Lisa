@@ -146,7 +146,11 @@ export type AuditEventType =
   | "error_occurred"
   | "persistence_saved"
   | "persistence_loaded"
-  | "system_info";
+  | "system_info"
+  | "llm_request_sent"
+  | "llm_response_received"
+  | "llm_request_failed"
+  | "llm_disabled_fallback";
 
 export interface AuditEvent {
   id: string;
@@ -192,6 +196,9 @@ export interface LisaSettings {
   theme: "dark" | "darker";
   language: string;
   developerMode: boolean;
+  enableLocalAi: boolean;
+  ollamaModel: string;
+  maxContextTurns: number;
 }
 
 export const DEFAULT_SETTINGS: LisaSettings = {
@@ -204,6 +211,9 @@ export const DEFAULT_SETTINGS: LisaSettings = {
   theme: "darker",
   language: "en",
   developerMode: false,
+  enableLocalAi: false,
+  ollamaModel: "",
+  maxContextTurns: 20,
 };
 
 // ─── Command Router ───────────────────────────────────────────────────────────
@@ -229,6 +239,26 @@ export interface CommandRouteResult {
   response?: string;
 }
 
+// ─── Interactions (session-only, not persisted) ───────────────────────────────
+
+export type InteractionKind = "command" | "local_ai" | "error" | "system";
+export type InteractionStatus = "thinking" | "complete" | "failed";
+
+export interface LisaInteraction {
+  id: string;
+  kind: InteractionKind;
+  prompt: string;
+  response: string;
+  model?: string;
+  status: InteractionStatus;
+  createdAt: string;
+  completedAt?: string;
+  latencyMs?: number;
+  error?: string;
+}
+
+export const INTERACTION_CAP = 25;
+
 // ─── Persisted State ──────────────────────────────────────────────────────────
 
 export interface PersistedState {
@@ -240,4 +270,4 @@ export interface PersistedState {
   savedAt: string;
 }
 
-export const STATE_VERSION = 1;
+export const STATE_VERSION = 2;

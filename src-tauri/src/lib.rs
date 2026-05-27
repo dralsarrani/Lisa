@@ -2,7 +2,75 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tauri::Manager;
 
+// ─── Ollama endpoint constants ────────────────────────────────────────────────
+// Localhost only. Arbitrary host URLs are never accepted in Phase 1A.
+
+const OLLAMA_BASE_URL: &str = "http://127.0.0.1:11434";
+const OLLAMA_CHAT_URL: &str = "http://127.0.0.1:11434/api/chat";
+const OLLAMA_TAGS_URL: &str = "http://127.0.0.1:11434/api/tags";
+
+// Short timeout for model discovery; long timeout for generation (first load can be slow).
+const OLLAMA_TAGS_TIMEOUT_SECS: u64 = 5;
+const OLLAMA_CHAT_TIMEOUT_SECS: u64 = 180;
+
 // ─── Data Types ──────────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OllamaModel {
+    pub name: String,
+    pub modified_at: Option<String>,
+    pub size: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OllamaTagsResponse {
+    models: Vec<OllamaModel>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OllamaChatMessage {
+    pub role: String,
+    pub content: String,
+}
+
+#[derive(Debug, Serialize)]
+struct OllamaChatOptions {
+    num_predict: u32,
+    temperature: f32,
+    top_p: f32,
+}
+
+#[derive(Debug, Serialize)]
+struct OllamaChatRequest<'a> {
+    model: &'a str,
+    messages: &'a [OllamaChatMessage],
+    stream: bool,
+    options: OllamaChatOptions,
+}
+
+#[derive(Debug, Deserialize)]
+struct OllamaMessageField {
+    content: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct OllamaRawChatResponse {
+    message: Option<OllamaMessageField>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct OllamaListResult {
+    pub models: Vec<OllamaModel>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct OllamaChatResult {
+    pub response: Option<String>,
+    pub error: Option<String>,
+    pub model: String,
+    pub latency_ms: u64,
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RuntimeHealth {
@@ -48,7 +116,6 @@ async fn get_runtime_health() -> RuntimeHealth {
     let os_type = std::env::consts::OS.to_string();
     let arch = std::env::consts::ARCH.to_string();
 
-    // Safe OS version check — best-effort, never panics.
     let os_version = get_os_version();
 
     RuntimeHealth {
@@ -79,13 +146,11 @@ async fn write_app_state(
 ) -> Result<AppStateWriteResult, String> {
     let path = get_state_path(&app_handle)?;
 
-    // Ensure directory exists.
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("Failed to create data directory: {e}"))?;
     }
 
-    // Validate JSON before writing.
     serde_json::from_str::<serde_json::Value>(&state_json)
         .map_err(|e| format!("Invalid JSON: {e}"))?;
 
@@ -108,7 +173,6 @@ fn get_state_path(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
 }
 
 fn get_os_version() -> String {
-    // Use a safe cross-platform approach.
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("cmd")
@@ -146,7 +210,6 @@ fn get_os_version() -> String {
 }
 
 fn check_ollama_safe() -> String {
-    // Only check if Ollama is reachable on the default port. Never fail.
     let result = std::net::TcpStream::connect_timeout(
         &"127.0.0.1:11434".parse().unwrap(),
         std::time::Duration::from_millis(300),
@@ -158,7 +221,6 @@ fn check_ollama_safe() -> String {
 }
 
 fn check_docker_safe() -> String {
-    // Check Docker socket / daemon safely. Never fail.
     #[cfg(target_os = "windows")]
     let docker_socket_exists = std::path::Path::new(r"\\.\pipe\docker_engine").exists();
     #[cfg(unix)]
@@ -170,6 +232,150 @@ fn check_docker_safe() -> String {
         "available".to_string()
     } else {
         "not_configured".to_string()
+    }
+}
+
+/// Walks the reqwest error source chain and returns a concise diagnostic string.
+/// Puts the innermost (root) cause first so it is not clipped by the UI.
+fn reqwest_error_detail(e: &reqwest::Error) -> String {
+    use std::error::Error;
+
+    let top = e.to_string();
+    let mut root = top.clone();
+    let mut source = e.source();
+    while let Some(cause) = source {
+        root = cause.to_string();
+        source = cause.source();
+    }
+
+    if root == top {
+        root
+    } else {
+        format!("{root} (detail: {top})")
+    }
+}
+
+// ─── Ollama Commands ──────────────────────────────────────────────────────────
+
+#[tauri::command]
+async fn list_ollama_models() -> OllamaListResult {
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(OLLAMA_TAGS_TIMEOUT_SECS))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return OllamaListResult {
+                models: vec![],
+                error: Some(format!("HTTP client build error: {e}")),
+            }
+        }
+    };
+
+    match client.get(OLLAMA_TAGS_URL).send().await {
+        Ok(resp) => match resp.json::<OllamaTagsResponse>().await {
+            Ok(tags) => OllamaListResult {
+                models: tags.models,
+                error: None,
+            },
+            Err(e) => OllamaListResult {
+                models: vec![],
+                error: Some(format!(
+                    "Ollama response parse error at {OLLAMA_TAGS_URL}: {e}"
+                )),
+            },
+        },
+        Err(e) => OllamaListResult {
+            models: vec![],
+            error: Some(format!(
+                "Ollama not reachable at {OLLAMA_BASE_URL}: {}",
+                reqwest_error_detail(&e)
+            )),
+        },
+    }
+}
+
+#[tauri::command]
+async fn send_ollama_chat(model: String, messages: Vec<OllamaChatMessage>) -> OllamaChatResult {
+    let start = std::time::Instant::now();
+
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(OLLAMA_CHAT_TIMEOUT_SECS))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return OllamaChatResult {
+                response: None,
+                error: Some(format!("HTTP client build error: {e}")),
+                model,
+                latency_ms: 0,
+            }
+        }
+    };
+
+    let body = OllamaChatRequest {
+        model: &model,
+        messages: &messages,
+        stream: false,
+        options: OllamaChatOptions {
+            num_predict: 256,
+            temperature: 0.4,
+            top_p: 0.9,
+        },
+    };
+
+    let resp = match client.post(OLLAMA_CHAT_URL).json(&body).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            let msg = if e.is_timeout() {
+                "Local model did not respond before the timeout. First responses can be slow while Ollama loads the model. Try again, choose a smaller model, or restart Ollama.".to_string()
+            } else {
+                format!(
+                    "Ollama chat failed at {OLLAMA_CHAT_URL}: {}",
+                    reqwest_error_detail(&e)
+                )
+            };
+            return OllamaChatResult {
+                response: None,
+                error: Some(msg),
+                model,
+                latency_ms: start.elapsed().as_millis() as u64,
+            }
+        }
+    };
+
+    let status = resp.status();
+    let latency_ms = start.elapsed().as_millis() as u64;
+
+    // Surface non-2xx HTTP errors before attempting body parse.
+    if !status.is_success() {
+        let body_text = resp.text().await.unwrap_or_default();
+        return OllamaChatResult {
+            response: None,
+            error: Some(format!(
+                "Ollama HTTP {status} from {OLLAMA_CHAT_URL}: {body_text}"
+            )),
+            model,
+            latency_ms,
+        };
+    }
+
+    match resp.json::<OllamaRawChatResponse>().await {
+        Ok(raw) => OllamaChatResult {
+            response: raw.message.map(|m| m.content),
+            error: None,
+            model,
+            latency_ms,
+        },
+        Err(e) => OllamaChatResult {
+            response: None,
+            error: Some(format!(
+                "Ollama response parse error at {OLLAMA_CHAT_URL}: {e}"
+            )),
+            model,
+            latency_ms,
+        },
     }
 }
 
@@ -185,7 +391,96 @@ pub fn run() {
             get_runtime_health,
             read_app_state,
             write_app_state,
+            list_ollama_models,
+            send_ollama_chat,
         ])
         .run(tauri::generate_context!())
         .expect("Error while running Lisa application");
+}
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ollama_urls_are_localhost_http_only() {
+        for url in [OLLAMA_BASE_URL, OLLAMA_CHAT_URL, OLLAMA_TAGS_URL] {
+            assert!(
+                url.starts_with("http://127.0.0.1:11434"),
+                "URL must be localhost-only http: {url}"
+            );
+            assert!(
+                !url.starts_with("https://"),
+                "TLS must not be used for localhost: {url}"
+            );
+        }
+    }
+
+    #[test]
+    fn ollama_urls_have_correct_paths() {
+        assert_eq!(OLLAMA_CHAT_URL, "http://127.0.0.1:11434/api/chat");
+        assert_eq!(OLLAMA_TAGS_URL, "http://127.0.0.1:11434/api/tags");
+        assert_eq!(OLLAMA_BASE_URL, "http://127.0.0.1:11434");
+    }
+
+    #[test]
+    fn timeout_constants_have_correct_values() {
+        assert_eq!(OLLAMA_TAGS_TIMEOUT_SECS, 5, "tags timeout must be short");
+        assert_eq!(OLLAMA_CHAT_TIMEOUT_SECS, 180, "chat timeout must allow slow first loads");
+        assert!(
+            OLLAMA_CHAT_TIMEOUT_SECS > OLLAMA_TAGS_TIMEOUT_SECS,
+            "chat timeout must exceed tags timeout"
+        );
+    }
+
+    #[test]
+    fn chat_request_serializes_correctly() {
+        let msg = OllamaChatMessage {
+            role: "user".to_string(),
+            content: "hello".to_string(),
+        };
+        let req = OllamaChatRequest {
+            model: "llama3.2:1b",
+            messages: &[msg],
+            stream: false,
+            options: OllamaChatOptions {
+                num_predict: 256,
+                temperature: 0.4,
+                top_p: 0.9,
+            },
+        };
+        let json = serde_json::to_string(&req).expect("serialization must succeed");
+        let v: serde_json::Value = serde_json::from_str(&json).expect("must round-trip");
+
+        assert_eq!(v["model"], "llama3.2:1b");
+        assert_eq!(v["stream"], false);
+        assert_eq!(v["messages"][0]["role"], "user");
+        assert_eq!(v["messages"][0]["content"], "hello");
+        assert_eq!(v["options"]["num_predict"], 256);
+        assert!((v["options"]["temperature"].as_f64().unwrap() - 0.4).abs() < 1e-6);
+        assert!((v["options"]["top_p"].as_f64().unwrap() - 0.9).abs() < 1e-6);
+    }
+
+    #[test]
+    fn chat_response_parses_message_content() {
+        let json = r#"{
+            "model": "llama3.2:1b",
+            "message": {"role": "assistant", "content": "Hello!"},
+            "done": true
+        }"#;
+        let parsed: OllamaRawChatResponse =
+            serde_json::from_str(json).expect("must parse Ollama chat response");
+        assert_eq!(parsed.message.unwrap().content, "Hello!");
+    }
+
+    #[test]
+    fn chat_response_handles_missing_message() {
+        // Ollama error responses may omit the message field.
+        let json = r#"{"model": "llama3.2:1b", "done": true, "error": "model not found"}"#;
+        let parsed: OllamaRawChatResponse =
+            serde_json::from_str(json).expect("must parse even without message field");
+        assert!(parsed.message.is_none());
+    }
 }
