@@ -48,6 +48,14 @@ describe("buildLisaSystemPrompt — capability boundaries", () => {
   it("declares Lisa cannot execute code or run programs autonomously", () => {
     expect(buildLisaSystemPrompt().toLowerCase()).toContain("execute code");
   });
+
+  it("declares Lisa does not have true long-term semantic memory", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("long-term semantic memory");
+  });
+
+  it("declares desktop control is not unlockable by approval", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("approval cannot unlock");
+  });
 });
 
 // ─── trimConversationHistory ──────────────────────────────────────────────────
