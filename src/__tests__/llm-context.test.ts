@@ -58,6 +58,27 @@ describe("buildLisaSystemPrompt — capability boundaries", () => {
   });
 });
 
+describe("buildLisaSystemPrompt — hard action constraint", () => {
+  it("forbids claiming to have executed actions", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("do not claim");
+  });
+  it("forbids claiming permission verification", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("verified access");
+  });
+  it("forbids implying 'verification complete'", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("verification complete");
+  });
+  it("forbids claiming connection to restricted networks", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("restricted network");
+  });
+  it("attributes deterministic actions to app logic, not LLM", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("deterministic");
+  });
+  it("provides a step-by-step guidance fallback phrase", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("guide you step by step");
+  });
+});
+
 // ─── trimConversationHistory ──────────────────────────────────────────────────
 
 function makeTurn(i: number): LisaConversationTurn {

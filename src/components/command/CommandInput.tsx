@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useLisa } from "../../app/useLisa";
-import { routeCommand } from "../../core/command-router";
+import { routeCommand, getDesktopActionGuardMessage } from "../../core/command-router";
 import { createTestMission, applyApprovalDecision } from "../../core/mission-store";
 import { createAuditEvent } from "../../core/audit-store";
 import { getModeDisplayName } from "../../core/mode-store";
@@ -552,6 +552,27 @@ export const CommandInput: React.FC = () => {
       }
 
       default: {
+        // Guard: block desktop-action commands before they reach the LLM.
+        const guardMsg = getDesktopActionGuardMessage(raw);
+        if (guardMsg) {
+          dispatch({ type: "SET_COMMAND_RESPONSE", payload: guardMsg });
+          dispatch({
+            type: "ADD_INTERACTION",
+            payload: {
+              id: makeId(), kind: "system", prompt: raw, status: "complete",
+              response: guardMsg, createdAt: now(), completedAt: now(),
+            },
+          });
+          addAudit({
+            eventType: "command_unknown",
+            source: "command_input",
+            summary: "LLM fallback blocked — action-like command detected.",
+            details: `input_chars=${raw.length}`,
+            severity: "info",
+          });
+          break;
+        }
+
         const { enableLocalAi, ollamaModel, maxContextTurns } = state.settings;
 
         if (enableLocalAi && ollamaModel) {

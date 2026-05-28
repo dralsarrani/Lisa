@@ -44,6 +44,10 @@ function normalize(input: string): string {
     .trim();
 }
 
+function modeResponse(modeId: LisaModeId): string {
+  return `Activating ${modeId.charAt(0).toUpperCase() + modeId.slice(1)} Mode.`;
+}
+
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 export function routeCommand(raw: string): CommandRouteResult {
@@ -65,7 +69,11 @@ export function routeCommand(raw: string): CommandRouteResult {
   }
 
   // Sleep.
-  if (normalized === "sleep" || normalized === "go to sleep" || normalized === "quiet mode") {
+  if (
+    normalized === "sleep" ||
+    normalized === "go to sleep" ||
+    normalized === "quiet mode"
+  ) {
     return result("sleep", raw, normalized, {}, "high", "Lisa entering sleep mode. I'll stay quiet until called.");
   }
 
@@ -122,23 +130,26 @@ export function routeCommand(raw: string): CommandRouteResult {
     return result("reject_test_action", raw, normalized, {}, "high", "Rejecting pending test action...");
   }
 
-  // Mode activation: "activate X mode" / "return to X mode" / "switch to X mode"
-  const modeActivateMatch = normalized.match(
-    /^(?:activate|switch to|enable|start|return to|go to|use)\s+(.+)$/
+  // Mode activation — verb-based.
+  // Supported verbs: activate, switch to, switch, turn on, enable, start,
+  //                  return to, go back to, go to, go, use, set to, set.
+  // Articles ("the", "a", "an") before the mode name are stripped.
+  const modeVerbMatch = normalized.match(
+    /^(?:activate|switch to|switch|turn on|enable|start|return to|go back to|go to|go|use|set to|set)\s+(.+)$/
   );
-  if (modeActivateMatch) {
-    const modeName = modeActivateMatch[1].trim();
+  if (modeVerbMatch) {
+    const modeName = modeVerbMatch[1].replace(/^(?:the|a|an)\s+/, "").trim();
     const modeId = MODE_NAME_MAP[modeName];
     if (modeId) {
-      return result(
-        "mode_change",
-        raw,
-        normalized,
-        { modeId },
-        "high",
-        `Activating ${modeId.charAt(0).toUpperCase() + modeId.slice(1)} Mode.`
-      );
+      return result("mode_change", raw, normalized, { modeId }, "high", modeResponse(modeId));
     }
+  }
+
+  // Mode activation — bare mode name (no leading verb).
+  // Handles: "cyber mode", "focus", "normal mode", "gaming", etc.
+  const bareModeId = MODE_NAME_MAP[normalized];
+  if (bareModeId) {
+    return result("mode_change", raw, normalized, { modeId: bareModeId }, "high", modeResponse(bareModeId));
   }
 
   // Fallback: unknown command.
@@ -150,6 +161,34 @@ export function routeCommand(raw: string): CommandRouteResult {
     "low",
     `I don't have a handler for "${raw}" yet. This command has been logged. Phase 0 only supports deterministic commands.`
   );
+}
+
+// ─── Desktop-action guard ─────────────────────────────────────────────────────
+//
+// Returns a safe refusal message if the raw input matches a known pattern for
+// unsupported desktop/system action commands, or null if safe to forward to LLM.
+// Called in CommandInput before the LLM streaming path.
+
+const BLOCKED_DESKTOP_ACTIONS: RegExp[] = [
+  // App opening / launching / closing
+  /\b(?:open|launch|close|quit|run)\s+(?:steam|chrome|firefox|edge|safari|opera|brave|discord|spotify|slack|zoom|teams|word|excel|powerpoint|notepad|explorer|terminal|cmd|powershell|bash|an?\s+app|the\s+app|any\s+app|a\s+program)\b/i,
+  // Mouse / cursor / keyboard control
+  /\bcontrol\s+(?:my|the|your)\s+(?:mouse|keyboard|desktop|computer|screen|cursor)\b/i,
+  /\b(?:move|click|drag)\s+(?:the\s+|my\s+)?(?:mouse|cursor)\b/i,
+  /\bright[- ]?click\b/i,
+  /\bdouble[- ]?click\b/i,
+  // Screen capture / reading
+  /\bread\s+(?:my|the|your)\s+screen\b/i,
+  /\bcapture\s+(?:the\s+|my\s+)?screen\b/i,
+];
+
+export function getDesktopActionGuardMessage(raw: string): string | null {
+  for (const re of BLOCKED_DESKTOP_ACTIONS) {
+    if (re.test(raw)) {
+      return "That capability is not implemented yet. I can explain steps, but I cannot perform it.";
+    }
+  }
+  return null;
 }
 
 // ─── Helper ───────────────────────────────────────────────────────────────────

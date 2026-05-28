@@ -10,7 +10,7 @@ Phase 1A connects Lisa to a locally running Ollama instance so she can answer op
 - `src/core/llm-context.ts` — system prompt, conversation history builder, history trimmer
 - Settings panel: Ollama status badge, model selector, enable/disable toggle, offline guidance
 - Command router LLM fallback: unknown commands route to the local model when enabled
-- Orb state transitions: thinking → speaking → idle during LLM queries
+- Orb state transitions: thinking → responding → idle during LLM queries (text only — voice is not implemented)
 - Console workspace: interaction history with per-entry thinking/complete/failed states
 - Four audit event types: `llm_request_sent`, `llm_response_received`, `llm_request_failed`, `llm_disabled_fallback`
 - Conversation history kept in memory (resets on restart), bounded by `maxContextTurns`
@@ -95,7 +95,7 @@ Type any open-ended question in the command bar:
 What is the difference between TCP and UDP?
 ```
 
-The Orb enters **thinking** → **speaking** → **idle** as the response arrives.
+The Orb enters **thinking** → **responding** → **idle** as the response arrives (text only — voice is not implemented in Phase 1B).
 The Console tab shows the interaction with a local-thinking indicator while waiting.
 
 ### 4. About first-response latency

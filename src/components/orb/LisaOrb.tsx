@@ -15,7 +15,7 @@ const STATE_LABELS: Record<OrbState, string> = {
   idle:              "IDLE",
   listening:         "LISTENING",
   thinking:          "THINKING",
-  speaking:          "SPEAKING",
+  speaking:          "RESPONDING",
   acting:            "ACTING",
   waiting_approval:  "AWAITING APPROVAL",
   paused:            "PAUSED",

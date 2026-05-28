@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { routeCommand } from "../core/command-router";
+import { routeCommand, getDesktopActionGuardMessage } from "../core/command-router";
 
 describe("routeCommand — emergency_stop", () => {
   it("routes 'emergency stop'", () => {
@@ -146,6 +146,126 @@ describe("routeCommand — mode_change", () => {
     const r = routeCommand("activate focus");
     expect(r.intent).toBe("mode_change");
     expect(r.payload?.modeId).toBe("focus");
+  });
+});
+
+describe("routeCommand — mode_change with article 'the'", () => {
+  it("routes 'Activate the cyber mode'", () => {
+    const r = routeCommand("Activate the cyber mode");
+    expect(r.intent).toBe("mode_change");
+    expect(r.payload?.modeId).toBe("cyber");
+  });
+  it("routes 'activate the cyber mode' (lowercase)", () => {
+    const r = routeCommand("activate the cyber mode");
+    expect(r.intent).toBe("mode_change");
+    expect(r.payload?.modeId).toBe("cyber");
+  });
+  it("routes 'switch to the focus mode'", () => {
+    const r = routeCommand("switch to the focus mode");
+    expect(r.intent).toBe("mode_change");
+    expect(r.payload?.modeId).toBe("focus");
+  });
+  it("routes 'enable the work mode'", () => {
+    const r = routeCommand("enable the work mode");
+    expect(r.intent).toBe("mode_change");
+    expect(r.payload?.modeId).toBe("work");
+  });
+});
+
+describe("routeCommand — mode_change additional verbs", () => {
+  it("routes 'turn on focus mode'", () => {
+    const r = routeCommand("turn on focus mode");
+    expect(r.intent).toBe("mode_change");
+    expect(r.payload?.modeId).toBe("focus");
+  });
+  it("routes 'go back to normal mode'", () => {
+    const r = routeCommand("go back to normal mode");
+    expect(r.intent).toBe("mode_change");
+    expect(r.payload?.modeId).toBe("normal");
+  });
+  it("routes 'return to normal'", () => {
+    const r = routeCommand("return to normal");
+    expect(r.intent).toBe("mode_change");
+    expect(r.payload?.modeId).toBe("normal");
+  });
+  it("routes 'go cyber mode'", () => {
+    const r = routeCommand("go cyber mode");
+    expect(r.intent).toBe("mode_change");
+    expect(r.payload?.modeId).toBe("cyber");
+  });
+  it("routes 'use coding mode'", () => {
+    const r = routeCommand("use coding mode");
+    expect(r.intent).toBe("mode_change");
+    expect(r.payload?.modeId).toBe("coding");
+  });
+});
+
+describe("routeCommand — mode_change bare mode names", () => {
+  it("routes bare 'cyber mode'", () => {
+    const r = routeCommand("cyber mode");
+    expect(r.intent).toBe("mode_change");
+    expect(r.payload?.modeId).toBe("cyber");
+  });
+  it("routes bare 'normal mode'", () => {
+    const r = routeCommand("normal mode");
+    expect(r.intent).toBe("mode_change");
+    expect(r.payload?.modeId).toBe("normal");
+  });
+  it("routes bare 'gaming'", () => {
+    const r = routeCommand("gaming");
+    expect(r.intent).toBe("mode_change");
+    expect(r.payload?.modeId).toBe("gaming");
+  });
+  it("routes bare 'privacy mode'", () => {
+    const r = routeCommand("privacy mode");
+    expect(r.intent).toBe("mode_change");
+    expect(r.payload?.modeId).toBe("privacy");
+  });
+});
+
+describe("getDesktopActionGuardMessage — blocked commands", () => {
+  it("blocks 'open Steam and download a game'", () => {
+    expect(getDesktopActionGuardMessage("open Steam and download a game")).not.toBeNull();
+  });
+  it("blocks 'can you control my mouse'", () => {
+    expect(getDesktopActionGuardMessage("can you control my mouse")).not.toBeNull();
+  });
+  it("blocks 'can you read my screen'", () => {
+    expect(getDesktopActionGuardMessage("can you read my screen")).not.toBeNull();
+  });
+  it("blocks 'launch Chrome'", () => {
+    expect(getDesktopActionGuardMessage("launch Chrome")).not.toBeNull();
+  });
+  it("blocks 'move the cursor to the top'", () => {
+    expect(getDesktopActionGuardMessage("move the cursor to the top")).not.toBeNull();
+  });
+  it("blocks 'right-click the desktop'", () => {
+    expect(getDesktopActionGuardMessage("right-click the desktop")).not.toBeNull();
+  });
+  it("blocks 'capture the screen'", () => {
+    expect(getDesktopActionGuardMessage("capture the screen")).not.toBeNull();
+  });
+  it("returns a message containing 'not implemented'", () => {
+    const msg = getDesktopActionGuardMessage("open Steam and download a game");
+    expect(msg).toContain("not implemented");
+  });
+});
+
+describe("getDesktopActionGuardMessage — safe commands pass through", () => {
+  it("passes 'what is quantum entanglement'", () => {
+    expect(getDesktopActionGuardMessage("what is quantum entanglement")).toBeNull();
+  });
+  it("passes 'explain recursion simply'", () => {
+    expect(getDesktopActionGuardMessage("explain recursion simply")).toBeNull();
+  });
+  it("passes 'what can you help me with'", () => {
+    expect(getDesktopActionGuardMessage("what can you help me with")).toBeNull();
+  });
+  it("passes empty string", () => {
+    expect(getDesktopActionGuardMessage("")).toBeNull();
+  });
+  it("passes 'activate cyber mode'", () => {
+    expect(getDesktopActionGuardMessage("activate cyber mode")).toBeNull();
   });
 });
 
