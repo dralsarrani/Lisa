@@ -2,7 +2,9 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { loadState, saveState } from "../core/persistence";
 import { createAuditEvent } from "../core/audit-store";
 import { DEFAULT_SETTINGS, STATE_VERSION, CONVERSATION_HISTORY_CAP, MEMORY_NOTES_CAP, MEMORY_NOTE_CHAR_LIMIT } from "../core/types";
-import type { LisaConversationTurn, MemoryNote } from "../core/types";
+import type { LisaConversationTurn, MemoryNote, ToolRequest, ToolResult, ToolApprovalContract } from "../core/types";
+
+const EMPTY_TOOLS: { toolRequests: ToolRequest[]; toolResults: ToolResult[]; toolApprovals: ToolApprovalContract[] } = { toolRequests: [], toolResults: [], toolApprovals: [] };
 
 beforeEach(() => {
   localStorage.clear();
@@ -56,6 +58,7 @@ describe("saveState + loadState round-trip", () => {
       auditEvents: [],
       conversationHistory: [],
       memoryNotes: [],
+      ...EMPTY_TOOLS,
     });
     const loaded = await loadState();
     expect(loaded.settings.activeMode).toBe("focus");
@@ -70,6 +73,7 @@ describe("saveState + loadState round-trip", () => {
       auditEvents: [],
       conversationHistory: [],
       memoryNotes: [],
+      ...EMPTY_TOOLS,
     });
     const loaded = await loadState();
     expect(loaded.missions).toEqual([]);
@@ -81,7 +85,7 @@ describe("saveState + loadState round-trip", () => {
     const events = Array.from({ length: 600 }, (_, i) =>
       createAuditEvent({ eventType: "app_started", source: "test", summary: `event ${i}` })
     );
-    await saveState({ settings: DEFAULT_SETTINGS, missions: [], approvals: [], auditEvents: events, conversationHistory: [], memoryNotes: [] });
+    await saveState({ settings: DEFAULT_SETTINGS, missions: [], approvals: [], auditEvents: events, conversationHistory: [], memoryNotes: [], ...EMPTY_TOOLS });
     const loaded = await loadState();
     expect(loaded.auditEvents.length).toBe(500);
   });
@@ -219,6 +223,7 @@ describe("conversationHistory — round-trip persistence (Phase 1D)", () => {
       auditEvents: [],
       conversationHistory: turns,
       memoryNotes: [],
+      ...EMPTY_TOOLS,
     });
     const loaded = await loadState();
     expect(loaded.conversationHistory).toHaveLength(2);
@@ -291,6 +296,7 @@ describe("conversationHistory — round-trip persistence (Phase 1D)", () => {
       auditEvents: [],
       conversationHistory: [makeTurn(1), makeTurn(2)],
       memoryNotes: [],
+      ...EMPTY_TOOLS,
     });
     await saveState({
       settings: DEFAULT_SETTINGS,
@@ -299,6 +305,7 @@ describe("conversationHistory — round-trip persistence (Phase 1D)", () => {
       auditEvents: [],
       conversationHistory: [],
       memoryNotes: [],
+      ...EMPTY_TOOLS,
     });
     const loaded = await loadState();
     expect(loaded.conversationHistory).toEqual([]);
@@ -313,6 +320,7 @@ describe("conversationHistory — round-trip persistence (Phase 1D)", () => {
       auditEvents: [],
       conversationHistory: turns,
       memoryNotes: [],
+      ...EMPTY_TOOLS,
     });
     const loaded = await loadState();
     expect(loaded.conversationHistory.length).toBe(CONVERSATION_HISTORY_CAP);
@@ -340,6 +348,7 @@ describe("memoryNotes — round-trip persistence (Phase 1F)", () => {
       auditEvents: [],
       conversationHistory: [],
       memoryNotes: notes,
+      ...EMPTY_TOOLS,
     });
     const loaded = await loadState();
     expect(loaded.memoryNotes).toHaveLength(2);
@@ -430,6 +439,7 @@ describe("memoryNotes — round-trip persistence (Phase 1F)", () => {
       auditEvents: [],
       conversationHistory: [],
       memoryNotes: notes,
+      ...EMPTY_TOOLS,
     });
     const loaded = await loadState();
     expect(loaded.memoryNotes.length).toBe(MEMORY_NOTES_CAP);

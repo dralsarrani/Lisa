@@ -30,6 +30,8 @@ function App() {
   const prevInteractionsLengthRef = useRef(0);
 
   const pendingApprovals = state.approvals.filter((a) => a.status === "pending");
+  const pendingToolApprovals = state.toolApprovals.filter((a) => a.decision === null);
+  const totalPending = pendingApprovals.length + pendingToolApprovals.length;
 
   useEffect(() => {
     if (state.interactions.length > prevInteractionsLengthRef.current) {
@@ -159,12 +161,12 @@ function App() {
           </div>
 
           {/* Pending approvals quick-action */}
-          {pendingApprovals.length > 0 && (
+          {totalPending > 0 && (
             <div className="panel app-pending-alert">
               <div className="pending-alert-content">
                 <span className="pending-alert-icon">⚠</span>
                 <span className="pending-alert-text">
-                  {pendingApprovals.length} approval{pendingApprovals.length > 1 ? "s" : ""} waiting
+                  {totalPending} approval{totalPending > 1 ? "s" : ""} waiting
                 </span>
                 <button
                   className="btn btn-primary pending-alert-btn"
@@ -189,8 +191,8 @@ function App() {
                   onClick={() => setActiveTab(tab.id)}
                 >
                   {tab.label}
-                  {tab.id === "approvals" && pendingApprovals.length > 0 && (
-                    <span className="app-tab-badge">{pendingApprovals.length}</span>
+                  {tab.id === "approvals" && totalPending > 0 && (
+                    <span className="app-tab-badge">{totalPending}</span>
                   )}
                   {tab.id === "audit" && (
                     <span className="app-tab-count">{state.auditEvents.length}</span>
@@ -213,7 +215,11 @@ function App() {
                 <MissionPanel missions={state.missions} />
               )}
               {activeTab === "approvals" && (
-                <ApprovalCenter approvals={state.approvals} />
+                <ApprovalCenter
+                  approvals={state.approvals}
+                  toolApprovals={state.toolApprovals}
+                  toolRequests={state.toolRequests}
+                />
               )}
               {activeTab === "audit" && (
                 <AuditLog events={state.auditEvents} />

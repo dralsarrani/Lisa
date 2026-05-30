@@ -335,10 +335,12 @@ function EmptyConsole({
 
 function kindLabel(kind: LisaInteraction["kind"]): string {
   switch (kind) {
-    case "local_ai": return "Local AI";
-    case "command":  return "Command";
-    case "system":   return "System";
-    case "error":    return "Error";
+    case "local_ai":      return "Local AI";
+    case "command":       return "Command";
+    case "system":        return "System";
+    case "error":         return "Error";
+    case "tool_request":  return "Tool";
+    case "tool_result":   return "Tool Result";
   }
 }
 

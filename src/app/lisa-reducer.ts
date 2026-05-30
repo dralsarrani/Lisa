@@ -10,8 +10,20 @@ import type {
   LisaInteraction,
   LisaConversationTurn,
   MemoryNote,
+  ToolRequest,
+  ToolResult,
+  ToolApprovalContract,
 } from "../core/types";
-import { DEFAULT_SETTINGS, INTERACTION_CAP, CONVERSATION_HISTORY_CAP, MEMORY_NOTES_CAP, MEMORY_NOTE_CHAR_LIMIT } from "../core/types";
+import {
+  DEFAULT_SETTINGS,
+  INTERACTION_CAP,
+  CONVERSATION_HISTORY_CAP,
+  MEMORY_NOTES_CAP,
+  MEMORY_NOTE_CHAR_LIMIT,
+  TOOL_REQUESTS_CAP,
+  TOOL_RESULTS_CAP,
+  TOOL_APPROVALS_CAP,
+} from "../core/types";
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -28,6 +40,9 @@ export interface LisaState {
   interactions: LisaInteraction[];
   conversationHistory: LisaConversationTurn[];
   memoryNotes: MemoryNote[];
+  toolRequests: ToolRequest[];
+  toolResults: ToolResult[];
+  toolApprovals: ToolApprovalContract[];
 }
 
 export const initialState: LisaState = {
@@ -43,6 +58,9 @@ export const initialState: LisaState = {
   interactions: [],
   conversationHistory: [],
   memoryNotes: [],
+  toolRequests: [],
+  toolResults: [],
+  toolApprovals: [],
 };
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
@@ -72,6 +90,34 @@ export type LisaAction =
   | { type: "CLEAR_AUDIT_LOG"; payload: AuditEvent }
   | { type: "CLEAR_MISSION_HISTORY" }
   | {
+      type: "CREATE_TOOL_REQUEST";
+      payload: { request: ToolRequest; approval: ToolApprovalContract; auditEvent: AuditEvent };
+    }
+  | {
+      type: "OPERATOR_APPROVE_TOOL";
+      payload: { requestId: string; resolvedAt: string; auditEvent: AuditEvent };
+    }
+  | {
+      type: "OPERATOR_REJECT_TOOL";
+      payload: { requestId: string; resolvedAt: string; auditEvent: AuditEvent };
+    }
+  | {
+      type: "START_TOOL_EXECUTION";
+      payload: { requestId: string; startedAt: string; auditEvent: AuditEvent };
+    }
+  | {
+      type: "COMPLETE_TOOL_EXECUTION";
+      payload: { requestId: string; result: ToolResult; completedAt: string; auditEvent: AuditEvent };
+    }
+  | {
+      type: "FAIL_TOOL_EXECUTION";
+      payload: { requestId: string; error: string; completedAt: string; auditEvent: AuditEvent };
+    }
+  | {
+      type: "CANCEL_TOOL_REQUEST";
+      payload: { requestId: string; auditEvent: AuditEvent };
+    }
+  | {
       type: "LOAD_STATE";
       payload: {
         settings: LisaSettings;
@@ -80,6 +126,9 @@ export type LisaAction =
         auditEvents: AuditEvent[];
         conversationHistory: LisaConversationTurn[];
         memoryNotes: MemoryNote[];
+        toolRequests: ToolRequest[];
+        toolResults: ToolResult[];
+        toolApprovals: ToolApprovalContract[];
       };
     };
 
@@ -143,11 +192,23 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
       const cancelledApprovals = state.approvals.map((a) =>
         a.status === "pending" ? { ...a, status: "cancelled" as const } : a
       );
+      const cancelledToolRequests = state.toolRequests.map((r) =>
+        r.status === "pending_approval" || r.status === "approved" || r.status === "running"
+          ? { ...r, status: "cancelled" as const, completedAt: new Date().toISOString() }
+          : r
+      );
+      const cancelledToolApprovals = state.toolApprovals.map((a) =>
+        a.decision === null
+          ? { ...a, decision: "rejected" as const, resolvedBy: "operator" as const, resolvedAt: new Date().toISOString() }
+          : a
+      );
       return {
         ...state,
         orbState: "emergency_stopped",
         missions: stoppedMissions,
         approvals: cancelledApprovals,
+        toolRequests: cancelledToolRequests,
+        toolApprovals: cancelledToolApprovals,
         commandResponse: "EMERGENCY STOP ACTIVATED. All active operations halted. System is safe.",
       };
     }
@@ -272,6 +333,116 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
       };
     }
 
+    case "CREATE_TOOL_REQUEST": {
+      const { request, approval, auditEvent } = action.payload;
+      return {
+        ...state,
+        toolRequests: [request, ...state.toolRequests].slice(0, TOOL_REQUESTS_CAP),
+        toolApprovals: [approval, ...state.toolApprovals].slice(0, TOOL_APPROVALS_CAP),
+        auditEvents: [auditEvent, ...state.auditEvents].slice(0, 500),
+      };
+    }
+
+    case "OPERATOR_APPROVE_TOOL": {
+      const { requestId, resolvedAt, auditEvent } = action.payload;
+      return {
+        ...state,
+        toolRequests: state.toolRequests.map((r) =>
+          r.id === requestId && r.status === "pending_approval"
+            ? { ...r, status: "approved" as const, approvedAt: resolvedAt }
+            : r
+        ),
+        toolApprovals: state.toolApprovals.map((a) =>
+          a.requestId === requestId && a.decision === null
+            ? { ...a, decision: "approved" as const, resolvedBy: "operator" as const, resolvedAt }
+            : a
+        ),
+        auditEvents: [auditEvent, ...state.auditEvents].slice(0, 500),
+      };
+    }
+
+    case "OPERATOR_REJECT_TOOL": {
+      const { requestId, resolvedAt, auditEvent } = action.payload;
+      return {
+        ...state,
+        toolRequests: state.toolRequests.map((r) =>
+          r.id === requestId && r.status === "pending_approval"
+            ? { ...r, status: "rejected" as const, completedAt: resolvedAt }
+            : r
+        ),
+        toolApprovals: state.toolApprovals.map((a) =>
+          a.requestId === requestId && a.decision === null
+            ? { ...a, decision: "rejected" as const, resolvedBy: "operator" as const, resolvedAt }
+            : a
+        ),
+        auditEvents: [auditEvent, ...state.auditEvents].slice(0, 500),
+      };
+    }
+
+    case "START_TOOL_EXECUTION": {
+      const { requestId, startedAt, auditEvent } = action.payload;
+      // Triple-check gate: only transition if request is approved, contract is approved by operator.
+      const req = state.toolRequests.find((r) => r.id === requestId);
+      const contract = state.toolApprovals.find((a) => a.requestId === requestId);
+      const gatePass =
+        req?.status === "approved" &&
+        contract?.decision === "approved" &&
+        contract?.resolvedBy === "operator";
+      if (!gatePass) return state;
+      return {
+        ...state,
+        toolRequests: state.toolRequests.map((r) =>
+          r.id === requestId ? { ...r, status: "running" as const, startedAt } : r
+        ),
+        auditEvents: [auditEvent, ...state.auditEvents].slice(0, 500),
+      };
+    }
+
+    case "COMPLETE_TOOL_EXECUTION": {
+      const { requestId, result, completedAt, auditEvent } = action.payload;
+      return {
+        ...state,
+        toolRequests: state.toolRequests.map((r) =>
+          r.id === requestId
+            ? { ...r, status: "succeeded" as const, completedAt, resultId: result.id }
+            : r
+        ),
+        toolResults: [result, ...state.toolResults].slice(0, TOOL_RESULTS_CAP),
+        auditEvents: [auditEvent, ...state.auditEvents].slice(0, 500),
+      };
+    }
+
+    case "FAIL_TOOL_EXECUTION": {
+      const { requestId, error, completedAt, auditEvent } = action.payload;
+      return {
+        ...state,
+        toolRequests: state.toolRequests.map((r) =>
+          r.id === requestId
+            ? { ...r, status: "failed" as const, completedAt, error }
+            : r
+        ),
+        auditEvents: [auditEvent, ...state.auditEvents].slice(0, 500),
+      };
+    }
+
+    case "CANCEL_TOOL_REQUEST": {
+      const { requestId, auditEvent } = action.payload;
+      return {
+        ...state,
+        toolRequests: state.toolRequests.map((r) =>
+          r.id === requestId && (r.status === "pending_approval" || r.status === "approved")
+            ? { ...r, status: "cancelled" as const, completedAt: new Date().toISOString() }
+            : r
+        ),
+        toolApprovals: state.toolApprovals.map((a) =>
+          a.requestId === requestId && a.decision === null
+            ? { ...a, decision: "rejected" as const, resolvedBy: "operator" as const, resolvedAt: new Date().toISOString() }
+            : a
+        ),
+        auditEvents: [auditEvent, ...state.auditEvents].slice(0, 500),
+      };
+    }
+
     case "LOAD_STATE":
       return {
         ...state,
@@ -282,6 +453,9 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
         auditEvents: action.payload.auditEvents,
         conversationHistory: action.payload.conversationHistory,
         memoryNotes: action.payload.memoryNotes,
+        toolRequests: action.payload.toolRequests,
+        toolResults: action.payload.toolResults,
+        toolApprovals: action.payload.toolApprovals,
         isLoaded: true,
       };
 

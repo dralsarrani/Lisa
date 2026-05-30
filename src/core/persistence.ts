@@ -1,5 +1,25 @@
-import type { PersistedState, LisaSettings, Mission, ApprovalRequest, AuditEvent, LisaConversationTurn, MemoryNote } from "./types";
-import { DEFAULT_SETTINGS, STATE_VERSION, CONVERSATION_HISTORY_CAP, MEMORY_NOTES_CAP, MEMORY_NOTE_CHAR_LIMIT } from "./types";
+import type {
+  PersistedState,
+  LisaSettings,
+  Mission,
+  ApprovalRequest,
+  AuditEvent,
+  LisaConversationTurn,
+  MemoryNote,
+  ToolRequest,
+  ToolResult,
+  ToolApprovalContract,
+} from "./types";
+import {
+  DEFAULT_SETTINGS,
+  STATE_VERSION,
+  CONVERSATION_HISTORY_CAP,
+  MEMORY_NOTES_CAP,
+  MEMORY_NOTE_CHAR_LIMIT,
+  TOOL_REQUESTS_CAP,
+  TOOL_RESULTS_CAP,
+  TOOL_APPROVALS_CAP,
+} from "./types";
 
 const STORAGE_KEY = "lisa_state_v1";
 const MAX_AUDIT_EVENTS = 500;
@@ -60,6 +80,9 @@ export async function loadState(): Promise<PersistedState> {
       auditEvents: (parsed.auditEvents ?? []).slice(-MAX_AUDIT_EVENTS),
       conversationHistory: safeConversationHistory(parsed.conversationHistory),
       memoryNotes: safeMemoryNotes(parsed.memoryNotes),
+      toolRequests: safeToolRequests(parsed.toolRequests),
+      toolResults: safeToolResults(parsed.toolResults),
+      toolApprovals: safeToolApprovals(parsed.toolApprovals),
       savedAt: parsed.savedAt ?? new Date().toISOString(),
     };
   } catch {
@@ -76,6 +99,9 @@ export async function saveState(state: {
   auditEvents: AuditEvent[];
   conversationHistory: LisaConversationTurn[];
   memoryNotes: MemoryNote[];
+  toolRequests: ToolRequest[];
+  toolResults: ToolResult[];
+  toolApprovals: ToolApprovalContract[];
 }): Promise<void> {
   const persisted: PersistedState = {
     version: STATE_VERSION,
@@ -85,6 +111,9 @@ export async function saveState(state: {
     auditEvents: state.auditEvents.slice(-MAX_AUDIT_EVENTS),
     conversationHistory: state.conversationHistory.slice(-CONVERSATION_HISTORY_CAP),
     memoryNotes: state.memoryNotes.slice(-MEMORY_NOTES_CAP),
+    toolRequests: state.toolRequests.slice(0, TOOL_REQUESTS_CAP),
+    toolResults: state.toolResults.slice(0, TOOL_RESULTS_CAP),
+    toolApprovals: state.toolApprovals.slice(0, TOOL_APPROVALS_CAP),
     savedAt: new Date().toISOString(),
   };
 
@@ -114,6 +143,9 @@ function defaultState(): PersistedState {
     auditEvents: [],
     conversationHistory: [],
     memoryNotes: [],
+    toolRequests: [],
+    toolResults: [],
+    toolApprovals: [],
     savedAt: new Date().toISOString(),
   };
 }
@@ -127,6 +159,9 @@ function migrateState(old: Partial<PersistedState>): PersistedState {
     auditEvents: old.auditEvents ?? [],
     conversationHistory: safeConversationHistory(old.conversationHistory),
     memoryNotes: safeMemoryNotes(old.memoryNotes),
+    toolRequests: [],
+    toolResults: [],
+    toolApprovals: [],
   };
 }
 
@@ -159,4 +194,61 @@ function safeMemoryNotes(raw: unknown): MemoryNote[] {
         n.content.trim().length <= MEMORY_NOTE_CHAR_LIMIT
     )
     .slice(-MEMORY_NOTES_CAP);
+}
+
+// Restart policy: running → cancelled; approved (not yet started) → expired.
+// pending_approval, rejected, succeeded, failed, cancelled, expired survive as-is.
+function safeToolRequests(raw: unknown): ToolRequest[] {
+  if (!Array.isArray(raw)) return [];
+  return (raw as ToolRequest[])
+    .filter(
+      (r) =>
+        r !== null &&
+        typeof r === "object" &&
+        typeof r.id === "string" &&
+        typeof r.toolId === "string" &&
+        typeof r.status === "string" &&
+        typeof r.createdAt === "string"
+    )
+    .map((r) => {
+      if (r.status === "running") {
+        return { ...r, status: "cancelled" as const, completedAt: new Date().toISOString() };
+      }
+      if (r.status === "approved") {
+        return { ...r, status: "expired" as const, completedAt: new Date().toISOString() };
+      }
+      return r;
+    })
+    .slice(0, TOOL_REQUESTS_CAP);
+}
+
+function safeToolResults(raw: unknown): ToolResult[] {
+  if (!Array.isArray(raw)) return [];
+  return (raw as ToolResult[])
+    .filter(
+      (r) =>
+        r !== null &&
+        typeof r === "object" &&
+        typeof r.id === "string" &&
+        typeof r.requestId === "string" &&
+        typeof r.toolId === "string" &&
+        typeof r.outputSummary === "string" &&
+        typeof r.succeededAt === "string"
+    )
+    .slice(0, TOOL_RESULTS_CAP);
+}
+
+function safeToolApprovals(raw: unknown): ToolApprovalContract[] {
+  if (!Array.isArray(raw)) return [];
+  return (raw as ToolApprovalContract[])
+    .filter(
+      (a) =>
+        a !== null &&
+        typeof a === "object" &&
+        typeof a.id === "string" &&
+        typeof a.requestId === "string" &&
+        typeof a.toolId === "string" &&
+        typeof a.createdAt === "string"
+    )
+    .slice(0, TOOL_APPROVALS_CAP);
 }

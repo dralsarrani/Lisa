@@ -118,6 +118,77 @@ export interface ApprovalRequest {
   resolvedBy?: string;
 }
 
+// ─── Tools ───────────────────────────────────────────────────────────────────
+
+export type ToolRiskLevel = "safe" | "low" | "medium" | "high" | "critical";
+export type ToolCategory = "diagnostic" | "information" | "file" | "system" | "network" | "automation";
+
+export interface ToolParameter {
+  name: string;
+  type: "string" | "number" | "boolean";
+  description: string;
+  required: boolean;
+  defaultValue?: string | number | boolean;
+}
+
+export interface ToolDefinition {
+  id: string;
+  displayName: string;
+  description: string;
+  category: ToolCategory;
+  riskLevel: ToolRiskLevel;
+  requiresApproval: boolean;
+  parameters: ToolParameter[];
+  consequences: string;
+  enabled: boolean;
+}
+
+export type ToolRequestStatus =
+  | "pending_approval"
+  | "approved"
+  | "rejected"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "cancelled"
+  | "expired";
+
+export interface ToolRequest {
+  id: string;
+  toolId: string;
+  toolDisplayName: string;
+  params: Record<string, string | number | boolean>;
+  status: ToolRequestStatus;
+  source: "user_command";
+  consequences: string;
+  createdAt: string;
+  approvedAt?: string;
+  startedAt?: string;
+  completedAt?: string;
+  resultId?: string;
+  error?: string;
+}
+
+export interface ToolResult {
+  id: string;
+  requestId: string;
+  toolId: string;
+  outputSummary: string;
+  succeededAt: string;
+}
+
+export interface ToolApprovalContract {
+  id: string;
+  requestId: string;
+  toolId: string;
+  toolDisplayName: string;
+  consequences: string;
+  decision: "approved" | "rejected" | null;
+  resolvedBy: "operator" | null;
+  createdAt: string;
+  resolvedAt?: string;
+}
+
 // ─── Audit Log ────────────────────────────────────────────────────────────────
 
 export type AuditSeverity = "info" | "warning" | "error" | "critical";
@@ -161,7 +232,16 @@ export type AuditEventType =
   | "memory_notes_cleared"
   | "ollama_model_test_started"
   | "ollama_model_test_passed"
-  | "ollama_model_test_failed";
+  | "ollama_model_test_failed"
+  | "tool_request_created"
+  | "tool_request_approved"
+  | "tool_request_rejected"
+  | "tool_request_cancelled"
+  | "tool_request_expired"
+  | "tool_execution_started"
+  | "tool_execution_succeeded"
+  | "tool_execution_failed"
+  | "tool_approval_contract_created";
 
 export interface AuditEvent {
   id: string;
@@ -244,6 +324,9 @@ export type CommandIntent =
   | "delete_memory_note"
   | "request_clear_memory_notes"
   | "confirm_clear_memory_notes"
+  | "request_tool"
+  | "approve_tool_request"
+  | "reject_tool_request"
   | "unknown";
 
 export interface CommandRouteResult {
@@ -257,7 +340,7 @@ export interface CommandRouteResult {
 
 // ─── Interactions (session-only, not persisted) ───────────────────────────────
 
-export type InteractionKind = "command" | "local_ai" | "error" | "system";
+export type InteractionKind = "command" | "local_ai" | "error" | "system" | "tool_request" | "tool_result";
 export type InteractionStatus = "thinking" | "streaming" | "complete" | "failed" | "cancelled";
 
 export interface LisaInteraction {
@@ -277,6 +360,9 @@ export const INTERACTION_CAP = 25;
 export const CONVERSATION_HISTORY_CAP = 50;
 export const MEMORY_NOTES_CAP = 20;
 export const MEMORY_NOTE_CHAR_LIMIT = 200;
+export const TOOL_REQUESTS_CAP = 50;
+export const TOOL_RESULTS_CAP = 50;
+export const TOOL_APPROVALS_CAP = 50;
 
 // ─── Persisted State ──────────────────────────────────────────────────────────
 
@@ -291,7 +377,10 @@ export interface PersistedState {
   auditEvents: AuditEvent[];
   conversationHistory: LisaConversationTurn[];
   memoryNotes: MemoryNote[];
+  toolRequests: ToolRequest[];
+  toolResults: ToolResult[];
+  toolApprovals: ToolApprovalContract[];
   savedAt: string;
 }
 
-export const STATE_VERSION = 4;
+export const STATE_VERSION = 5;

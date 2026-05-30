@@ -184,6 +184,45 @@ export function routeCommand(raw: string): CommandRouteResult {
     return result("reject_test_action", raw, normalized, {}, "high", "Rejecting pending test action...");
   }
 
+  // Tool request — run a named tool (requires approval).
+  if (
+    normalized === "run conversation stats" ||
+    normalized === "conversation stats" ||
+    normalized === "show conversation stats"
+  ) {
+    return result("request_tool", raw, normalized, { toolId: "conversation-stats" }, "high", "Tool request created: Conversation Stats. Approval required before execution.");
+  }
+
+  if (
+    normalized === "run runtime snapshot" ||
+    normalized === "runtime snapshot" ||
+    normalized === "show runtime snapshot"
+  ) {
+    return result("request_tool", raw, normalized, { toolId: "runtime-snapshot" }, "high", "Tool request created: Runtime Snapshot. Approval required before execution.");
+  }
+
+  // Approve pending tool request.
+  if (
+    normalized === "approve tool" ||
+    normalized === "approve tool request" ||
+    normalized === "approve the tool" ||
+    normalized === "approve the tool request"
+  ) {
+    return result("approve_tool_request", raw, normalized, {}, "high", "Approving pending tool request...");
+  }
+
+  // Reject pending tool request.
+  if (
+    normalized === "reject tool" ||
+    normalized === "reject tool request" ||
+    normalized === "reject the tool" ||
+    normalized === "reject the tool request" ||
+    normalized === "cancel tool" ||
+    normalized === "cancel tool request"
+  ) {
+    return result("reject_tool_request", raw, normalized, {}, "high", "Rejecting pending tool request...");
+  }
+
   // Mode activation — verb-based.
   // Supported verbs: activate, switch to, switch, turn on, enable, start,
   //                  return to, go back to, go to, go, use, set to, set.

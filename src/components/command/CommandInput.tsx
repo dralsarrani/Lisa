@@ -9,6 +9,7 @@ import { buildOllamaMessages, trimConversationHistory } from "../../core/llm-con
 import type { LisaConversationTurn } from "../../core/llm-context";
 import { MEMORY_NOTES_CAP, MEMORY_NOTE_CHAR_LIMIT } from "../../core/types";
 import { classifyOllamaError } from "../../core/ollama-error";
+import { getToolDefinition } from "../../core/tool-registry";
 import "./CommandInput.css";
 
 // ─── Pure formatter — exported for testing ────────────────────────────────────
@@ -713,6 +714,146 @@ export const CommandInput: React.FC = () => {
         dispatch({
           type: "ADD_INTERACTION",
           payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: confirmedMsg, createdAt: now(), completedAt: now() },
+        });
+        break;
+      }
+
+      case "request_tool": {
+        const toolId = typeof route.payload?.toolId === "string" ? route.payload.toolId : "";
+        const definition = toolId ? getToolDefinition(toolId) : undefined;
+        if (!definition) {
+          const unknownMsg = `Unknown tool: "${toolId}". No tool request created.`;
+          dispatch({ type: "SET_COMMAND_RESPONSE", payload: unknownMsg });
+          dispatch({
+            type: "ADD_INTERACTION",
+            payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: unknownMsg, createdAt: now(), completedAt: now() },
+          });
+          break;
+        }
+        if (!definition.enabled) {
+          const disabledMsg = `Tool "${definition.displayName}" is currently disabled.`;
+          dispatch({ type: "SET_COMMAND_RESPONSE", payload: disabledMsg });
+          dispatch({
+            type: "ADD_INTERACTION",
+            payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: disabledMsg, createdAt: now(), completedAt: now() },
+          });
+          break;
+        }
+        const requestId = makeId();
+        const contractId = makeId();
+        const createdAt = now();
+        const request = {
+          id: requestId,
+          toolId: definition.id,
+          toolDisplayName: definition.displayName,
+          params: {} as Record<string, string | number | boolean>,
+          status: "pending_approval" as const,
+          source: "user_command" as const,
+          consequences: definition.consequences,
+          createdAt,
+        };
+        const contract = {
+          id: contractId,
+          requestId,
+          toolId: definition.id,
+          toolDisplayName: definition.displayName,
+          consequences: definition.consequences,
+          decision: null,
+          resolvedBy: null,
+          createdAt,
+        };
+        dispatch({
+          type: "CREATE_TOOL_REQUEST",
+          payload: {
+            request,
+            approval: contract,
+            auditEvent: createAuditEvent({
+              eventType: "tool_request_created",
+              source: "command_input",
+              summary: `Tool request created: "${definition.displayName}"`,
+              severity: "info",
+            }),
+          },
+        });
+        const toolRequestMsg = route.response ?? `Tool request created: "${definition.displayName}". Go to Approvals tab to approve.`;
+        dispatch({ type: "SET_COMMAND_RESPONSE", payload: toolRequestMsg });
+        dispatch({ type: "SET_ORB_STATE", payload: "waiting_approval" });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: toolRequestMsg, createdAt: now(), completedAt: now() },
+        });
+        addAudit({
+          eventType: "tool_approval_contract_created",
+          source: "command_input",
+          summary: `Approval contract created for "${definition.displayName}"`,
+          severity: "info",
+        });
+        break;
+      }
+
+      case "approve_tool_request": {
+        const pendingContract = state.toolApprovals.find((a) => a.decision === null);
+        const pendingRequest = pendingContract
+          ? state.toolRequests.find((r) => r.id === pendingContract.requestId && r.status === "pending_approval")
+          : undefined;
+        if (!pendingContract || !pendingRequest) {
+          const noToolMsg = "No pending tool request found.";
+          dispatch({ type: "SET_COMMAND_RESPONSE", payload: noToolMsg });
+          dispatch({
+            type: "ADD_INTERACTION",
+            payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: noToolMsg, createdAt: now(), completedAt: now() },
+          });
+          break;
+        }
+        const approveMsg = `Tool approval granted: "${pendingContract.toolDisplayName}". Execution starting — check Approvals tab.`;
+        dispatch({ type: "SET_COMMAND_RESPONSE", payload: approveMsg });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: approveMsg, createdAt: now(), completedAt: now() },
+        });
+        addAudit({
+          eventType: "tool_request_approved",
+          source: "command_input",
+          summary: `Tool approved via command: "${pendingContract.toolDisplayName}"`,
+          severity: "info",
+        });
+        break;
+      }
+
+      case "reject_tool_request": {
+        const pendingContract = state.toolApprovals.find((a) => a.decision === null);
+        const pendingRequest = pendingContract
+          ? state.toolRequests.find((r) => r.id === pendingContract.requestId)
+          : undefined;
+        if (!pendingContract || !pendingRequest) {
+          const noToolMsg = "No pending tool request found.";
+          dispatch({ type: "SET_COMMAND_RESPONSE", payload: noToolMsg });
+          dispatch({
+            type: "ADD_INTERACTION",
+            payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: noToolMsg, createdAt: now(), completedAt: now() },
+          });
+          break;
+        }
+        const resolvedAt = now();
+        dispatch({
+          type: "OPERATOR_REJECT_TOOL",
+          payload: {
+            requestId: pendingRequest.id,
+            resolvedAt,
+            auditEvent: createAuditEvent({
+              eventType: "tool_request_rejected",
+              source: "command_input",
+              summary: `Tool rejected via command: "${pendingContract.toolDisplayName}"`,
+              severity: "warning",
+            }),
+          },
+        });
+        const rejectMsg = `Tool request rejected: "${pendingContract.toolDisplayName}".`;
+        dispatch({ type: "SET_COMMAND_RESPONSE", payload: rejectMsg });
+        dispatch({ type: "SET_ORB_STATE", payload: "idle" });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: rejectMsg, createdAt: now(), completedAt: now() },
         });
         break;
       }
