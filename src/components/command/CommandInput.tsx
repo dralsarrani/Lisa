@@ -41,6 +41,13 @@ export const CommandInput: React.FC = () => {
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLlmResponseRef = useRef(false);
 
+  // Seed conversation history ref once when persisted state is loaded.
+  useEffect(() => {
+    if (state.isLoaded) {
+      conversationHistoryRef.current = state.conversationHistory;
+    }
+  }, [state.isLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!state.commandResponse) return;
     const isEmergencyMessage =
@@ -155,10 +162,9 @@ export const CommandInput: React.FC = () => {
               details: `response_chars=${accumulatedResponse.length} latency_ms=${ev.payload.latency_ms}`,
               severity: "info",
             });
-            conversationHistoryRef.current = [
-              ...trimmedHistory,
-              { userInput: raw, assistantResponse: accumulatedResponse, timestamp: now(), model },
-            ];
+            const completedTurn = { userInput: raw, assistantResponse: accumulatedResponse, timestamp: now(), model };
+            conversationHistoryRef.current = [...trimmedHistory, completedTurn];
+            dispatch({ type: "APPEND_CONVERSATION_TURN", payload: completedTurn });
             setTimeout(() => dispatch({ type: "SET_ORB_STATE", payload: "idle" }), 3000);
             resolve();
           }

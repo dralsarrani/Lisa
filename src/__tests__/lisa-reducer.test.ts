@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { lisaReducer, initialState } from "../app/lisa-reducer";
-import { INTERACTION_CAP } from "../core/types";
-import type { LisaInteraction } from "../core/types";
+import { INTERACTION_CAP, CONVERSATION_HISTORY_CAP } from "../core/types";
+import type { LisaInteraction, LisaConversationTurn } from "../core/types";
 
 function makeInteraction(
   id: string,
@@ -254,6 +254,52 @@ describe("ABORT_INTERACTION", () => {
       payload: { id: "no-such-id", completedAt: new Date().toISOString() },
     });
     expect(state.interactions[0].status).toBe("thinking");
+  });
+});
+
+// ─── APPEND_CONVERSATION_TURN ─────────────────────────────────────────────────
+
+function makeTurn(n: number): LisaConversationTurn {
+  return {
+    userInput: `q${n}`,
+    assistantResponse: `a${n}`,
+    timestamp: new Date().toISOString(),
+    model: "llama3.2:1b",
+  };
+}
+
+describe("APPEND_CONVERSATION_TURN", () => {
+  it("appends a turn to an empty history", () => {
+    const turn = makeTurn(1);
+    const next = lisaReducer(initialState, { type: "APPEND_CONVERSATION_TURN", payload: turn });
+    expect(next.conversationHistory).toHaveLength(1);
+    expect(next.conversationHistory[0].userInput).toBe("q1");
+  });
+
+  it("appends turns in order", () => {
+    let state = lisaReducer(initialState, { type: "APPEND_CONVERSATION_TURN", payload: makeTurn(1) });
+    state = lisaReducer(state, { type: "APPEND_CONVERSATION_TURN", payload: makeTurn(2) });
+    expect(state.conversationHistory[0].userInput).toBe("q1");
+    expect(state.conversationHistory[1].userInput).toBe("q2");
+  });
+
+  it("does not mutate the previous state", () => {
+    const turn = makeTurn(1);
+    const before = initialState.conversationHistory;
+    lisaReducer(initialState, { type: "APPEND_CONVERSATION_TURN", payload: turn });
+    expect(before).toHaveLength(0);
+  });
+
+  it("trims oldest turns when CONVERSATION_HISTORY_CAP is exceeded", () => {
+    let state = initialState;
+    for (let i = 0; i < CONVERSATION_HISTORY_CAP + 5; i++) {
+      state = lisaReducer(state, { type: "APPEND_CONVERSATION_TURN", payload: makeTurn(i) });
+    }
+    const cap = Math.min(state.settings.maxContextTurns, CONVERSATION_HISTORY_CAP);
+    expect(state.conversationHistory.length).toBeLessThanOrEqual(cap);
+    expect(state.conversationHistory[state.conversationHistory.length - 1].userInput).toBe(
+      `q${CONVERSATION_HISTORY_CAP + 4}`
+    );
   });
 });
 

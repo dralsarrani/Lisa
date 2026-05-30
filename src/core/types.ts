@@ -262,8 +262,12 @@ export interface LisaInteraction {
 }
 
 export const INTERACTION_CAP = 25;
+export const CONVERSATION_HISTORY_CAP = 50;
 
 // ─── Persisted State ──────────────────────────────────────────────────────────
+
+import type { LisaConversationTurn } from "./llm-context";
+export type { LisaConversationTurn };
 
 export interface PersistedState {
   version: number;
@@ -271,7 +275,8 @@ export interface PersistedState {
   missions: Mission[];
   approvals: ApprovalRequest[];
   auditEvents: AuditEvent[];
+  conversationHistory: LisaConversationTurn[];
   savedAt: string;
 }
 
-export const STATE_VERSION = 2;
+export const STATE_VERSION = 3;

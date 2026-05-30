@@ -8,8 +8,9 @@ import type {
   LisaSettings,
   RuntimeHealth,
   LisaInteraction,
+  LisaConversationTurn,
 } from "../core/types";
-import { DEFAULT_SETTINGS, INTERACTION_CAP } from "../core/types";
+import { DEFAULT_SETTINGS, INTERACTION_CAP, CONVERSATION_HISTORY_CAP } from "../core/types";
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -24,6 +25,7 @@ export interface LisaState {
   isLoaded: boolean;
   commandResponse: string | null;
   interactions: LisaInteraction[];
+  conversationHistory: LisaConversationTurn[];
 }
 
 export const initialState: LisaState = {
@@ -37,6 +39,7 @@ export const initialState: LisaState = {
   isLoaded: false,
   commandResponse: null,
   interactions: [],
+  conversationHistory: [],
 };
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
@@ -58,6 +61,7 @@ export type LisaAction =
   | { type: "UPDATE_INTERACTION"; payload: { id: string } & Partial<Omit<LisaInteraction, "id" | "createdAt">> }
   | { type: "APPEND_INTERACTION_CONTENT"; payload: { id: string; chunk: string } }
   | { type: "ABORT_INTERACTION"; payload: { id: string; completedAt: string; latencyMs?: number } }
+  | { type: "APPEND_CONVERSATION_TURN"; payload: LisaConversationTurn }
   | { type: "CLEAR_AUDIT_LOG"; payload: AuditEvent }
   | { type: "CLEAR_MISSION_HISTORY" }
   | {
@@ -67,6 +71,7 @@ export type LisaAction =
         missions: Mission[];
         approvals: ApprovalRequest[];
         auditEvents: AuditEvent[];
+        conversationHistory: LisaConversationTurn[];
       };
     };
 
@@ -205,6 +210,15 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
       };
     }
 
+    case "APPEND_CONVERSATION_TURN": {
+      const cap = Math.min(state.settings.maxContextTurns, CONVERSATION_HISTORY_CAP);
+      const updated = [...state.conversationHistory, action.payload];
+      return {
+        ...state,
+        conversationHistory: updated.length > cap ? updated.slice(-cap) : updated,
+      };
+    }
+
     case "CLEAR_AUDIT_LOG":
       // Sentinel event is included as the payload — replace the log with only it.
       return { ...state, auditEvents: [action.payload] };
@@ -231,6 +245,7 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
         missions: action.payload.missions,
         approvals: action.payload.approvals,
         auditEvents: action.payload.auditEvents,
+        conversationHistory: action.payload.conversationHistory,
         isLoaded: true,
       };
 

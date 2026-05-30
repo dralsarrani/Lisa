@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { loadState, saveState } from "../core/persistence";
 import { createAuditEvent } from "../core/audit-store";
-import { DEFAULT_SETTINGS, STATE_VERSION } from "../core/types";
+import { DEFAULT_SETTINGS, STATE_VERSION, CONVERSATION_HISTORY_CAP } from "../core/types";
+import type { LisaConversationTurn } from "../core/types";
 
 beforeEach(() => {
   localStorage.clear();
@@ -53,6 +54,7 @@ describe("saveState + loadState round-trip", () => {
       missions: [],
       approvals: [],
       auditEvents: [],
+      conversationHistory: [],
     });
     const loaded = await loadState();
     expect(loaded.settings.activeMode).toBe("focus");
@@ -65,6 +67,7 @@ describe("saveState + loadState round-trip", () => {
       missions: [],
       approvals: [],
       auditEvents: [],
+      conversationHistory: [],
     });
     const loaded = await loadState();
     expect(loaded.missions).toEqual([]);
@@ -76,7 +79,7 @@ describe("saveState + loadState round-trip", () => {
     const events = Array.from({ length: 600 }, (_, i) =>
       createAuditEvent({ eventType: "app_started", source: "test", summary: `event ${i}` })
     );
-    await saveState({ settings: DEFAULT_SETTINGS, missions: [], approvals: [], auditEvents: events });
+    await saveState({ settings: DEFAULT_SETTINGS, missions: [], approvals: [], auditEvents: events, conversationHistory: [] });
     const loaded = await loadState();
     expect(loaded.auditEvents.length).toBe(500);
   });
@@ -155,5 +158,139 @@ describe("loadState — v1 to v2 migration", () => {
     const state = await loadState();
     expect(state.missions).toHaveLength(1);
     expect(state.auditEvents).toHaveLength(1);
+  });
+});
+
+function makeTurn(n: number): LisaConversationTurn {
+  return {
+    userInput: `question ${n}`,
+    assistantResponse: `answer ${n}`,
+    timestamp: new Date().toISOString(),
+    model: "llama3.2:1b",
+  };
+}
+
+describe("loadState — v2 to v3 migration (Phase 1D)", () => {
+  it("adds conversationHistory: [] when migrating from version 2", async () => {
+    localStorage.setItem(
+      "lisa_state_v1",
+      JSON.stringify({
+        version: 2,
+        settings: { activeMode: "focus" },
+        missions: [],
+        approvals: [],
+        auditEvents: [],
+        savedAt: new Date().toISOString(),
+      })
+    );
+    const state = await loadState();
+    expect(state.version).toBe(STATE_VERSION);
+    expect(state.conversationHistory).toEqual([]);
+    expect(state.settings.activeMode).toBe("focus");
+  });
+
+  it("preserves missions and settings across v2→v3 migration", async () => {
+    localStorage.setItem(
+      "lisa_state_v1",
+      JSON.stringify({
+        version: 2,
+        settings: { developerMode: true },
+        missions: [{ id: "m1", title: "Migrated" }],
+        approvals: [],
+        auditEvents: [],
+        savedAt: new Date().toISOString(),
+      })
+    );
+    const state = await loadState();
+    expect(state.settings.developerMode).toBe(true);
+    expect(state.missions).toHaveLength(1);
+  });
+});
+
+describe("conversationHistory — round-trip persistence (Phase 1D)", () => {
+  it("persists and reloads conversation turns", async () => {
+    const turns = [makeTurn(1), makeTurn(2)];
+    await saveState({
+      settings: DEFAULT_SETTINGS,
+      missions: [],
+      approvals: [],
+      auditEvents: [],
+      conversationHistory: turns,
+    });
+    const loaded = await loadState();
+    expect(loaded.conversationHistory).toHaveLength(2);
+    expect(loaded.conversationHistory[0].userInput).toBe("question 1");
+    expect(loaded.conversationHistory[1].assistantResponse).toBe("answer 2");
+  });
+
+  it("returns [] when conversationHistory is missing from stored state", async () => {
+    localStorage.setItem(
+      "lisa_state_v1",
+      JSON.stringify({
+        version: STATE_VERSION,
+        settings: DEFAULT_SETTINGS,
+        missions: [],
+        approvals: [],
+        auditEvents: [],
+        savedAt: new Date().toISOString(),
+      })
+    );
+    const loaded = await loadState();
+    expect(loaded.conversationHistory).toEqual([]);
+  });
+
+  it("returns [] when conversationHistory is not an array", async () => {
+    localStorage.setItem(
+      "lisa_state_v1",
+      JSON.stringify({
+        version: STATE_VERSION,
+        settings: DEFAULT_SETTINGS,
+        missions: [],
+        approvals: [],
+        auditEvents: [],
+        conversationHistory: "bad-value",
+        savedAt: new Date().toISOString(),
+      })
+    );
+    const loaded = await loadState();
+    expect(loaded.conversationHistory).toEqual([]);
+  });
+
+  it("drops malformed turns and keeps valid ones", async () => {
+    localStorage.setItem(
+      "lisa_state_v1",
+      JSON.stringify({
+        version: STATE_VERSION,
+        settings: DEFAULT_SETTINGS,
+        missions: [],
+        approvals: [],
+        auditEvents: [],
+        conversationHistory: [
+          makeTurn(1),
+          { userInput: 42, assistantResponse: "bad", timestamp: "x", model: "y" },
+          makeTurn(3),
+          null,
+        ],
+        savedAt: new Date().toISOString(),
+      })
+    );
+    const loaded = await loadState();
+    expect(loaded.conversationHistory).toHaveLength(2);
+    expect(loaded.conversationHistory[0].userInput).toBe("question 1");
+    expect(loaded.conversationHistory[1].userInput).toBe("question 3");
+  });
+
+  it("caps conversationHistory at CONVERSATION_HISTORY_CAP on save", async () => {
+    const turns = Array.from({ length: CONVERSATION_HISTORY_CAP + 10 }, (_, i) => makeTurn(i));
+    await saveState({
+      settings: DEFAULT_SETTINGS,
+      missions: [],
+      approvals: [],
+      auditEvents: [],
+      conversationHistory: turns,
+    });
+    const loaded = await loadState();
+    expect(loaded.conversationHistory.length).toBe(CONVERSATION_HISTORY_CAP);
+    expect(loaded.conversationHistory[0].userInput).toBe(`question ${10}`);
   });
 });

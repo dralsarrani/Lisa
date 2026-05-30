@@ -1,5 +1,5 @@
-import type { PersistedState, LisaSettings, Mission, ApprovalRequest, AuditEvent } from "./types";
-import { DEFAULT_SETTINGS, STATE_VERSION } from "./types";
+import type { PersistedState, LisaSettings, Mission, ApprovalRequest, AuditEvent, LisaConversationTurn } from "./types";
+import { DEFAULT_SETTINGS, STATE_VERSION, CONVERSATION_HISTORY_CAP } from "./types";
 
 const STORAGE_KEY = "lisa_state_v1";
 const MAX_AUDIT_EVENTS = 500;
@@ -58,6 +58,7 @@ export async function loadState(): Promise<PersistedState> {
       missions: parsed.missions ?? [],
       approvals: parsed.approvals ?? [],
       auditEvents: (parsed.auditEvents ?? []).slice(-MAX_AUDIT_EVENTS),
+      conversationHistory: safeConversationHistory(parsed.conversationHistory),
       savedAt: parsed.savedAt ?? new Date().toISOString(),
     };
   } catch {
@@ -72,6 +73,7 @@ export async function saveState(state: {
   missions: Mission[];
   approvals: ApprovalRequest[];
   auditEvents: AuditEvent[];
+  conversationHistory: LisaConversationTurn[];
 }): Promise<void> {
   const persisted: PersistedState = {
     version: STATE_VERSION,
@@ -79,6 +81,7 @@ export async function saveState(state: {
     missions: state.missions,
     approvals: state.approvals,
     auditEvents: state.auditEvents.slice(-MAX_AUDIT_EVENTS),
+    conversationHistory: state.conversationHistory.slice(-CONVERSATION_HISTORY_CAP),
     savedAt: new Date().toISOString(),
   };
 
@@ -106,17 +109,33 @@ function defaultState(): PersistedState {
     missions: [],
     approvals: [],
     auditEvents: [],
+    conversationHistory: [],
     savedAt: new Date().toISOString(),
   };
 }
 
 function migrateState(old: Partial<PersistedState>): PersistedState {
-  // Phase 0: simple migration — use defaults and carry over what we can.
   return {
     ...defaultState(),
     settings: { ...DEFAULT_SETTINGS, ...(old.settings ?? {}) },
     missions: old.missions ?? [],
     approvals: old.approvals ?? [],
     auditEvents: old.auditEvents ?? [],
+    conversationHistory: safeConversationHistory(old.conversationHistory),
   };
+}
+
+function safeConversationHistory(raw: unknown): LisaConversationTurn[] {
+  if (!Array.isArray(raw)) return [];
+  return (raw as LisaConversationTurn[])
+    .filter(
+      (t) =>
+        t !== null &&
+        typeof t === "object" &&
+        typeof t.userInput === "string" &&
+        typeof t.assistantResponse === "string" &&
+        typeof t.timestamp === "string" &&
+        typeof t.model === "string"
+    )
+    .slice(-CONVERSATION_HISTORY_CAP);
 }

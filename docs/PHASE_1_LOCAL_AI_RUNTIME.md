@@ -144,11 +144,13 @@ Emergency stop always works regardless of LLM state.
 
 ## Conversation History
 
-- History is kept in memory and resets when the app restarts
-- Bounded by `maxContextTurns` setting (default: 20 turns)
+- Recent completed turns are persisted locally and restored when the app restarts (Phase 1D)
+- This is **conversation continuity**, not semantic memory — Lisa does not maintain a long-term memory graph or vector database
+- Bounded by `maxContextTurns` setting (default: 20 turns) and a hard cap of `CONVERSATION_HISTORY_CAP = 50`
 - Trimmed from the oldest end when the limit is reached
 - The system prompt is prepended to every request regardless of history
-- Persistent conversation history is a Phase 1B+ concern
+- Only successfully completed turns are persisted — cancelled, failed, and aborted turns are discarded
+- Console interactions remain session-only and are never persisted
 
 ---
 
@@ -207,7 +209,6 @@ Full prompt and response content are **not** logged by default to avoid noisy or
 - **No desktop control.** Lisa cannot control the mouse, keyboard, or applications.
 - **No file access.** Lisa cannot read or write files beyond her own state store.
 - **No cloud providers.** Only localhost Ollama is supported.
-- **Conversation resets on restart.** Persistent history is a Phase 1B+ concern.
 - **Localhost only.** The Rust backend hardcodes `127.0.0.1:11434`. Arbitrary URLs are rejected.
 
 ---
@@ -246,7 +247,7 @@ handleLlmQuery(raw, model, maxContextTurns)
 |---|---|
 | `src-tauri/src/lib.rs` | `list_ollama_models`, `send_ollama_chat` Rust commands |
 | `src/core/llm-context.ts` | System prompt, message builder, history trimmer |
-| `src/core/types.ts` | `LisaSettings` fields, `AuditEventType` values, `INTERACTION_CAP`, `STATE_VERSION = 2` |
+| `src/core/types.ts` | `LisaSettings` fields, `AuditEventType` values, `INTERACTION_CAP`, `CONVERSATION_HISTORY_CAP`, `STATE_VERSION = 3` |
 | `src/components/command/CommandInput.tsx` | LLM fallback in the `default` switch case |
 | `src/components/settings/SettingsPanel.tsx` | Local AI section: status, model picker, guidance |
 | `src/components/console/ConsolePanel.tsx` | Interaction history with thinking/complete/failed states |
@@ -266,10 +267,40 @@ cd src-tauri && cargo test
 
 ---
 
-## What's Next — Phase 1B Candidates
+---
 
-- **Streaming responses** — tokens appear as they arrive via Tauri event emit; no more waiting for the full response
-- **Abort/cancel** — interrupt a slow request mid-generation
-- **Persistent conversation** — conversation history survives app restarts
+## Phase 1D — Persistent Conversation History
+
+Phase 1D adds local persistence for recent completed conversation turns so that Lisa can resume context after an app restart.
+
+**What changed:**
+
+- `STATE_VERSION` bumped 2 → 3; existing v2 state migrates automatically with `conversationHistory: []`
+- `conversationHistory: LisaConversationTurn[]` added to `PersistedState`
+- `APPEND_CONVERSATION_TURN` reducer action appends completed turns and enforces the cap
+- `conversationHistoryRef` is seeded from persisted state on app load (`state.isLoaded` effect)
+- Only successfully completed turns are appended — cancelled, failed, and aborted turns are not persisted
+- `safeConversationHistory()` validates each persisted turn on load; malformed entries are silently dropped
+- System prompt updated to distinguish conversation continuity from semantic memory
+
+**What this is NOT:**
+
+- Not semantic memory — Lisa has no vector database, memory graph, or arbitrary fact retention
+- Not a Console feed backup — the Console interactions list remains session-only
+- Not long-term user profiling — history is bounded and oldest turns are dropped first
+- Not voice, screen awareness, desktop control, agents, or tool execution — none of these are implemented
+
+**Audit events added:**
+
+| Event | When fired |
+|---|---|
+| `llm_stream_aborted` | Stream cancelled by user before completion (Phase 1C) |
+
+---
+
+## What's Next — Future Phase Candidates
+
 - **Voice shell** — STT (Whisper) + TTS wired to the LLM pipeline
 - **SQLite migration** — replace localStorage + JSON file with a proper database
+- **Screen awareness** — read-only screen context passed to the LLM
+- **Skill execution** — structured tool calls approved by the user before execution
