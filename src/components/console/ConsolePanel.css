@@ -311,10 +311,10 @@
 }
 
 .console-failed-detail {
-  font-family: var(--font-mono);
-  font-size: 0.64rem;
-  color: rgba(239, 68, 68, 0.65);
-  line-height: 1.5;
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  color: rgba(239, 68, 68, 0.80);
+  line-height: 1.55;
   word-break: break-word;
 }
 

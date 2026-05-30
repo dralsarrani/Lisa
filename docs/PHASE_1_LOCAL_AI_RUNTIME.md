@@ -532,6 +532,104 @@ Get-PSDrive C | Select-Object Used, Free
 
 ---
 
+---
+
+# Lisa Phase 1I — Local AI Polish / Prompt & Console Quality
+
+## What Phase 1I Adds
+
+Phase 1I polishes the Console output experience so local AI responses feel production-grade. No new capabilities, no new backend behavior, no agents, no tools, no voice, no screen/desktop control.
+
+## Markdown Rendering for Local AI Responses
+
+Local AI (`kind: "local_ai"`) interactions now render markdown safely via `react-markdown` + `remark-gfm`.
+
+**Supported elements:**
+- Headings (h1–h3, scaled to fit Console card context)
+- Bold and italic
+- Inline code (accent-colored, monospace)
+- Fenced code blocks (dark background, horizontal scroll, no overflow clipping)
+- Ordered and unordered lists
+- Blockquotes (left-border accent)
+- Horizontal rules
+- Links (open in new tab with `rel="noopener noreferrer"`)
+
+**Security:**
+- `rehypeRaw` is explicitly NOT used — raw HTML in LLM output is never rendered as DOM
+- Links always carry `rel="noopener noreferrer"` to prevent tab-napping
+- No `eval`, no script injection surface
+
+**Scope:** Markdown rendering applies only to `interaction.kind === "local_ai"`. All other interaction kinds (`"command"`, `"system"`, `"error"`) continue to render as plain text with `white-space: pre-wrap`.
+
+## Deterministic Command Responses Stay Plain
+
+Memory commands, mode changes, emergency stop, runtime health, and all other deterministic responses remain plain text. They are never run through the markdown parser.
+
+## Memory Command Output Polish
+
+`formatMemoryNotesList()` is now an exported pure function used by the `list_memory_notes` command handler:
+
+- **Empty state:** `"No memory notes saved. Use 'remember that …' or Settings → Memory Notes to add one."`
+- **With notes:** `"Memory notes (N):\n1. content\n2. content…"` — one numbered entry per line
+
+## Error Card Polish
+
+`FailedResponse` in the Console now:
+- Uses `var(--font-sans)` for the error detail text (was monospace) — friendly classified errors read as natural sentences
+- Shows latency in the meta row when available (already present for other states)
+
+## Scroll Behavior
+
+The Console feed now uses a **near-bottom guard** instead of always scrolling to the bottom:
+- Auto-scrolls on new interactions only when the user is within 120px of the bottom
+- If the user has scrolled up more than 120px (reading history), new chunks do not yank the viewport
+
+## Dependencies Added
+
+| Package | Version | Purpose |
+|---|---|---|
+| `react-markdown` | 10.1.0 | Safe markdown-to-JSX rendering |
+| `remark-gfm` | 4.0.1 | GFM extensions (tables, strikethrough, task lists) |
+
+No unsafe HTML plugins added. Bundle size: 394 KB JS / 119 KB gzip (was 236 KB / 70 KB).
+
+## New Files
+
+| File | Purpose |
+|---|---|
+| `src/components/console/MarkdownResponse.tsx` | Markdown renderer component — `local_ai` only |
+| `src/components/console/MarkdownResponse.css` | Markdown element styles using existing CSS tokens |
+| `src/__tests__/memory-command-output.test.ts` | 6 tests for `formatMemoryNotesList` |
+
+## Changed Files
+
+| File | Change |
+|---|---|
+| `src/components/console/ConsolePanel.tsx` | Import `MarkdownResponse`; near-bottom scroll guard; `CompleteResponse` uses markdown for `local_ai`; `FailedResponse` shows latency |
+| `src/components/console/ConsolePanel.css` | `.console-failed-detail` switched to sans font, larger and more readable |
+| `src/components/command/CommandInput.tsx` | Export `formatMemoryNotesList`; use it in `list_memory_notes` case |
+| `package.json` / `package-lock.json` | Added `react-markdown` + `remark-gfm` |
+
+## What Is NOT in Phase 1I
+
+- No voice, STT/TTS, wake word, agents, tool execution, approval contracts
+- No screen awareness, OCR, desktop control, mouse/keyboard control
+- No semantic/vector memory, memory graph, cloud providers
+- No new Tauri commands
+- No Orb redesign or whole-UI redesign
+- No markdown rendering for command/system/error interactions
+- No syntax highlighting library (kept simple and safe)
+- No `rehypeRaw` or any unsafe HTML rendering
+
+## Validation
+
+- typecheck: clean
+- build: clean (394 KB JS bundle)
+- tests: **252 frontend / 32 Rust — all passing**
+- cargo check: clean
+
+---
+
 ## What's Next — Future Phase Candidates
 
 - **Voice shell** — STT (Whisper) + TTS wired to the LLM pipeline

@@ -11,6 +11,15 @@ import { MEMORY_NOTES_CAP, MEMORY_NOTE_CHAR_LIMIT } from "../../core/types";
 import { classifyOllamaError } from "../../core/ollama-error";
 import "./CommandInput.css";
 
+// ─── Pure formatter — exported for testing ────────────────────────────────────
+
+export function formatMemoryNotesList(notes: Array<{ content: string }>): string {
+  if (notes.length === 0) {
+    return "No memory notes saved. Use 'remember that …' or Settings → Memory Notes to add one.";
+  }
+  return `Memory notes (${notes.length}):\n${notes.map((n, i) => `${i + 1}. ${n.content}`).join("\n")}`;
+}
+
 const SUGGESTIONS = [
   "Lisa, create test mission",
   "Lisa, check local runtime",
@@ -621,10 +630,7 @@ export const CommandInput: React.FC = () => {
       }
 
       case "list_memory_notes": {
-        const listResponse =
-          state.memoryNotes.length === 0
-            ? "No memory notes saved."
-            : `Memory notes (${state.memoryNotes.length}):\n${state.memoryNotes.map((n, i) => `${i + 1}. ${n.content}`).join("\n")}`;
+        const listResponse = formatMemoryNotesList(state.memoryNotes);
         dispatch({ type: "SET_COMMAND_RESPONSE", payload: listResponse });
         dispatch({
           type: "ADD_INTERACTION",

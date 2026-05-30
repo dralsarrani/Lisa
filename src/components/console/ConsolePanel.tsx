@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import type { LisaInteraction, LisaSettings, OrbState } from "../../core/types";
+import { MarkdownResponse } from "./MarkdownResponse";
 import "./ConsolePanel.css";
 
 interface ConsolePanelProps {
@@ -15,10 +16,18 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
   settings,
   onCancelStream,
 }) => {
+  const feedRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const feed = feedRef.current;
+    if (!feed) return;
+    const distanceFromBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight;
+    // Only auto-scroll when the user is already near the bottom (within 120px).
+    // This avoids yanking the viewport when the user has scrolled up to read history.
+    if (distanceFromBottom < 120) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [interactions]);
 
   if (interactions.length === 0) {
@@ -36,7 +45,7 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
           </span>
         )}
       </div>
-      <div className="console-feed">
+      <div className="console-feed" ref={feedRef}>
         {interactions.map((ix) => (
           <InteractionCard key={ix.id} interaction={ix} onCancelStream={onCancelStream} />
         ))}
@@ -218,7 +227,11 @@ function CancelledResponse({ interaction }: { interaction: LisaInteraction }) {
 function CompleteResponse({ interaction }: { interaction: LisaInteraction }) {
   return (
     <>
-      <div className="console-response-text">{interaction.response}</div>
+      {interaction.kind === "local_ai" ? (
+        <MarkdownResponse content={interaction.response} />
+      ) : (
+        <div className="console-response-text">{interaction.response}</div>
+      )}
       <div className="console-response-meta">
         <span className={`console-meta-kind console-meta-kind-${interaction.kind}`}>
           {kindLabel(interaction.kind)}
@@ -243,12 +256,11 @@ function CompleteResponse({ interaction }: { interaction: LisaInteraction }) {
 // ─── Failed response ──────────────────────────────────────────────────────────
 
 function FailedResponse({ interaction }: { interaction: LisaInteraction }) {
+  const errorText = interaction.error ?? interaction.response ?? "An unknown error occurred.";
   return (
     <>
       <div className="console-failed-label">Request failed</div>
-      <div className="console-failed-detail">
-        {interaction.error ?? interaction.response ?? "An unknown error occurred."}
-      </div>
+      <div className="console-failed-detail">{errorText}</div>
       <div className="console-response-meta">
         <span className={`console-meta-kind console-meta-kind-${interaction.kind}`}>
           {kindLabel(interaction.kind)}
@@ -257,6 +269,12 @@ function FailedResponse({ interaction }: { interaction: LisaInteraction }) {
           <>
             <span className="console-meta-sep">·</span>
             <span className="console-meta-model">{interaction.model}</span>
+          </>
+        )}
+        {interaction.latencyMs != null && (
+          <>
+            <span className="console-meta-sep">·</span>
+            <span className="console-meta-latency">{formatLatency(interaction.latencyMs)}</span>
           </>
         )}
       </div>
