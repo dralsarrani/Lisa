@@ -462,3 +462,44 @@ describe("routeCommand — confirm_clear_memory_notes", () => {
     expect(routeCommand("confirm clear memory").confidence).toBe("high");
   });
 });
+
+// ─── Phase 1J audit — routing coverage gaps ───────────────────────────────────
+
+describe("routeCommand — runtime_health exact phrases", () => {
+  it("routes 'check local runtime'", () => {
+    expect(routeCommand("check local runtime").intent).toBe("runtime_health");
+  });
+  it("routes 'Lisa, check local runtime'", () => {
+    expect(routeCommand("Lisa, check local runtime").intent).toBe("runtime_health");
+  });
+});
+
+describe("routeCommand — mode_change 'switch to cyber mode'", () => {
+  it("routes 'switch to cyber mode'", () => {
+    const r = routeCommand("switch to cyber mode");
+    expect(r.intent).toBe("mode_change");
+    expect(r.payload?.modeId).toBe("cyber");
+  });
+});
+
+// ─── Phase 1J audit — action-like guard pass-through (handled by LLM tier) ───
+//
+// These inputs are NOT matched by the desktop-action guard regex.
+// They pass through to the LLM, whose system prompt explicitly refuses them.
+// Confirming null here proves the guard does not eat them silently; the LLM
+// boundary tests in llm-context.test.ts verify the LLM refuses them correctly.
+
+describe("getDesktopActionGuardMessage — LLM-tier handled, not guard-blocked", () => {
+  it("passes 'Can you click this button?' through to LLM tier", () => {
+    expect(getDesktopActionGuardMessage("Can you click this button?")).toBeNull();
+  });
+  it("passes 'Can you run this file?' through to LLM tier", () => {
+    expect(getDesktopActionGuardMessage("Can you run this file?")).toBeNull();
+  });
+  it("passes 'Can you connect to a restricted network?' through to LLM tier", () => {
+    expect(getDesktopActionGuardMessage("Can you connect to a restricted network?")).toBeNull();
+  });
+  it("passes 'Can you verify permissions?' through to LLM tier", () => {
+    expect(getDesktopActionGuardMessage("Can you verify permissions?")).toBeNull();
+  });
+});

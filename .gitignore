@@ -27,6 +27,9 @@ Thumbs.db
 .env.*
 !.env.example
 
+# Claude Code local settings (machine-specific, not for version control)
+.claude/settings.local.json
+
 # Large debug/build artifacts
 *.pdb
 *.rlib
