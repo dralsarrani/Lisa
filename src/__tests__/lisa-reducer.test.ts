@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { lisaReducer, initialState } from "../app/lisa-reducer";
-import { INTERACTION_CAP, CONVERSATION_HISTORY_CAP } from "../core/types";
+import { INTERACTION_CAP, CONVERSATION_HISTORY_CAP, MEMORY_NOTES_CAP, MEMORY_NOTE_CHAR_LIMIT } from "../core/types";
 import type { LisaInteraction, LisaConversationTurn } from "../core/types";
 
 function makeInteraction(
@@ -347,5 +347,98 @@ describe("INTERACTION_CAP", () => {
 
   it("is at most 50 to keep memory bounded", () => {
     expect(INTERACTION_CAP).toBeLessThanOrEqual(50);
+  });
+});
+
+// ─── ADD_MEMORY_NOTE ──────────────────────────────────────────────────────────
+
+describe("ADD_MEMORY_NOTE", () => {
+  it("adds a note to an empty list", () => {
+    const next = lisaReducer(initialState, { type: "ADD_MEMORY_NOTE", payload: "prefer TypeScript" });
+    expect(next.memoryNotes).toHaveLength(1);
+    expect(next.memoryNotes[0].content).toBe("prefer TypeScript");
+    expect(typeof next.memoryNotes[0].id).toBe("string");
+    expect(typeof next.memoryNotes[0].createdAt).toBe("string");
+  });
+
+  it("trims whitespace from the note content", () => {
+    const next = lisaReducer(initialState, { type: "ADD_MEMORY_NOTE", payload: "  trimmed  " });
+    expect(next.memoryNotes[0].content).toBe("trimmed");
+  });
+
+  it("rejects empty or whitespace-only content", () => {
+    const next = lisaReducer(initialState, { type: "ADD_MEMORY_NOTE", payload: "   " });
+    expect(next.memoryNotes).toHaveLength(0);
+  });
+
+  it(`rejects content over MEMORY_NOTE_CHAR_LIMIT (${MEMORY_NOTE_CHAR_LIMIT} chars)`, () => {
+    const over = "x".repeat(MEMORY_NOTE_CHAR_LIMIT + 1);
+    const next = lisaReducer(initialState, { type: "ADD_MEMORY_NOTE", payload: over });
+    expect(next.memoryNotes).toHaveLength(0);
+  });
+
+  it(`accepts content exactly at MEMORY_NOTE_CHAR_LIMIT`, () => {
+    const exact = "a".repeat(MEMORY_NOTE_CHAR_LIMIT);
+    const next = lisaReducer(initialState, { type: "ADD_MEMORY_NOTE", payload: exact });
+    expect(next.memoryNotes).toHaveLength(1);
+  });
+
+  it(`caps notes at MEMORY_NOTES_CAP (${MEMORY_NOTES_CAP}) — oldest are dropped`, () => {
+    let state = initialState;
+    for (let i = 0; i < MEMORY_NOTES_CAP + 3; i++) {
+      state = lisaReducer(state, { type: "ADD_MEMORY_NOTE", payload: `note ${i}` });
+    }
+    expect(state.memoryNotes).toHaveLength(MEMORY_NOTES_CAP);
+    expect(state.memoryNotes[MEMORY_NOTES_CAP - 1].content).toBe(`note ${MEMORY_NOTES_CAP + 2}`);
+  });
+
+  it("does not mutate initialState", () => {
+    lisaReducer(initialState, { type: "ADD_MEMORY_NOTE", payload: "side effect?" });
+    expect(initialState.memoryNotes).toHaveLength(0);
+  });
+});
+
+// ─── DELETE_MEMORY_NOTE ───────────────────────────────────────────────────────
+
+describe("DELETE_MEMORY_NOTE", () => {
+  it("removes the note with the given id", () => {
+    let state = lisaReducer(initialState, { type: "ADD_MEMORY_NOTE", payload: "keep me" });
+    state = lisaReducer(state, { type: "ADD_MEMORY_NOTE", payload: "delete me" });
+    const idToDelete = state.memoryNotes[1].id;
+    const next = lisaReducer(state, { type: "DELETE_MEMORY_NOTE", payload: idToDelete });
+    expect(next.memoryNotes).toHaveLength(1);
+    expect(next.memoryNotes[0].content).toBe("keep me");
+  });
+
+  it("is a no-op when the id is unknown", () => {
+    let state = lisaReducer(initialState, { type: "ADD_MEMORY_NOTE", payload: "stay" });
+    state = lisaReducer(state, { type: "DELETE_MEMORY_NOTE", payload: "nonexistent-id" });
+    expect(state.memoryNotes).toHaveLength(1);
+  });
+});
+
+// ─── CLEAR_MEMORY_NOTES ───────────────────────────────────────────────────────
+
+describe("CLEAR_MEMORY_NOTES", () => {
+  it("clears all notes", () => {
+    let state = lisaReducer(initialState, { type: "ADD_MEMORY_NOTE", payload: "note 1" });
+    state = lisaReducer(state, { type: "ADD_MEMORY_NOTE", payload: "note 2" });
+    const cleared = lisaReducer(state, { type: "CLEAR_MEMORY_NOTES" });
+    expect(cleared.memoryNotes).toEqual([]);
+  });
+
+  it("is safe when notes are already empty", () => {
+    const next = lisaReducer(initialState, { type: "CLEAR_MEMORY_NOTES" });
+    expect(next.memoryNotes).toEqual([]);
+  });
+
+  it("leaves conversationHistory, interactions, and settings untouched", () => {
+    let state = lisaReducer(initialState, { type: "ADD_MEMORY_NOTE", payload: "note" });
+    state = lisaReducer(state, { type: "APPEND_CONVERSATION_TURN", payload: makeTurn(1) });
+    state = lisaReducer(state, { type: "ADD_INTERACTION", payload: makeInteraction("ix-1") });
+    const cleared = lisaReducer(state, { type: "CLEAR_MEMORY_NOTES" });
+    expect(cleared.memoryNotes).toEqual([]);
+    expect(cleared.conversationHistory).toHaveLength(1);
+    expect(cleared.interactions).toHaveLength(1);
   });
 });

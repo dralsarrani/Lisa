@@ -328,6 +328,49 @@ Phase 1D adds local persistence for recent completed conversation turns so that 
 
 ---
 
+---
+
+# Lisa Phase 1F — Basic Memory Foundation
+
+## What Phase 1F Adds
+
+Phase 1F gives the user a persistent, user-controlled memory layer. Notes are saved explicitly by the user, injected into the local AI system prompt, and survive app restarts. There is no automatic inference — only what the user deliberately writes.
+
+**Added in this phase:**
+
+- `MemoryNote { id, content, createdAt }` — new type defined in `llm-context.ts`, re-exported from `types.ts`
+- `MEMORY_NOTES_CAP = 20`, `MEMORY_NOTE_CHAR_LIMIT = 200` — bounds constants in `types.ts`
+- `ADD_MEMORY_NOTE`, `DELETE_MEMORY_NOTE`, `CLEAR_MEMORY_NOTES` reducer actions
+- `memoryNotes: MemoryNote[]` added to `LisaState`, `PersistedState`, `LOAD_STATE` payload, and `saveState()` parameter
+- `safeMemoryNotes()` validation guard on load — drops malformed, empty, or over-limit entries
+- `buildLisaSystemPrompt(memoryNotes=[])` — injects a formatted notes block only when notes exist; empty array produces no block
+- `buildOllamaMessages(history, input, memoryNotes=[])` — passes notes to system prompt on every request
+- Settings panel — Memory Notes section: add input with char counter, per-note delete (×), two-step bulk clear with 5 s auto-reset
+- `STATE_VERSION` bumped 3 → 4; old state migrates automatically with `memoryNotes: []`
+- Three new audit event types (no note content ever logged):
+
+| Event | Metadata logged |
+|---|---|
+| `memory_note_added` | `chars=N` |
+| `memory_note_deleted` | `note_id=X` |
+| `memory_notes_cleared` | `count=N` |
+
+**How it works:**
+
+1. User types a note (max 200 chars) in Settings → Memory Notes and clicks Add.
+2. Note is stored in `state.memoryNotes` and auto-saved to localStorage / Tauri state file.
+3. On the next local AI request, `buildOllamaMessages` prepends the notes block to the system prompt.
+4. Lisa may reference the notes when answering but will not claim to have inferred or automatically learned them.
+
+**What this is NOT:**
+
+- Not automatic memory — Lisa never writes notes herself; only the user can add them
+- Not semantic/vector memory — no embeddings, similarity search, or memory graph
+- Not a credentials store — notes must not contain passwords or secrets
+- Not voice, screen awareness, desktop control, agents, or tool execution — none of these are implemented
+
+---
+
 ## What's Next — Future Phase Candidates
 
 - **Voice shell** — STT (Whisper) + TTS wired to the LLM pipeline

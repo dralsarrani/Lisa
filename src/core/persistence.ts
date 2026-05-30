@@ -1,5 +1,5 @@
-import type { PersistedState, LisaSettings, Mission, ApprovalRequest, AuditEvent, LisaConversationTurn } from "./types";
-import { DEFAULT_SETTINGS, STATE_VERSION, CONVERSATION_HISTORY_CAP } from "./types";
+import type { PersistedState, LisaSettings, Mission, ApprovalRequest, AuditEvent, LisaConversationTurn, MemoryNote } from "./types";
+import { DEFAULT_SETTINGS, STATE_VERSION, CONVERSATION_HISTORY_CAP, MEMORY_NOTES_CAP, MEMORY_NOTE_CHAR_LIMIT } from "./types";
 
 const STORAGE_KEY = "lisa_state_v1";
 const MAX_AUDIT_EVENTS = 500;
@@ -59,6 +59,7 @@ export async function loadState(): Promise<PersistedState> {
       approvals: parsed.approvals ?? [],
       auditEvents: (parsed.auditEvents ?? []).slice(-MAX_AUDIT_EVENTS),
       conversationHistory: safeConversationHistory(parsed.conversationHistory),
+      memoryNotes: safeMemoryNotes(parsed.memoryNotes),
       savedAt: parsed.savedAt ?? new Date().toISOString(),
     };
   } catch {
@@ -74,6 +75,7 @@ export async function saveState(state: {
   approvals: ApprovalRequest[];
   auditEvents: AuditEvent[];
   conversationHistory: LisaConversationTurn[];
+  memoryNotes: MemoryNote[];
 }): Promise<void> {
   const persisted: PersistedState = {
     version: STATE_VERSION,
@@ -82,6 +84,7 @@ export async function saveState(state: {
     approvals: state.approvals,
     auditEvents: state.auditEvents.slice(-MAX_AUDIT_EVENTS),
     conversationHistory: state.conversationHistory.slice(-CONVERSATION_HISTORY_CAP),
+    memoryNotes: state.memoryNotes.slice(-MEMORY_NOTES_CAP),
     savedAt: new Date().toISOString(),
   };
 
@@ -110,6 +113,7 @@ function defaultState(): PersistedState {
     approvals: [],
     auditEvents: [],
     conversationHistory: [],
+    memoryNotes: [],
     savedAt: new Date().toISOString(),
   };
 }
@@ -122,6 +126,7 @@ function migrateState(old: Partial<PersistedState>): PersistedState {
     approvals: old.approvals ?? [],
     auditEvents: old.auditEvents ?? [],
     conversationHistory: safeConversationHistory(old.conversationHistory),
+    memoryNotes: safeMemoryNotes(old.memoryNotes),
   };
 }
 
@@ -138,4 +143,20 @@ function safeConversationHistory(raw: unknown): LisaConversationTurn[] {
         typeof t.model === "string"
     )
     .slice(-CONVERSATION_HISTORY_CAP);
+}
+
+function safeMemoryNotes(raw: unknown): MemoryNote[] {
+  if (!Array.isArray(raw)) return [];
+  return (raw as MemoryNote[])
+    .filter(
+      (n) =>
+        n !== null &&
+        typeof n === "object" &&
+        typeof n.id === "string" &&
+        typeof n.content === "string" &&
+        typeof n.createdAt === "string" &&
+        n.content.trim().length > 0 &&
+        n.content.trim().length <= MEMORY_NOTE_CHAR_LIMIT
+    )
+    .slice(-MEMORY_NOTES_CAP);
 }

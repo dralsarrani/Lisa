@@ -96,7 +96,7 @@ export const CommandInput: React.FC = () => {
       conversationHistoryRef.current,
       Math.max(0, maxContextTurns - 1)
     );
-    const messages = buildOllamaMessages(trimmedHistory, raw);
+    const messages = buildOllamaMessages(trimmedHistory, raw, state.memoryNotes);
 
     dispatch({ type: "SET_ORB_STATE", payload: "thinking" });
     isLlmResponseRef.current = false;

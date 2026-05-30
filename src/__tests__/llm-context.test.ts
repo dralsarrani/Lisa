@@ -162,3 +162,54 @@ describe("buildOllamaMessages", () => {
     expect(messages[0].content).toBe(buildLisaSystemPrompt());
   });
 });
+
+// ─── Memory notes in system prompt (Phase 1F) ─────────────────────────────────
+
+import type { MemoryNote } from "../core/llm-context";
+
+function makeMemNote(content: string): MemoryNote {
+  return { id: crypto.randomUUID(), content, createdAt: new Date().toISOString() };
+}
+
+describe("buildLisaSystemPrompt — memory notes", () => {
+  it("omits the injected notes block when notes array is empty", () => {
+    const prompt = buildLisaSystemPrompt([]);
+    expect(prompt).not.toContain("explicitly saved by the user — do not invent");
+  });
+
+  it("omits the injected notes block when called with no argument", () => {
+    expect(buildLisaSystemPrompt()).not.toContain("explicitly saved by the user — do not invent");
+  });
+
+  it("includes the notes block with content when notes are present", () => {
+    const notes = [makeMemNote("prefer TypeScript"), makeMemNote("use tabs not spaces")];
+    const prompt = buildLisaSystemPrompt(notes);
+    expect(prompt).toContain("explicitly saved by the user — do not invent");
+    expect(prompt).toContain("prefer TypeScript");
+    expect(prompt).toContain("use tabs not spaces");
+  });
+
+  it("labels notes as user-created, not inferred", () => {
+    const prompt = buildLisaSystemPrompt([makeMemNote("explicit note")]);
+    expect(prompt.toLowerCase()).toContain("do not invent");
+  });
+
+  it("still denies semantic memory even when notes exist", () => {
+    const prompt = buildLisaSystemPrompt([makeMemNote("some note")]);
+    expect(prompt.toLowerCase()).toContain("long-term semantic memory");
+  });
+});
+
+describe("buildOllamaMessages — memory notes", () => {
+  it("passes notes into the system message", () => {
+    const notes = [makeMemNote("dark mode only")];
+    const messages = buildOllamaMessages([], "hello", notes);
+    expect(messages[0].content).toContain("dark mode only");
+    expect(messages[0].content).toBe(buildLisaSystemPrompt(notes));
+  });
+
+  it("system message with no notes matches buildLisaSystemPrompt([])", () => {
+    const messages = buildOllamaMessages([], "hi", []);
+    expect(messages[0].content).toBe(buildLisaSystemPrompt([]));
+  });
+});

@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { loadState, saveState } from "../core/persistence";
 import { createAuditEvent } from "../core/audit-store";
-import { DEFAULT_SETTINGS, STATE_VERSION, CONVERSATION_HISTORY_CAP } from "../core/types";
-import type { LisaConversationTurn } from "../core/types";
+import { DEFAULT_SETTINGS, STATE_VERSION, CONVERSATION_HISTORY_CAP, MEMORY_NOTES_CAP, MEMORY_NOTE_CHAR_LIMIT } from "../core/types";
+import type { LisaConversationTurn, MemoryNote } from "../core/types";
 
 beforeEach(() => {
   localStorage.clear();
@@ -55,6 +55,7 @@ describe("saveState + loadState round-trip", () => {
       approvals: [],
       auditEvents: [],
       conversationHistory: [],
+      memoryNotes: [],
     });
     const loaded = await loadState();
     expect(loaded.settings.activeMode).toBe("focus");
@@ -68,6 +69,7 @@ describe("saveState + loadState round-trip", () => {
       approvals: [],
       auditEvents: [],
       conversationHistory: [],
+      memoryNotes: [],
     });
     const loaded = await loadState();
     expect(loaded.missions).toEqual([]);
@@ -79,7 +81,7 @@ describe("saveState + loadState round-trip", () => {
     const events = Array.from({ length: 600 }, (_, i) =>
       createAuditEvent({ eventType: "app_started", source: "test", summary: `event ${i}` })
     );
-    await saveState({ settings: DEFAULT_SETTINGS, missions: [], approvals: [], auditEvents: events, conversationHistory: [] });
+    await saveState({ settings: DEFAULT_SETTINGS, missions: [], approvals: [], auditEvents: events, conversationHistory: [], memoryNotes: [] });
     const loaded = await loadState();
     expect(loaded.auditEvents.length).toBe(500);
   });
@@ -216,6 +218,7 @@ describe("conversationHistory — round-trip persistence (Phase 1D)", () => {
       approvals: [],
       auditEvents: [],
       conversationHistory: turns,
+      memoryNotes: [],
     });
     const loaded = await loadState();
     expect(loaded.conversationHistory).toHaveLength(2);
@@ -287,6 +290,7 @@ describe("conversationHistory — round-trip persistence (Phase 1D)", () => {
       approvals: [],
       auditEvents: [],
       conversationHistory: [makeTurn(1), makeTurn(2)],
+      memoryNotes: [],
     });
     await saveState({
       settings: DEFAULT_SETTINGS,
@@ -294,6 +298,7 @@ describe("conversationHistory — round-trip persistence (Phase 1D)", () => {
       approvals: [],
       auditEvents: [],
       conversationHistory: [],
+      memoryNotes: [],
     });
     const loaded = await loadState();
     expect(loaded.conversationHistory).toEqual([]);
@@ -307,9 +312,146 @@ describe("conversationHistory — round-trip persistence (Phase 1D)", () => {
       approvals: [],
       auditEvents: [],
       conversationHistory: turns,
+      memoryNotes: [],
     });
     const loaded = await loadState();
     expect(loaded.conversationHistory.length).toBe(CONVERSATION_HISTORY_CAP);
     expect(loaded.conversationHistory[0].userInput).toBe(`question ${10}`);
+  });
+});
+
+// ─── memoryNotes — round-trip persistence (Phase 1F) ─────────────────────────
+
+function makeNote(i: number, content?: string): MemoryNote {
+  return {
+    id: `note-${i}`,
+    content: content ?? `memory note ${i}`,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+describe("memoryNotes — round-trip persistence (Phase 1F)", () => {
+  it("persists and reloads memory notes", async () => {
+    const notes = [makeNote(1), makeNote(2)];
+    await saveState({
+      settings: DEFAULT_SETTINGS,
+      missions: [],
+      approvals: [],
+      auditEvents: [],
+      conversationHistory: [],
+      memoryNotes: notes,
+    });
+    const loaded = await loadState();
+    expect(loaded.memoryNotes).toHaveLength(2);
+    expect(loaded.memoryNotes[0].content).toBe("memory note 1");
+    expect(loaded.memoryNotes[1].id).toBe("note-2");
+  });
+
+  it("returns [] when memoryNotes is missing from stored state", async () => {
+    localStorage.setItem(
+      "lisa_state_v1",
+      JSON.stringify({
+        version: STATE_VERSION,
+        settings: DEFAULT_SETTINGS,
+        missions: [],
+        approvals: [],
+        auditEvents: [],
+        conversationHistory: [],
+        savedAt: new Date().toISOString(),
+      })
+    );
+    const loaded = await loadState();
+    expect(loaded.memoryNotes).toEqual([]);
+  });
+
+  it("returns [] when memoryNotes is not an array", async () => {
+    localStorage.setItem(
+      "lisa_state_v1",
+      JSON.stringify({
+        version: STATE_VERSION,
+        settings: DEFAULT_SETTINGS,
+        missions: [],
+        approvals: [],
+        auditEvents: [],
+        conversationHistory: [],
+        memoryNotes: "bad-value",
+        savedAt: new Date().toISOString(),
+      })
+    );
+    const loaded = await loadState();
+    expect(loaded.memoryNotes).toEqual([]);
+  });
+
+  it("drops notes with content exceeding MEMORY_NOTE_CHAR_LIMIT", async () => {
+    const overLimit = makeNote(99, "x".repeat(MEMORY_NOTE_CHAR_LIMIT + 1));
+    localStorage.setItem(
+      "lisa_state_v1",
+      JSON.stringify({
+        version: STATE_VERSION,
+        settings: DEFAULT_SETTINGS,
+        missions: [],
+        approvals: [],
+        auditEvents: [],
+        conversationHistory: [],
+        memoryNotes: [makeNote(1), overLimit, makeNote(3)],
+        savedAt: new Date().toISOString(),
+      })
+    );
+    const loaded = await loadState();
+    expect(loaded.memoryNotes).toHaveLength(2);
+    expect(loaded.memoryNotes[0].content).toBe("memory note 1");
+    expect(loaded.memoryNotes[1].content).toBe("memory note 3");
+  });
+
+  it("drops notes with empty content", async () => {
+    localStorage.setItem(
+      "lisa_state_v1",
+      JSON.stringify({
+        version: STATE_VERSION,
+        settings: DEFAULT_SETTINGS,
+        missions: [],
+        approvals: [],
+        auditEvents: [],
+        conversationHistory: [],
+        memoryNotes: [makeNote(1), makeNote(2, "   "), makeNote(3)],
+        savedAt: new Date().toISOString(),
+      })
+    );
+    const loaded = await loadState();
+    expect(loaded.memoryNotes).toHaveLength(2);
+  });
+
+  it("caps memoryNotes at MEMORY_NOTES_CAP on save", async () => {
+    const notes = Array.from({ length: MEMORY_NOTES_CAP + 5 }, (_, i) => makeNote(i));
+    await saveState({
+      settings: DEFAULT_SETTINGS,
+      missions: [],
+      approvals: [],
+      auditEvents: [],
+      conversationHistory: [],
+      memoryNotes: notes,
+    });
+    const loaded = await loadState();
+    expect(loaded.memoryNotes.length).toBe(MEMORY_NOTES_CAP);
+    expect(loaded.memoryNotes[MEMORY_NOTES_CAP - 1].id).toBe(`note-${MEMORY_NOTES_CAP + 4}`);
+  });
+
+  it("v3→v4 migration adds memoryNotes: [] for old state", async () => {
+    localStorage.setItem(
+      "lisa_state_v1",
+      JSON.stringify({
+        version: 3,
+        settings: { activeMode: "focus" },
+        missions: [],
+        approvals: [],
+        auditEvents: [],
+        conversationHistory: [],
+        savedAt: new Date().toISOString(),
+      })
+    );
+    const state = await loadState();
+    expect(state.version).toBe(STATE_VERSION);
+    expect(state.memoryNotes).toEqual([]);
+    expect(state.settings.activeMode).toBe("focus");
   });
 });

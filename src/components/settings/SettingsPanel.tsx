@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import type { LisaSettings, LisaModeId } from "../../core/types";
-import { CONVERSATION_HISTORY_CAP } from "../../core/types";
+import { CONVERSATION_HISTORY_CAP, MEMORY_NOTES_CAP, MEMORY_NOTE_CHAR_LIMIT } from "../../core/types";
 import { LISA_MODES } from "../../core/mode-store";
 import { useLisa } from "../../app/useLisa";
 import "./SettingsPanel.css";
@@ -18,12 +18,60 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
   const [ollamaReachable, setOllamaReachable] = useState<boolean | null>(null);
   const [confirmingClear, setConfirmingClear] = useState(false);
   const confirmResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [newNoteInput, setNewNoteInput] = useState("");
+  const [confirmingClearNotes, setConfirmingClearNotes] = useState(false);
+  const confirmNotesClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return () => {
       if (confirmResetRef.current) clearTimeout(confirmResetRef.current);
+      if (confirmNotesClearRef.current) clearTimeout(confirmNotesClearRef.current);
     };
   }, []);
+
+  function handleAddNote() {
+    const content = newNoteInput.trim();
+    if (!content || content.length > MEMORY_NOTE_CHAR_LIMIT || state.memoryNotes.length >= MEMORY_NOTES_CAP) return;
+    dispatch({ type: "ADD_MEMORY_NOTE", payload: content });
+    addAudit({
+      eventType: "memory_note_added",
+      source: "settings_panel",
+      summary: "Memory note added.",
+      details: `chars=${content.length}`,
+      severity: "info",
+    });
+    setNewNoteInput("");
+  }
+
+  function handleDeleteNote(id: string) {
+    dispatch({ type: "DELETE_MEMORY_NOTE", payload: id });
+    addAudit({
+      eventType: "memory_note_deleted",
+      source: "settings_panel",
+      summary: "Memory note deleted.",
+      details: `note_id=${id}`,
+      severity: "info",
+    });
+  }
+
+  function handleClearNotes() {
+    if (!confirmingClearNotes) {
+      setConfirmingClearNotes(true);
+      confirmNotesClearRef.current = setTimeout(() => setConfirmingClearNotes(false), 5000);
+      return;
+    }
+    if (confirmNotesClearRef.current) clearTimeout(confirmNotesClearRef.current);
+    const clearedCount = state.memoryNotes.length;
+    dispatch({ type: "CLEAR_MEMORY_NOTES" });
+    addAudit({
+      eventType: "memory_notes_cleared",
+      source: "settings_panel",
+      summary: "All memory notes cleared.",
+      details: `Cleared ${clearedCount} note${clearedCount === 1 ? "" : "s"}.`,
+      severity: "info",
+    });
+    setConfirmingClearNotes(false);
+  }
 
   const fetchModels = useCallback(async () => {
     const isInTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -346,6 +394,80 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
                 <span className="history-session-note">This cannot be undone. Click again to confirm.</span>
               )}
               <span className="history-session-note">Console messages remain for this session.</span>
+            </>
+          );
+        })()}
+      </div>
+
+      {/* ── Memory Notes ── */}
+      <div className="settings-section">
+        <div className="settings-section-label">Memory Notes</div>
+        {(() => {
+          const noteCount = state.memoryNotes.length;
+          const isAtCap = noteCount >= MEMORY_NOTES_CAP;
+          const isOverLimit = newNoteInput.length > MEMORY_NOTE_CHAR_LIMIT;
+          const addDisabled = !newNoteInput.trim() || isOverLimit || isAtCap;
+          return (
+            <>
+              <div className="history-meta-row">
+                <div className="history-meta-item">
+                  <span className="settings-field-label">Notes</span>
+                  <span className="settings-field-value">{noteCount} / {MEMORY_NOTES_CAP}</span>
+                </div>
+                <div className="history-meta-item">
+                  <span className="settings-field-label">Char limit</span>
+                  <span className="settings-field-value">{MEMORY_NOTE_CHAR_LIMIT}</span>
+                </div>
+              </div>
+              <p className="history-note">
+                Only save facts you explicitly want Lisa to reference. These notes are injected into local AI prompts and are not inferred automatically.
+              </p>
+              <div className="memory-add-row">
+                <input
+                  className="memory-note-input"
+                  type="text"
+                  value={newNoteInput}
+                  onChange={(e) => setNewNoteInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !addDisabled) handleAddNote(); }}
+                  placeholder="e.g. I prefer TypeScript over JavaScript"
+                  disabled={isAtCap}
+                  aria-label="New memory note"
+                />
+                <span className={`memory-char-count${isOverLimit ? " memory-char-over" : ""}`}>
+                  {newNoteInput.length}/{MEMORY_NOTE_CHAR_LIMIT}
+                </span>
+                <button className="btn ai-refresh-btn" onClick={handleAddNote} disabled={addDisabled}>
+                  Add
+                </button>
+              </div>
+              {state.memoryNotes.length > 0 && (
+                <ul className="memory-notes-list">
+                  {state.memoryNotes.map((note) => (
+                    <li key={note.id} className="memory-note-item">
+                      <span className="memory-note-content">{note.content}</span>
+                      <button
+                        className="memory-note-delete"
+                        onClick={() => handleDeleteNote(note.id)}
+                        title="Delete note"
+                        aria-label="Delete note"
+                      >
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <button
+                className={`history-clear-btn${confirmingClearNotes ? " history-clear-confirm" : ""}`}
+                onClick={handleClearNotes}
+                disabled={noteCount === 0}
+                title={noteCount === 0 ? "No notes to clear" : undefined}
+              >
+                {confirmingClearNotes ? "Confirm Clear All" : "Clear All Notes"}
+              </button>
+              {confirmingClearNotes && (
+                <span className="history-session-note">This cannot be undone. Click again to confirm.</span>
+              )}
             </>
           );
         })()}

@@ -155,7 +155,10 @@ export type AuditEventType =
   | "llm_stream_completed"
   | "llm_stream_failed"
   | "llm_stream_aborted"
-  | "clear_conversation_history";
+  | "clear_conversation_history"
+  | "memory_note_added"
+  | "memory_note_deleted"
+  | "memory_notes_cleared";
 
 export interface AuditEvent {
   id: string;
@@ -264,11 +267,13 @@ export interface LisaInteraction {
 
 export const INTERACTION_CAP = 25;
 export const CONVERSATION_HISTORY_CAP = 50;
+export const MEMORY_NOTES_CAP = 20;
+export const MEMORY_NOTE_CHAR_LIMIT = 200;
 
 // ─── Persisted State ──────────────────────────────────────────────────────────
 
-import type { LisaConversationTurn } from "./llm-context";
-export type { LisaConversationTurn };
+import type { LisaConversationTurn, MemoryNote } from "./llm-context";
+export type { LisaConversationTurn, MemoryNote };
 
 export interface PersistedState {
   version: number;
@@ -277,7 +282,8 @@ export interface PersistedState {
   approvals: ApprovalRequest[];
   auditEvents: AuditEvent[];
   conversationHistory: LisaConversationTurn[];
+  memoryNotes: MemoryNote[];
   savedAt: string;
 }
 
-export const STATE_VERSION = 3;
+export const STATE_VERSION = 4;

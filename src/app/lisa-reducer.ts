@@ -9,8 +9,9 @@ import type {
   RuntimeHealth,
   LisaInteraction,
   LisaConversationTurn,
+  MemoryNote,
 } from "../core/types";
-import { DEFAULT_SETTINGS, INTERACTION_CAP, CONVERSATION_HISTORY_CAP } from "../core/types";
+import { DEFAULT_SETTINGS, INTERACTION_CAP, CONVERSATION_HISTORY_CAP, MEMORY_NOTES_CAP, MEMORY_NOTE_CHAR_LIMIT } from "../core/types";
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -26,6 +27,7 @@ export interface LisaState {
   commandResponse: string | null;
   interactions: LisaInteraction[];
   conversationHistory: LisaConversationTurn[];
+  memoryNotes: MemoryNote[];
 }
 
 export const initialState: LisaState = {
@@ -40,6 +42,7 @@ export const initialState: LisaState = {
   commandResponse: null,
   interactions: [],
   conversationHistory: [],
+  memoryNotes: [],
 };
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
@@ -63,6 +66,9 @@ export type LisaAction =
   | { type: "ABORT_INTERACTION"; payload: { id: string; completedAt: string; latencyMs?: number } }
   | { type: "APPEND_CONVERSATION_TURN"; payload: LisaConversationTurn }
   | { type: "CLEAR_CONVERSATION_HISTORY" }
+  | { type: "ADD_MEMORY_NOTE"; payload: string }
+  | { type: "DELETE_MEMORY_NOTE"; payload: string }
+  | { type: "CLEAR_MEMORY_NOTES" }
   | { type: "CLEAR_AUDIT_LOG"; payload: AuditEvent }
   | { type: "CLEAR_MISSION_HISTORY" }
   | {
@@ -73,6 +79,7 @@ export type LisaAction =
         approvals: ApprovalRequest[];
         auditEvents: AuditEvent[];
         conversationHistory: LisaConversationTurn[];
+        memoryNotes: MemoryNote[];
       };
     };
 
@@ -223,6 +230,30 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
     case "CLEAR_CONVERSATION_HISTORY":
       return { ...state, conversationHistory: [] };
 
+    case "ADD_MEMORY_NOTE": {
+      const content = action.payload.trim();
+      if (!content || content.length > MEMORY_NOTE_CHAR_LIMIT) return state;
+      const note: MemoryNote = {
+        id: crypto.randomUUID(),
+        content,
+        createdAt: new Date().toISOString(),
+      };
+      const updated = [...state.memoryNotes, note];
+      return {
+        ...state,
+        memoryNotes: updated.length > MEMORY_NOTES_CAP ? updated.slice(-MEMORY_NOTES_CAP) : updated,
+      };
+    }
+
+    case "DELETE_MEMORY_NOTE":
+      return {
+        ...state,
+        memoryNotes: state.memoryNotes.filter((n) => n.id !== action.payload),
+      };
+
+    case "CLEAR_MEMORY_NOTES":
+      return { ...state, memoryNotes: [] };
+
     case "CLEAR_AUDIT_LOG":
       // Sentinel event is included as the payload — replace the log with only it.
       return { ...state, auditEvents: [action.payload] };
@@ -250,6 +281,7 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
         approvals: action.payload.approvals,
         auditEvents: action.payload.auditEvents,
         conversationHistory: action.payload.conversationHistory,
+        memoryNotes: action.payload.memoryNotes,
         isLoaded: true,
       };
 

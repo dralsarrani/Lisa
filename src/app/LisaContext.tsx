@@ -26,6 +26,7 @@ export function LisaProvider({ children }: { children: React.ReactNode }) {
           approvals: persisted.approvals,
           auditEvents: persisted.auditEvents,
           conversationHistory: persisted.conversationHistory,
+          memoryNotes: persisted.memoryNotes,
         },
       });
 
@@ -54,6 +55,7 @@ export function LisaProvider({ children }: { children: React.ReactNode }) {
         approvals: state.approvals,
         auditEvents: state.auditEvents,
         conversationHistory: state.conversationHistory,
+        memoryNotes: state.memoryNotes,
       }).catch(() => {
         // Persistence error — non-fatal.
       });
@@ -62,7 +64,7 @@ export function LisaProvider({ children }: { children: React.ReactNode }) {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [state.settings, state.missions, state.approvals, state.auditEvents, state.conversationHistory, state.isLoaded]);
+  }, [state.settings, state.missions, state.approvals, state.auditEvents, state.conversationHistory, state.memoryNotes, state.isLoaded]);
 
   return (
     <LisaContext.Provider value={{ state, dispatch, addAudit }}>
