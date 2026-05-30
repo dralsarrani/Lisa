@@ -99,15 +99,17 @@ export const CommandInput: React.FC = () => {
 
     let accumulatedResponse = "";
     let firstChunk = true;
-    const unsub = { chunk: () => {}, done: () => {}, error: () => {} } as {
+    const unsub = { chunk: () => {}, done: () => {}, error: () => {}, abort: () => {} } as {
       chunk: () => void;
       done: () => void;
       error: () => void;
+      abort: () => void;
     };
     const cleanup = () => {
       unsub.chunk();
       unsub.done();
       unsub.error();
+      unsub.abort();
     };
 
     await new Promise<void>((resolve) => {
@@ -191,11 +193,31 @@ export const CommandInput: React.FC = () => {
             resolve();
           }
         ),
+        listen<{ id: string; model: string; latency_ms: number; response_chars: number }>(
+          "lisa-stream-aborted",
+          (ev) => {
+            if (ev.payload.id !== interactionId) return;
+            cleanup();
+            dispatch({
+              type: "ABORT_INTERACTION",
+              payload: { id: interactionId, completedAt: now(), latencyMs: ev.payload.latency_ms },
+            });
+            addAudit({
+              eventType: "llm_stream_aborted",
+              source: "command_input",
+              summary: `LLM stream aborted — model: "${model}" at ${ev.payload.latency_ms}ms`,
+              details: `request_id=${interactionId} model=${model} latency_ms=${ev.payload.latency_ms} response_chars=${ev.payload.response_chars}`,
+              severity: "warning",
+            });
+            resolve();
+          }
+        ),
       ])
-        .then(([unChunk, unDone, unError]) => {
+        .then(([unChunk, unDone, unError, unAbort]) => {
           unsub.chunk = unChunk;
           unsub.done = unDone;
           unsub.error = unError;
+          unsub.abort = unAbort;
           invoke("stream_ollama_chat", {
             interactionId,
             model,

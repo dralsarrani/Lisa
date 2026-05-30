@@ -48,6 +48,13 @@ function App() {
     });
   }, [dispatch, addAudit]);
 
+  const handleCancelStream = useCallback(async (interactionId: string) => {
+    const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    if (!isTauri) return;
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("cancel_ollama_stream", { interactionId }).catch(() => {});
+  }, []);
+
   const handleRuntimeRefresh = useCallback(async () => {
     dispatch({ type: "SET_ORB_STATE", payload: "acting" });
     addAudit({ eventType: "runtime_health_checked", source: "runtime_panel", summary: "Health check initiated.", severity: "info" });
@@ -199,6 +206,7 @@ function App() {
                   interactions={state.interactions}
                   orbState={state.orbState}
                   settings={state.settings}
+                  onCancelStream={handleCancelStream}
                 />
               )}
               {activeTab === "missions" && (

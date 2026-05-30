@@ -260,6 +260,47 @@
   animation: thinking-fade 2s ease-in-out infinite;
 }
 
+/* ── Cancel button ──────────────────────────────────────────────────────────── */
+.console-cancel-btn {
+  font-family: var(--font-mono);
+  font-size: 0.48rem;
+  letter-spacing: 0.07em;
+  color: rgba(239, 68, 68, 0.75);
+  background: rgba(239, 68, 68, 0.07);
+  border: 1px solid rgba(239, 68, 68, 0.30);
+  border-radius: 2px;
+  padding: 1px 7px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  line-height: 1.6;
+}
+
+.console-cancel-btn:hover {
+  background: rgba(239, 68, 68, 0.16);
+  color: rgba(239, 68, 68, 1);
+  border-color: rgba(239, 68, 68, 0.55);
+}
+
+/* ── Cancelled state ────────────────────────────────────────────────────────── */
+.console-cancelled-label {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: rgba(245, 158, 11, 0.70);
+  letter-spacing: 0.07em;
+  margin-bottom: 5px;
+}
+
+.console-cancelled-partial {
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  line-height: 1.68;
+  color: var(--text-secondary);
+  word-break: break-word;
+  white-space: pre-wrap;
+  opacity: 0.60;
+  margin-bottom: 6px;
+}
+
 /* ── Failed state ───────────────────────────────────────────────────────────── */
 .console-failed-label {
   font-family: var(--font-mono);

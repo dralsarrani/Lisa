@@ -6,12 +6,14 @@ interface ConsolePanelProps {
   interactions: LisaInteraction[];
   orbState: OrbState;
   settings: LisaSettings;
+  onCancelStream?: (id: string) => void;
 }
 
 export const ConsolePanel: React.FC<ConsolePanelProps> = ({
   interactions,
   orbState,
   settings,
+  onCancelStream,
 }) => {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -36,7 +38,7 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
       </div>
       <div className="console-feed">
         {interactions.map((ix) => (
-          <InteractionCard key={ix.id} interaction={ix} />
+          <InteractionCard key={ix.id} interaction={ix} onCancelStream={onCancelStream} />
         ))}
         <div ref={bottomRef} />
       </div>
@@ -46,7 +48,13 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
 
 // ─── Interaction card ─────────────────────────────────────────────────────────
 
-function InteractionCard({ interaction }: { interaction: LisaInteraction }) {
+function InteractionCard({
+  interaction,
+  onCancelStream,
+}: {
+  interaction: LisaInteraction;
+  onCancelStream?: (id: string) => void;
+}) {
   const time = new Date(interaction.createdAt).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
@@ -63,9 +71,19 @@ function InteractionCard({ interaction }: { interaction: LisaInteraction }) {
 
       <div className="console-response">
         {interaction.status === "thinking" ? (
-          <ThinkingIndicator model={interaction.model} kind={interaction.kind} />
+          <ThinkingIndicator
+            model={interaction.model}
+            kind={interaction.kind}
+            id={interaction.id}
+            onCancel={interaction.kind === "local_ai" ? onCancelStream : undefined}
+          />
         ) : interaction.status === "streaming" ? (
-          <StreamingResponse interaction={interaction} />
+          <StreamingResponse
+            interaction={interaction}
+            onCancel={interaction.kind === "local_ai" ? onCancelStream : undefined}
+          />
+        ) : interaction.status === "cancelled" ? (
+          <CancelledResponse interaction={interaction} />
         ) : interaction.status === "failed" ? (
           <FailedResponse interaction={interaction} />
         ) : (
@@ -78,7 +96,13 @@ function InteractionCard({ interaction }: { interaction: LisaInteraction }) {
 
 // ─── Streaming response ───────────────────────────────────────────────────────
 
-function StreamingResponse({ interaction }: { interaction: LisaInteraction }) {
+function StreamingResponse({
+  interaction,
+  onCancel,
+}: {
+  interaction: LisaInteraction;
+  onCancel?: (id: string) => void;
+}) {
   return (
     <>
       <div className="console-streaming-text">
@@ -97,6 +121,19 @@ function StreamingResponse({ interaction }: { interaction: LisaInteraction }) {
         )}
         <span className="console-meta-sep">·</span>
         <span className="console-streaming-indicator">streaming…</span>
+        {onCancel && (
+          <>
+            <span className="console-meta-sep">·</span>
+            <button
+              className="console-cancel-btn"
+              type="button"
+              onClick={() => onCancel(interaction.id)}
+              aria-label="Cancel streaming response"
+            >
+              ✕ Cancel
+            </button>
+          </>
+        )}
       </div>
     </>
   );
@@ -107,9 +144,13 @@ function StreamingResponse({ interaction }: { interaction: LisaInteraction }) {
 function ThinkingIndicator({
   model,
   kind,
+  id,
+  onCancel,
 }: {
   model?: string;
   kind?: LisaInteraction["kind"];
+  id?: string;
+  onCancel?: (id: string) => void;
 }) {
   let label: string;
   if (kind === "local_ai" && model) {
@@ -128,7 +169,47 @@ function ThinkingIndicator({
         <span className="console-thinking-dot" />
       </div>
       <span className="console-thinking-label">{label}</span>
+      {onCancel && id && (
+        <button
+          className="console-cancel-btn"
+          type="button"
+          onClick={() => onCancel(id)}
+          aria-label="Cancel pending request"
+        >
+          ✕ Cancel
+        </button>
+      )}
     </div>
+  );
+}
+
+// ─── Cancelled response ───────────────────────────────────────────────────────
+
+function CancelledResponse({ interaction }: { interaction: LisaInteraction }) {
+  return (
+    <>
+      <div className="console-cancelled-label">Response cancelled</div>
+      {interaction.response && (
+        <div className="console-cancelled-partial">{interaction.response}</div>
+      )}
+      <div className="console-response-meta">
+        <span className={`console-meta-kind console-meta-kind-${interaction.kind}`}>
+          {kindLabel(interaction.kind)}
+        </span>
+        {interaction.model && (
+          <>
+            <span className="console-meta-sep">·</span>
+            <span className="console-meta-model">{interaction.model}</span>
+          </>
+        )}
+        {interaction.latencyMs != null && (
+          <>
+            <span className="console-meta-sep">·</span>
+            <span className="console-meta-latency">{formatLatency(interaction.latencyMs)}</span>
+          </>
+        )}
+      </div>
+    </>
   );
 }
 

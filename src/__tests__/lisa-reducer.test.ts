@@ -150,6 +150,113 @@ describe("UPDATE_INTERACTION", () => {
   });
 });
 
+// ─── APPEND_INTERACTION_CONTENT ───────────────────────────────────────────────
+
+describe("APPEND_INTERACTION_CONTENT", () => {
+  it("appends chunk to a streaming interaction", () => {
+    let state = lisaReducer(initialState, {
+      type: "ADD_INTERACTION",
+      payload: makeInteraction("id-1", { status: "streaming" }),
+    });
+    state = lisaReducer(state, {
+      type: "APPEND_INTERACTION_CONTENT",
+      payload: { id: "id-1", chunk: "Hello " },
+    });
+    state = lisaReducer(state, {
+      type: "APPEND_INTERACTION_CONTENT",
+      payload: { id: "id-1", chunk: "world" },
+    });
+    expect(state.interactions[0].response).toBe("Hello world");
+  });
+
+  it("does not append chunk to a cancelled interaction", () => {
+    let state = lisaReducer(initialState, {
+      type: "ADD_INTERACTION",
+      payload: makeInteraction("id-1", { status: "streaming", response: "Partial" }),
+    });
+    state = lisaReducer(state, {
+      type: "ABORT_INTERACTION",
+      payload: { id: "id-1", completedAt: new Date().toISOString() },
+    });
+    state = lisaReducer(state, {
+      type: "APPEND_INTERACTION_CONTENT",
+      payload: { id: "id-1", chunk: " stale chunk" },
+    });
+    expect(state.interactions[0].response).toBe("Partial");
+  });
+});
+
+// ─── ABORT_INTERACTION ────────────────────────────────────────────────────────
+
+describe("ABORT_INTERACTION", () => {
+  it("marks the interaction as cancelled", () => {
+    const completedAt = new Date().toISOString();
+    let state = lisaReducer(initialState, {
+      type: "ADD_INTERACTION",
+      payload: makeInteraction("id-1", { status: "streaming" }),
+    });
+    state = lisaReducer(state, {
+      type: "ABORT_INTERACTION",
+      payload: { id: "id-1", completedAt },
+    });
+    const ix = state.interactions.find((i) => i.id === "id-1");
+    expect(ix?.status).toBe("cancelled");
+    expect(ix?.completedAt).toBe(completedAt);
+  });
+
+  it("records latencyMs when provided", () => {
+    let state = lisaReducer(initialState, {
+      type: "ADD_INTERACTION",
+      payload: makeInteraction("id-1", { status: "streaming" }),
+    });
+    state = lisaReducer(state, {
+      type: "ABORT_INTERACTION",
+      payload: { id: "id-1", completedAt: new Date().toISOString(), latencyMs: 3200 },
+    });
+    expect(state.interactions[0].latencyMs).toBe(3200);
+  });
+
+  it("resets orbState to idle", () => {
+    let state = lisaReducer(initialState, { type: "SET_ORB_STATE", payload: "speaking" });
+    state = lisaReducer(state, {
+      type: "ADD_INTERACTION",
+      payload: makeInteraction("id-1"),
+    });
+    state = lisaReducer(state, {
+      type: "ABORT_INTERACTION",
+      payload: { id: "id-1", completedAt: new Date().toISOString() },
+    });
+    expect(state.orbState).toBe("idle");
+  });
+
+  it("does not affect other interactions", () => {
+    let state = initialState;
+    state = lisaReducer(state, { type: "ADD_INTERACTION", payload: makeInteraction("id-a") });
+    state = lisaReducer(state, {
+      type: "ADD_INTERACTION",
+      payload: makeInteraction("id-b", { status: "streaming" }),
+    });
+    state = lisaReducer(state, {
+      type: "ABORT_INTERACTION",
+      payload: { id: "id-b", completedAt: new Date().toISOString() },
+    });
+    expect(state.interactions.find((i) => i.id === "id-a")?.status).toBe("thinking");
+    expect(state.interactions.find((i) => i.id === "id-b")?.status).toBe("cancelled");
+  });
+
+  it("is a no-op when id is unknown", () => {
+    let state = lisaReducer(initialState, {
+      type: "ADD_INTERACTION",
+      payload: makeInteraction("id-1"),
+    });
+    state = lisaReducer(state, {
+      type: "ABORT_INTERACTION",
+      payload: { id: "no-such-id", completedAt: new Date().toISOString() },
+    });
+    expect(state.interactions[0].status).toBe("thinking");
+  });
+});
+
 // ─── INTERACTION_CAP constant ─────────────────────────────────────────────────
 
 describe("INTERACTION_CAP", () => {

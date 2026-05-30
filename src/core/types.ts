@@ -246,7 +246,7 @@ export interface CommandRouteResult {
 // ─── Interactions (session-only, not persisted) ───────────────────────────────
 
 export type InteractionKind = "command" | "local_ai" | "error" | "system";
-export type InteractionStatus = "thinking" | "streaming" | "complete" | "failed";
+export type InteractionStatus = "thinking" | "streaming" | "complete" | "failed" | "cancelled";
 
 export interface LisaInteraction {
   id: string;

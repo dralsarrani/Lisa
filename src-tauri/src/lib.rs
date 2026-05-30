@@ -1,6 +1,10 @@
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Mutex,
+};
 use tauri::{Emitter, Manager};
 
 // ─── Ollama endpoint constants ────────────────────────────────────────────────
@@ -84,6 +88,62 @@ pub struct StreamErrorPayload {
     pub id: String,
     pub error: String,
     pub latency_ms: u64,
+}
+
+// ─── Stream abort event payload ───────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StreamAbortedPayload {
+    pub id: String,
+    pub model: String,
+    pub latency_ms: u64,
+    pub response_chars: usize,
+}
+
+// ─── Per-stream cancellation state ───────────────────────────────────────────
+
+pub struct CancelState {
+    cancelled: AtomicBool,
+    active_id: Mutex<Option<String>>,
+}
+
+impl CancelState {
+    fn new() -> Self {
+        CancelState {
+            cancelled: AtomicBool::new(false),
+            active_id: Mutex::new(None),
+        }
+    }
+
+    /// Mark a new stream as active and reset the cancellation flag.
+    fn begin_stream(&self, id: &str) {
+        let mut guard = self.active_id.lock().unwrap_or_else(|e| e.into_inner());
+        *guard = Some(id.to_string());
+        // Reset BEFORE the stream starts so any stale cancel from the prior stream is cleared.
+        self.cancelled.store(false, Ordering::SeqCst);
+    }
+
+    /// Clear active stream tracking and reset the cancellation flag.
+    fn end_stream(&self) {
+        let mut guard = self.active_id.lock().unwrap_or_else(|e| e.into_inner());
+        *guard = None;
+        self.cancelled.store(false, Ordering::SeqCst);
+    }
+
+    /// Set the cancellation flag if `id` matches the active stream. Returns true if cancelled.
+    fn cancel_if_active(&self, id: &str) -> bool {
+        let guard = self.active_id.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.as_deref() == Some(id) {
+            self.cancelled.store(true, Ordering::SeqCst);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::Relaxed)
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -286,6 +346,15 @@ fn reqwest_error_detail(e: &reqwest::Error) -> String {
 // ─── Ollama Commands ──────────────────────────────────────────────────────────
 
 #[tauri::command]
+async fn cancel_ollama_stream(
+    interaction_id: String,
+    cancel: tauri::State<'_, CancelState>,
+) -> Result<(), String> {
+    cancel.cancel_if_active(&interaction_id);
+    Ok(())
+}
+
+#[tauri::command]
 async fn list_ollama_models() -> OllamaListResult {
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(OLLAMA_TAGS_TIMEOUT_SECS))
@@ -410,11 +479,13 @@ async fn send_ollama_chat(model: String, messages: Vec<OllamaChatMessage>) -> Ol
 #[tauri::command]
 async fn stream_ollama_chat(
     app_handle: tauri::AppHandle,
+    cancel: tauri::State<'_, CancelState>,
     interaction_id: String,
     model: String,
     messages: Vec<OllamaChatMessage>,
 ) -> Result<(), String> {
     let start = std::time::Instant::now();
+    cancel.begin_stream(&interaction_id);
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(OLLAMA_CHAT_TIMEOUT_SECS))
@@ -432,22 +503,28 @@ async fn stream_ollama_chat(
         },
     };
 
-    let resp = client
+    let resp = match client
         .post(OLLAMA_CHAT_URL)
         .json(&body)
         .send()
         .await
-        .map_err(|e| {
-            if e.is_timeout() {
+    {
+        Ok(r) => r,
+        Err(e) => {
+            cancel.end_stream();
+            let msg = if e.is_timeout() {
                 "Local model did not respond before the timeout. First responses can be slow while Ollama loads the model. Try again, choose a smaller model, or restart Ollama.".to_string()
             } else {
                 format!("Ollama chat failed at {OLLAMA_CHAT_URL}: {}", reqwest_error_detail(&e))
-            }
-        })?;
+            };
+            return Err(msg);
+        }
+    };
 
     let status = resp.status();
     if !status.is_success() {
         let body_text = resp.text().await.unwrap_or_default();
+        cancel.end_stream();
         return Err(format!(
             "Ollama HTTP {status} from {OLLAMA_CHAT_URL}: {body_text}"
         ));
@@ -455,8 +532,24 @@ async fn stream_ollama_chat(
 
     let mut byte_stream = resp.bytes_stream();
     let mut line_buf = String::new();
+    let mut response_chars: usize = 0;
 
     while let Some(item) = byte_stream.next().await {
+        // Check cancellation before processing each network chunk.
+        if cancel.is_cancelled() {
+            let _ = app_handle.emit(
+                "lisa-stream-aborted",
+                StreamAbortedPayload {
+                    id: interaction_id.clone(),
+                    model: model.clone(),
+                    latency_ms: start.elapsed().as_millis() as u64,
+                    response_chars,
+                },
+            );
+            cancel.end_stream();
+            return Ok(());
+        }
+
         let bytes = match item {
             Ok(b) => b,
             Err(e) => {
@@ -468,6 +561,7 @@ async fn stream_ollama_chat(
                         latency_ms: start.elapsed().as_millis() as u64,
                     },
                 );
+                cancel.end_stream();
                 return Ok(());
             }
         };
@@ -491,10 +585,12 @@ async fn stream_ollama_chat(
                                     latency_ms: start.elapsed().as_millis() as u64,
                                 },
                             );
+                            cancel.end_stream();
                             return Ok(());
                         }
                         if let Some(msg) = chunk.message {
                             if !msg.content.is_empty() {
+                                response_chars += msg.content.len();
                                 let _ = app_handle.emit(
                                     "lisa-stream-chunk",
                                     StreamChunkPayload {
@@ -513,6 +609,7 @@ async fn stream_ollama_chat(
                                     latency_ms: start.elapsed().as_millis() as u64,
                                 },
                             );
+                            cancel.end_stream();
                             return Ok(());
                         }
                     }
@@ -533,6 +630,7 @@ async fn stream_ollama_chat(
             latency_ms: start.elapsed().as_millis() as u64,
         },
     );
+    cancel.end_stream();
 
     Ok(())
 }
@@ -544,6 +642,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_shell::init())
+        .manage(CancelState::new())
         .invoke_handler(tauri::generate_handler![
             ping_backend,
             get_runtime_health,
@@ -552,6 +651,7 @@ pub fn run() {
             list_ollama_models,
             send_ollama_chat,
             stream_ollama_chat,
+            cancel_ollama_stream,
         ])
         .run(tauri::generate_context!())
         .expect("Error while running Lisa application");
@@ -668,5 +768,97 @@ mod tests {
             serde_json::from_str(json).expect("must parse error chunk");
         assert_eq!(chunk.error.as_deref(), Some("model not found"));
         assert!(chunk.message.is_none());
+    }
+
+    // ─── CancelState ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn cancel_state_starts_not_cancelled() {
+        let state = CancelState::new();
+        assert!(!state.is_cancelled());
+    }
+
+    #[test]
+    fn cancel_state_begin_stream_resets_flag() {
+        let state = CancelState::new();
+        state.begin_stream("req-1");
+        assert!(!state.is_cancelled(), "flag must be false after begin_stream");
+    }
+
+    #[test]
+    fn cancel_state_matching_id_cancels() {
+        let state = CancelState::new();
+        state.begin_stream("req-1");
+        let cancelled = state.cancel_if_active("req-1");
+        assert!(cancelled);
+        assert!(state.is_cancelled());
+    }
+
+    #[test]
+    fn cancel_state_wrong_id_does_not_cancel() {
+        let state = CancelState::new();
+        state.begin_stream("req-1");
+        let cancelled = state.cancel_if_active("req-999");
+        assert!(!cancelled);
+        assert!(!state.is_cancelled());
+    }
+
+    #[test]
+    fn cancel_state_no_active_stream_does_not_cancel() {
+        let state = CancelState::new();
+        let cancelled = state.cancel_if_active("req-1");
+        assert!(!cancelled);
+        assert!(!state.is_cancelled());
+    }
+
+    #[test]
+    fn cancel_state_end_stream_resets_flag() {
+        let state = CancelState::new();
+        state.begin_stream("req-1");
+        state.cancel_if_active("req-1");
+        assert!(state.is_cancelled());
+        state.end_stream();
+        assert!(!state.is_cancelled());
+    }
+
+    #[test]
+    fn cancel_state_end_stream_clears_active_id() {
+        let state = CancelState::new();
+        state.begin_stream("req-1");
+        state.end_stream();
+        // After end, a cancel for the old ID should not work.
+        let cancelled = state.cancel_if_active("req-1");
+        assert!(!cancelled);
+    }
+
+    #[test]
+    fn cancel_state_second_stream_overrides_first() {
+        let state = CancelState::new();
+        state.begin_stream("req-1");
+        state.begin_stream("req-2");
+        // req-1 is stale — cancelling it must not work.
+        let cancelled = state.cancel_if_active("req-1");
+        assert!(!cancelled);
+        assert!(!state.is_cancelled());
+        // req-2 is active.
+        let cancelled = state.cancel_if_active("req-2");
+        assert!(cancelled);
+        assert!(state.is_cancelled());
+    }
+
+    #[test]
+    fn stream_aborted_payload_serializes_correctly() {
+        let payload = StreamAbortedPayload {
+            id: "req-001".to_string(),
+            model: "llama3.2:1b".to_string(),
+            latency_ms: 1234,
+            response_chars: 42,
+        };
+        let json = serde_json::to_string(&payload).expect("must serialize");
+        let v: serde_json::Value = serde_json::from_str(&json).expect("must round-trip");
+        assert_eq!(v["id"], "req-001");
+        assert_eq!(v["model"], "llama3.2:1b");
+        assert_eq!(v["latency_ms"], 1234);
+        assert_eq!(v["response_chars"], 42);
     }
 }

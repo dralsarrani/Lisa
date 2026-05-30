@@ -57,6 +57,7 @@ export type LisaAction =
   | { type: "ADD_INTERACTION"; payload: LisaInteraction }
   | { type: "UPDATE_INTERACTION"; payload: { id: string } & Partial<Omit<LisaInteraction, "id" | "createdAt">> }
   | { type: "APPEND_INTERACTION_CONTENT"; payload: { id: string; chunk: string } }
+  | { type: "ABORT_INTERACTION"; payload: { id: string; completedAt: string; latencyMs?: number } }
   | { type: "CLEAR_AUDIT_LOG"; payload: AuditEvent }
   | { type: "CLEAR_MISSION_HISTORY" }
   | {
@@ -188,7 +189,18 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
       return {
         ...state,
         interactions: state.interactions.map((i) =>
-          i.id === id ? { ...i, response: i.response + chunk } : i
+          i.id === id && i.status !== "cancelled" ? { ...i, response: i.response + chunk } : i
+        ),
+      };
+    }
+
+    case "ABORT_INTERACTION": {
+      const { id, completedAt, latencyMs } = action.payload;
+      return {
+        ...state,
+        orbState: "idle",
+        interactions: state.interactions.map((i) =>
+          i.id === id ? { ...i, status: "cancelled", completedAt, latencyMs } : i
         ),
       };
     }
