@@ -280,6 +280,25 @@ describe("conversationHistory — round-trip persistence (Phase 1D)", () => {
     expect(loaded.conversationHistory[1].userInput).toBe("question 3");
   });
 
+  it("cleared conversationHistory persists and loads as []", async () => {
+    await saveState({
+      settings: DEFAULT_SETTINGS,
+      missions: [],
+      approvals: [],
+      auditEvents: [],
+      conversationHistory: [makeTurn(1), makeTurn(2)],
+    });
+    await saveState({
+      settings: DEFAULT_SETTINGS,
+      missions: [],
+      approvals: [],
+      auditEvents: [],
+      conversationHistory: [],
+    });
+    const loaded = await loadState();
+    expect(loaded.conversationHistory).toEqual([]);
+  });
+
   it("caps conversationHistory at CONVERSATION_HISTORY_CAP on save", async () => {
     const turns = Array.from({ length: CONVERSATION_HISTORY_CAP + 10 }, (_, i) => makeTurn(i));
     await saveState({

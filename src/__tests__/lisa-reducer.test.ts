@@ -303,6 +303,40 @@ describe("APPEND_CONVERSATION_TURN", () => {
   });
 });
 
+// ─── CLEAR_CONVERSATION_HISTORY ───────────────────────────────────────────────
+
+describe("CLEAR_CONVERSATION_HISTORY", () => {
+  it("clears non-empty conversation history", () => {
+    let state = lisaReducer(initialState, { type: "APPEND_CONVERSATION_TURN", payload: makeTurn(1) });
+    state = lisaReducer(state, { type: "APPEND_CONVERSATION_TURN", payload: makeTurn(2) });
+    expect(state.conversationHistory).toHaveLength(2);
+    const cleared = lisaReducer(state, { type: "CLEAR_CONVERSATION_HISTORY" });
+    expect(cleared.conversationHistory).toEqual([]);
+  });
+
+  it("is safe when history is already empty", () => {
+    const next = lisaReducer(initialState, { type: "CLEAR_CONVERSATION_HISTORY" });
+    expect(next.conversationHistory).toEqual([]);
+  });
+
+  it("does not mutate previous state", () => {
+    const state = lisaReducer(initialState, { type: "APPEND_CONVERSATION_TURN", payload: makeTurn(1) });
+    const before = state.conversationHistory;
+    lisaReducer(state, { type: "CLEAR_CONVERSATION_HISTORY" });
+    expect(before).toHaveLength(1);
+  });
+
+  it("leaves interactions untouched", () => {
+    const ix = makeInteraction("ix-clear");
+    let state = lisaReducer(initialState, { type: "ADD_INTERACTION", payload: ix });
+    state = lisaReducer(state, { type: "APPEND_CONVERSATION_TURN", payload: makeTurn(1) });
+    const cleared = lisaReducer(state, { type: "CLEAR_CONVERSATION_HISTORY" });
+    expect(cleared.conversationHistory).toEqual([]);
+    expect(cleared.interactions).toHaveLength(1);
+    expect(cleared.interactions[0].id).toBe("ix-clear");
+  });
+});
+
 // ─── INTERACTION_CAP constant ─────────────────────────────────────────────────
 
 describe("INTERACTION_CAP", () => {

@@ -48,6 +48,14 @@ export const CommandInput: React.FC = () => {
     }
   }, [state.isLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Sync ref when history is externally cleared (e.g. from Settings panel).
+  // Only fires when length drops to 0 — does not interfere with normal turn appends.
+  useEffect(() => {
+    if (state.isLoaded && state.conversationHistory.length === 0) {
+      conversationHistoryRef.current = [];
+    }
+  }, [state.isLoaded, state.conversationHistory.length]);
+
   useEffect(() => {
     if (!state.commandResponse) return;
     const isEmergencyMessage =

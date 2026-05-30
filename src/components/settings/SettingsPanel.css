@@ -223,6 +223,66 @@
 .ai-refresh-btn:hover:not(:disabled) { border-color: var(--color-accent); color: var(--color-accent); }
 .ai-refresh-btn:disabled { opacity: 0.45; cursor: default; }
 
+/* ── Conversation History ──────────────────────────────────────────────────── */
+.history-meta-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.history-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.history-note {
+  margin: 0;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  line-height: 1.45;
+  font-family: var(--font-sans);
+}
+
+.history-session-note {
+  font-size: 0.60rem;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+}
+
+.history-clear-btn {
+  align-self: flex-start;
+  padding: 4px 12px;
+  font-size: 0.62rem;
+  letter-spacing: 0.07em;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  transition: all var(--transition-fast);
+}
+
+.history-clear-btn:hover:not(:disabled) {
+  border-color: rgba(251,191,36,0.55);
+  color: #fbbf24;
+}
+
+.history-clear-btn:disabled { opacity: 0.35; cursor: default; }
+
+.history-clear-confirm {
+  border-color: rgba(239,68,68,0.50) !important;
+  color: var(--color-error) !important;
+  background: rgba(239,68,68,0.08) !important;
+}
+
+.history-clear-confirm:hover:not(:disabled) {
+  border-color: rgba(239,68,68,0.80) !important;
+}
+
 /* ── Build info ────────────────────────────────────────────────────────────── */
 .settings-build-info {
   background: var(--bg-elevated);

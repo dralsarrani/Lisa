@@ -62,6 +62,7 @@ export type LisaAction =
   | { type: "APPEND_INTERACTION_CONTENT"; payload: { id: string; chunk: string } }
   | { type: "ABORT_INTERACTION"; payload: { id: string; completedAt: string; latencyMs?: number } }
   | { type: "APPEND_CONVERSATION_TURN"; payload: LisaConversationTurn }
+  | { type: "CLEAR_CONVERSATION_HISTORY" }
   | { type: "CLEAR_AUDIT_LOG"; payload: AuditEvent }
   | { type: "CLEAR_MISSION_HISTORY" }
   | {
@@ -218,6 +219,9 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
         conversationHistory: updated.length > cap ? updated.slice(-cap) : updated,
       };
     }
+
+    case "CLEAR_CONVERSATION_HISTORY":
+      return { ...state, conversationHistory: [] };
 
     case "CLEAR_AUDIT_LOG":
       // Sentinel event is included as the payload — replace the log with only it.

@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import type { LisaSettings, LisaModeId } from "../../core/types";
+import { CONVERSATION_HISTORY_CAP } from "../../core/types";
 import { LISA_MODES } from "../../core/mode-store";
 import { useLisa } from "../../app/useLisa";
 import "./SettingsPanel.css";
@@ -9,12 +10,20 @@ interface SettingsPanelProps {
 }
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
-  const { dispatch, addAudit } = useLisa();
+  const { state, dispatch, addAudit } = useLisa();
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [modelsFetching, setModelsFetching] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
   // null = not yet probed, true = reachable, false = unreachable
   const [ollamaReachable, setOllamaReachable] = useState<boolean | null>(null);
+  const [confirmingClear, setConfirmingClear] = useState(false);
+  const confirmResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (confirmResetRef.current) clearTimeout(confirmResetRef.current);
+    };
+  }, []);
 
   const fetchModels = useCallback(async () => {
     const isInTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -67,6 +76,25 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
   // fetchModels is stable (useCallback); settings.enableLocalAi is the real dependency.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.enableLocalAi]);
+
+  function handleClearHistory() {
+    if (!confirmingClear) {
+      setConfirmingClear(true);
+      confirmResetRef.current = setTimeout(() => setConfirmingClear(false), 5000);
+      return;
+    }
+    if (confirmResetRef.current) clearTimeout(confirmResetRef.current);
+    const clearedCount = state.conversationHistory.length;
+    dispatch({ type: "CLEAR_CONVERSATION_HISTORY" });
+    addAudit({
+      eventType: "clear_conversation_history",
+      source: "settings_panel",
+      summary: "Conversation history cleared.",
+      details: `Cleared ${clearedCount} turn${clearedCount === 1 ? "" : "s"}.`,
+      severity: "info",
+    });
+    setConfirmingClear(false);
+  }
 
   function setMode(id: LisaModeId) {
     dispatch({ type: "SET_MODE", payload: id });
@@ -280,6 +308,49 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
         )}
       </div>
 
+      {/* ── Conversation History ── */}
+      <div className="settings-section">
+        <div className="settings-section-label">Conversation History</div>
+        {(() => {
+          const historyCount = state.conversationHistory.length;
+          const isStreaming = state.orbState === "thinking" || state.orbState === "speaking";
+          return (
+            <>
+              <div className="history-meta-row">
+                <div className="history-meta-item">
+                  <span className="settings-field-label">Stored turns</span>
+                  <span className="settings-field-value">{historyCount}</span>
+                </div>
+                <div className="history-meta-item">
+                  <span className="settings-field-label">Context limit</span>
+                  <span className="settings-field-value">{settings.maxContextTurns}</span>
+                </div>
+                <div className="history-meta-item">
+                  <span className="settings-field-label">Hard cap</span>
+                  <span className="settings-field-value">{CONVERSATION_HISTORY_CAP}</span>
+                </div>
+              </div>
+              <p className="history-note">
+                Recent completed local AI turns are kept for continuity across restarts.
+                This is not long-term semantic memory.
+              </p>
+              <button
+                className={`history-clear-btn${confirmingClear ? " history-clear-confirm" : ""}`}
+                onClick={handleClearHistory}
+                disabled={historyCount === 0 || isStreaming}
+                title={isStreaming ? "Unavailable during active response" : historyCount === 0 ? "No history to clear" : undefined}
+              >
+                {confirmingClear ? "Confirm Clear" : "Clear Conversation History"}
+              </button>
+              {confirmingClear && (
+                <span className="history-session-note">This cannot be undone. Click again to confirm.</span>
+              )}
+              <span className="history-session-note">Console messages remain for this session.</span>
+            </>
+          );
+        })()}
+      </div>
+
       {/* ── Phase Flags ── */}
       <div className="settings-section">
         <div className="settings-section-label">Phase Flags</div>
@@ -334,7 +405,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
         <div className="settings-build-info">
           <div className="settings-field">
             <span className="settings-field-label">Phase</span>
-            <span className="settings-field-value">1A — Local AI Runtime</span>
+            <span className="settings-field-value">1E — Conversation History Controls</span>
           </div>
           <div className="settings-field">
             <span className="settings-field-label">Version</span>

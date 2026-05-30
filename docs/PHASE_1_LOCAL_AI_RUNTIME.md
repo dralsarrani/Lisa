@@ -269,6 +269,36 @@ cd src-tauri && cargo test
 
 ---
 
+## Phase 1E — Conversation History Controls
+
+Phase 1E adds user-facing visibility and control over the persisted conversation history introduced in Phase 1D.
+
+**What changed:**
+
+- Settings panel gains a **Conversation History** section showing stored turn count, context limit, and hard cap
+- **Clear Conversation History** button with two-step confirmation (first click arms, second click executes)
+- Button is disabled when history is empty or a local AI stream is active
+- Clearing dispatches `CLEAR_CONVERSATION_HISTORY` reducer action → `conversationHistory: []` → persists automatically via existing save flow
+- `CommandInput` syncs `conversationHistoryRef` to `[]` when state history is cleared externally
+- Audit event `clear_conversation_history` records the cleared turn count
+- `clear_conversation_history` added to `AuditEventType`
+
+**Behavior guarantees:**
+
+- Clearing history does not remove Console session messages
+- Clearing history does not affect missions, approvals, audit log, settings, or modes
+- The next LLM request after clear sends no prior conversation context
+- The button cannot fire during an active streaming response
+
+**What this is NOT:**
+
+- Not a history viewer — individual turn content is not displayed
+- Not per-turn deletion — only bulk clear is available
+- Not search or export — deferred to a future phase
+- Not semantic memory management — this only controls recent conversation continuity
+
+---
+
 ## Phase 1D — Persistent Conversation History
 
 Phase 1D adds local persistence for recent completed conversation turns so that Lisa can resume context after an app restart.

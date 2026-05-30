@@ -154,7 +154,8 @@ export type AuditEventType =
   | "llm_stream_started"
   | "llm_stream_completed"
   | "llm_stream_failed"
-  | "llm_stream_aborted";
+  | "llm_stream_aborted"
+  | "clear_conversation_history";
 
 export interface AuditEvent {
   id: string;
