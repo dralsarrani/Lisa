@@ -371,6 +371,59 @@ Phase 1F gives the user a persistent, user-controlled memory layer. Notes are sa
 
 ---
 
+---
+
+# Lisa Phase 1G — Natural Memory Commands
+
+## What Phase 1G Adds
+
+Phase 1G wires the Memory Notes system (added in Phase 1F) into the command bar via deterministic routing. The user can add, list, delete, and clear memory notes using natural language — no LLM involvement, no fuzzy matching, no automatic inference.
+
+**New command intents (all deterministic, high-confidence):**
+
+| Intent | Example inputs |
+|---|---|
+| `add_memory_note` | `remember that I prefer TypeScript` / `note that my editor is VS Code` / `save memory: I use Windows` / `add memory: concise answers please` |
+| `list_memory_notes` | `list memory notes` / `show memory notes` / `what do you remember` / `memory notes` |
+| `delete_memory_note` | `delete memory 1` / `forget memory 2` / `remove memory 3` |
+| `request_clear_memory_notes` | `clear memory notes` / `clear all memory notes` / `delete all memory notes` |
+| `confirm_clear_memory_notes` | `confirm clear memory` |
+
+**Implementation details:**
+
+- `CommandIntent` union type extended with 5 new values in `types.ts`
+- `routeCommand()` extended in `command-router.ts` — memory blocks placed before `approve_test_action` so `"confirm clear memory"` beats the bare `"confirm"` check
+- Note content extracted from the original raw input (prefix-stripped, case preserved) — stored exactly as typed
+- Two-step clear: `request_clear_memory_notes` arms a 30 s confirmation window; `confirm_clear_memory_notes` executes or reports no pending clear
+- All new intents route before the LLM fallback — memory commands never reach the model
+- `CommandInput.tsx` handles all 5 new cases with the same validation and audit behavior as Settings:
+  - Empty content rejected with message
+  - Over-limit content rejected with char count
+  - Cap reached rejected with guidance to delete first
+  - Audit: `chars=N` / `note_id=X` / `count=N` — never note content
+
+**Settings compatibility:**
+
+- Notes added by command appear in Settings → Memory Notes
+- Notes deleted in Settings no longer appear in `list memory notes`
+- Notes added via Settings are numbered and deletable by command
+- Both paths share the same `state.memoryNotes` array and persistence
+
+**System prompt boundary (added):**
+
+- `llm-context.ts` now states: "Memory note commands (add, list, delete, clear) are handled by Lisa's deterministic app logic. Do not attempt to add, modify, or delete memory notes yourself."
+
+**What this is NOT:**
+
+- Not automatic inference — the LLM never decides what to remember
+- Not semantic/vector memory — no embeddings or similarity search
+- Not fuzzy deletion — only numbered deletion by index (e.g. `delete memory 1`)
+- Not voice, screen, desktop control, or agent execution
+
+**Tests added:** 26 new command-router tests covering all 5 intents + 1 llm-context test for the new system prompt line. Total: 228 tests passing.
+
+---
+
 ## What's Next — Future Phase Candidates
 
 - **Voice shell** — STT (Whisper) + TTS wired to the LLM pipeline

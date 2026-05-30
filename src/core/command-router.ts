@@ -109,6 +109,60 @@ export function routeCommand(raw: string): CommandRouteResult {
     return result("create_test_mission", raw, normalized, {}, "high", "Creating Phase 0 test mission...");
   }
 
+  // ── Memory commands (before approve/reject so "confirm clear memory" wins) ──
+
+  // Confirm clear — must come before bare "confirm" → approve_test_action.
+  if (normalized === "confirm clear memory") {
+    return result("confirm_clear_memory_notes", raw, normalized, {}, "high", "Confirming memory clear...");
+  }
+
+  // Add memory note — extract content from raw (case preserved, prefix stripped).
+  {
+    const prefixStripped = raw.replace(/^lisa[,\s]+/i, "").replace(/[.,!?]+$/, "").trim();
+    const addNoteMatch =
+      prefixStripped.match(/^remember\s+that\s+(.+)$/i) ||
+      prefixStripped.match(/^remember\s+(.+)$/i) ||
+      prefixStripped.match(/^note\s+that\s+(.+)$/i) ||
+      prefixStripped.match(/^save\s+memory[:\s]\s*(.+)$/i) ||
+      prefixStripped.match(/^add\s+memory[:\s]\s*(.+)$/i);
+    if (addNoteMatch) {
+      const noteContent = addNoteMatch[1].trim();
+      return result("add_memory_note", raw, normalized, { noteContent }, "high", "Saving memory note...");
+    }
+  }
+
+  // List memory notes.
+  if (
+    normalized === "show memory notes" ||
+    normalized === "show my memory notes" ||
+    normalized === "list memory notes" ||
+    normalized === "list my memory notes" ||
+    normalized === "what do you remember" ||
+    normalized === "what memory notes do you have" ||
+    normalized === "memory notes"
+  ) {
+    return result("list_memory_notes", raw, normalized, {}, "high", "Listing memory notes...");
+  }
+
+  // Delete memory note by number.
+  {
+    const deleteNoteMatch = normalized.match(/^(?:delete|forget|remove)\s+memory\s+(\d+)$/);
+    if (deleteNoteMatch) {
+      const noteIndex = parseInt(deleteNoteMatch[1], 10);
+      return result("delete_memory_note", raw, normalized, { noteIndex }, "high", "Deleting memory note...");
+    }
+  }
+
+  // Request clear all memory notes.
+  if (
+    normalized === "clear memory notes" ||
+    normalized === "clear all memory notes" ||
+    normalized === "clear my memory notes" ||
+    normalized === "delete all memory notes"
+  ) {
+    return result("request_clear_memory_notes", raw, normalized, {}, "high", 'Type "confirm clear memory" to delete all memory notes.');
+  }
+
   // Approve test action.
   if (
     normalized === "approve test action" ||

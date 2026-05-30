@@ -7,6 +7,7 @@ import { getModeDisplayName } from "../../core/mode-store";
 import { fetchRuntimeHealth } from "../../core/runtime-health";
 import { buildOllamaMessages, trimConversationHistory } from "../../core/llm-context";
 import type { LisaConversationTurn } from "../../core/llm-context";
+import { MEMORY_NOTES_CAP, MEMORY_NOTE_CHAR_LIMIT } from "../../core/types";
 import "./CommandInput.css";
 
 const SUGGESTIONS = [
@@ -40,6 +41,8 @@ export const CommandInput: React.FC = () => {
   const conversationHistoryRef = useRef<LisaConversationTurn[]>([]);
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLlmResponseRef = useRef(false);
+  const pendingMemoryClearRef = useRef<boolean>(false);
+  const pendingMemoryClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Seed conversation history ref once when persisted state is loaded.
   useEffect(() => {
@@ -584,6 +587,125 @@ export const CommandInput: React.FC = () => {
             },
           });
         }
+        break;
+      }
+
+      case "add_memory_note": {
+        const noteContent = typeof route.payload?.noteContent === "string" ? route.payload.noteContent.trim() : "";
+        let addMsg: string;
+        if (!noteContent) {
+          addMsg = "Nothing to remember — the note was empty.";
+        } else if (noteContent.length > MEMORY_NOTE_CHAR_LIMIT) {
+          addMsg = `Memory note too long (${noteContent.length} chars, max ${MEMORY_NOTE_CHAR_LIMIT}).`;
+        } else if (state.memoryNotes.length >= MEMORY_NOTES_CAP) {
+          addMsg = `Memory notes are full (${MEMORY_NOTES_CAP} max). Delete a note in Settings or via "delete memory N".`;
+        } else {
+          dispatch({ type: "ADD_MEMORY_NOTE", payload: noteContent });
+          addAudit({
+            eventType: "memory_note_added",
+            source: "command_input",
+            summary: "Memory note added via command.",
+            details: `chars=${noteContent.length}`,
+            severity: "info",
+          });
+          addMsg = "Memory note saved.";
+        }
+        dispatch({ type: "SET_COMMAND_RESPONSE", payload: addMsg });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: addMsg, createdAt: now(), completedAt: now() },
+        });
+        break;
+      }
+
+      case "list_memory_notes": {
+        const listResponse =
+          state.memoryNotes.length === 0
+            ? "No memory notes saved."
+            : `Memory notes (${state.memoryNotes.length}):\n${state.memoryNotes.map((n, i) => `${i + 1}. ${n.content}`).join("\n")}`;
+        dispatch({ type: "SET_COMMAND_RESPONSE", payload: listResponse });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: listResponse, createdAt: now(), completedAt: now() },
+        });
+        break;
+      }
+
+      case "delete_memory_note": {
+        const noteIndex = typeof route.payload?.noteIndex === "number" ? route.payload.noteIndex : 0;
+        const targetNote = noteIndex >= 1 && noteIndex <= state.memoryNotes.length ? state.memoryNotes[noteIndex - 1] : null;
+        let deleteMsg: string;
+        if (!targetNote) {
+          deleteMsg =
+            state.memoryNotes.length === 0
+              ? "No memory notes saved."
+              : `No note at position ${noteIndex}. You have ${state.memoryNotes.length} memory note${state.memoryNotes.length === 1 ? "" : "s"}.`;
+        } else {
+          dispatch({ type: "DELETE_MEMORY_NOTE", payload: targetNote.id });
+          addAudit({
+            eventType: "memory_note_deleted",
+            source: "command_input",
+            summary: "Memory note deleted via command.",
+            details: `note_id=${targetNote.id} index=${noteIndex}`,
+            severity: "info",
+          });
+          deleteMsg = `Deleted memory note ${noteIndex}.`;
+        }
+        dispatch({ type: "SET_COMMAND_RESPONSE", payload: deleteMsg });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: deleteMsg, createdAt: now(), completedAt: now() },
+        });
+        break;
+      }
+
+      case "request_clear_memory_notes": {
+        let clearPromptMsg: string;
+        if (state.memoryNotes.length === 0) {
+          clearPromptMsg = "No memory notes to clear.";
+        } else {
+          pendingMemoryClearRef.current = true;
+          if (pendingMemoryClearTimerRef.current) clearTimeout(pendingMemoryClearTimerRef.current);
+          pendingMemoryClearTimerRef.current = setTimeout(() => {
+            pendingMemoryClearRef.current = false;
+          }, 30_000);
+          const n = state.memoryNotes.length;
+          clearPromptMsg = `This will delete all ${n} memory note${n === 1 ? "" : "s"}. Type "confirm clear memory" to continue.`;
+        }
+        dispatch({ type: "SET_COMMAND_RESPONSE", payload: clearPromptMsg });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: clearPromptMsg, createdAt: now(), completedAt: now() },
+        });
+        break;
+      }
+
+      case "confirm_clear_memory_notes": {
+        let confirmedMsg: string;
+        if (!pendingMemoryClearRef.current) {
+          confirmedMsg = "No memory clear was pending.";
+        } else {
+          pendingMemoryClearRef.current = false;
+          if (pendingMemoryClearTimerRef.current) {
+            clearTimeout(pendingMemoryClearTimerRef.current);
+            pendingMemoryClearTimerRef.current = null;
+          }
+          const countCleared = state.memoryNotes.length;
+          dispatch({ type: "CLEAR_MEMORY_NOTES" });
+          addAudit({
+            eventType: "memory_notes_cleared",
+            source: "command_input",
+            summary: "All memory notes cleared via command.",
+            details: `count=${countCleared}`,
+            severity: "info",
+          });
+          confirmedMsg = `Cleared ${countCleared} memory note${countCleared === 1 ? "" : "s"}.`;
+        }
+        dispatch({ type: "SET_COMMAND_RESPONSE", payload: confirmedMsg });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: confirmedMsg, createdAt: now(), completedAt: now() },
+        });
         break;
       }
 

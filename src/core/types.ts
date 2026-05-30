@@ -236,6 +236,11 @@ export type CommandIntent =
   | "create_test_mission"
   | "approve_test_action"
   | "reject_test_action"
+  | "add_memory_note"
+  | "list_memory_notes"
+  | "delete_memory_note"
+  | "request_clear_memory_notes"
+  | "confirm_clear_memory_notes"
   | "unknown";
 
 export interface CommandRouteResult {

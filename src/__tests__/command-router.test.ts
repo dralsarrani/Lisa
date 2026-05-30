@@ -317,3 +317,148 @@ describe("routeCommand — response field", () => {
     }
   });
 });
+
+// ─── Memory commands — add_memory_note ───────────────────────────────────────
+
+describe("routeCommand — add_memory_note", () => {
+  it("routes 'remember that I prefer TypeScript over JavaScript'", () => {
+    const r = routeCommand("remember that I prefer TypeScript over JavaScript");
+    expect(r.intent).toBe("add_memory_note");
+    expect(r.payload?.noteContent).toBe("I prefer TypeScript over JavaScript");
+  });
+
+  it("routes 'remember I prefer TypeScript' (without 'that')", () => {
+    const r = routeCommand("remember I prefer TypeScript");
+    expect(r.intent).toBe("add_memory_note");
+    expect(r.payload?.noteContent).toBe("I prefer TypeScript");
+  });
+
+  it("routes 'note that my preferred editor is VS Code'", () => {
+    const r = routeCommand("note that my preferred editor is VS Code");
+    expect(r.intent).toBe("add_memory_note");
+    expect(r.payload?.noteContent).toBe("my preferred editor is VS Code");
+  });
+
+  it("routes 'save memory: I use Windows'", () => {
+    const r = routeCommand("save memory: I use Windows");
+    expect(r.intent).toBe("add_memory_note");
+    expect(r.payload?.noteContent).toBe("I use Windows");
+  });
+
+  it("routes 'add memory: I prefer concise answers'", () => {
+    const r = routeCommand("add memory: I prefer concise answers");
+    expect(r.intent).toBe("add_memory_note");
+    expect(r.payload?.noteContent).toBe("I prefer concise answers");
+  });
+
+  it("routes 'Lisa, remember that my main project is AUTO'", () => {
+    const r = routeCommand("Lisa, remember that my main project is AUTO");
+    expect(r.intent).toBe("add_memory_note");
+    expect(r.payload?.noteContent).toBe("my main project is AUTO");
+  });
+
+  it("preserves original case of note content", () => {
+    const r = routeCommand("remember that I use TypeScript and React");
+    expect(r.payload?.noteContent).toBe("I use TypeScript and React");
+  });
+
+  it("has high confidence", () => {
+    expect(routeCommand("remember that I prefer dark mode").confidence).toBe("high");
+  });
+});
+
+// ─── Memory commands — list_memory_notes ─────────────────────────────────────
+
+describe("routeCommand — list_memory_notes", () => {
+  it("routes 'list memory notes'", () => {
+    expect(routeCommand("list memory notes").intent).toBe("list_memory_notes");
+  });
+
+  it("routes 'show memory notes'", () => {
+    expect(routeCommand("show memory notes").intent).toBe("list_memory_notes");
+  });
+
+  it("routes 'what do you remember'", () => {
+    expect(routeCommand("what do you remember").intent).toBe("list_memory_notes");
+  });
+
+  it("routes 'what memory notes do you have'", () => {
+    expect(routeCommand("what memory notes do you have").intent).toBe("list_memory_notes");
+  });
+
+  it("routes 'memory notes'", () => {
+    expect(routeCommand("memory notes").intent).toBe("list_memory_notes");
+  });
+
+  it("routes 'Lisa, list memory notes'", () => {
+    expect(routeCommand("Lisa, list memory notes").intent).toBe("list_memory_notes");
+  });
+});
+
+// ─── Memory commands — delete_memory_note ────────────────────────────────────
+
+describe("routeCommand — delete_memory_note", () => {
+  it("routes 'delete memory 1' with noteIndex=1", () => {
+    const r = routeCommand("delete memory 1");
+    expect(r.intent).toBe("delete_memory_note");
+    expect(r.payload?.noteIndex).toBe(1);
+  });
+
+  it("routes 'forget memory 1'", () => {
+    const r = routeCommand("forget memory 1");
+    expect(r.intent).toBe("delete_memory_note");
+    expect(r.payload?.noteIndex).toBe(1);
+  });
+
+  it("routes 'remove memory 3' with noteIndex=3", () => {
+    const r = routeCommand("remove memory 3");
+    expect(r.intent).toBe("delete_memory_note");
+    expect(r.payload?.noteIndex).toBe(3);
+  });
+
+  it("routes 'Lisa, delete memory 2' with noteIndex=2", () => {
+    const r = routeCommand("Lisa, delete memory 2");
+    expect(r.intent).toBe("delete_memory_note");
+    expect(r.payload?.noteIndex).toBe(2);
+  });
+});
+
+// ─── Memory commands — request_clear_memory_notes ────────────────────────────
+
+describe("routeCommand — request_clear_memory_notes", () => {
+  it("routes 'clear memory notes'", () => {
+    expect(routeCommand("clear memory notes").intent).toBe("request_clear_memory_notes");
+  });
+
+  it("routes 'clear all memory notes'", () => {
+    expect(routeCommand("clear all memory notes").intent).toBe("request_clear_memory_notes");
+  });
+
+  it("routes 'delete all memory notes'", () => {
+    expect(routeCommand("delete all memory notes").intent).toBe("request_clear_memory_notes");
+  });
+
+  it("response instructs user to confirm", () => {
+    expect(routeCommand("clear memory notes").response).toContain("confirm clear memory");
+  });
+});
+
+// ─── Memory commands — confirm_clear_memory_notes ────────────────────────────
+
+describe("routeCommand — confirm_clear_memory_notes", () => {
+  it("routes 'confirm clear memory'", () => {
+    expect(routeCommand("confirm clear memory").intent).toBe("confirm_clear_memory_notes");
+  });
+
+  it("routes 'Lisa, confirm clear memory'", () => {
+    expect(routeCommand("Lisa, confirm clear memory").intent).toBe("confirm_clear_memory_notes");
+  });
+
+  it("bare 'confirm' still routes to approve_test_action", () => {
+    expect(routeCommand("confirm").intent).toBe("approve_test_action");
+  });
+
+  it("has high confidence", () => {
+    expect(routeCommand("confirm clear memory").confidence).toBe("high");
+  });
+});

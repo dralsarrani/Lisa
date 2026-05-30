@@ -77,6 +77,9 @@ describe("buildLisaSystemPrompt — hard action constraint", () => {
   it("provides a step-by-step guidance fallback phrase", () => {
     expect(buildLisaSystemPrompt().toLowerCase()).toContain("guide you step by step");
   });
+  it("declares memory commands are handled by deterministic app logic", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("memory note commands");
+  });
 });
 
 // ─── trimConversationHistory ──────────────────────────────────────────────────
