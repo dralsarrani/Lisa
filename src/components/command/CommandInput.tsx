@@ -8,6 +8,7 @@ import { fetchRuntimeHealth } from "../../core/runtime-health";
 import { buildOllamaMessages, trimConversationHistory } from "../../core/llm-context";
 import type { LisaConversationTurn } from "../../core/llm-context";
 import { MEMORY_NOTES_CAP, MEMORY_NOTE_CHAR_LIMIT } from "../../core/types";
+import { classifyOllamaError } from "../../core/ollama-error";
 import "./CommandInput.css";
 
 const SUGGESTIONS = [
@@ -241,13 +242,14 @@ export const CommandInput: React.FC = () => {
             messages: messages.map((m) => ({ role: m.role, content: m.content })),
           }).catch((err: unknown) => {
             const errMsg = err instanceof Error ? err.message : String(err);
+            const friendlyMsg = classifyOllamaError(errMsg);
             cleanup();
             dispatch({ type: "SET_ORB_STATE", payload: "error" });
             dispatch({
               type: "UPDATE_INTERACTION",
-              payload: { id: interactionId, status: "failed", error: errMsg, completedAt: now() },
+              payload: { id: interactionId, status: "failed", error: friendlyMsg, completedAt: now() },
             });
-            dispatch({ type: "SET_COMMAND_RESPONSE", payload: `LLM stream failed: ${errMsg}` });
+            dispatch({ type: "SET_COMMAND_RESPONSE", payload: `LLM stream failed: ${friendlyMsg}` });
             addAudit({
               eventType: "llm_stream_failed",
               source: "command_input",

@@ -5,15 +5,36 @@ import { LISA_MODES } from "../../core/mode-store";
 import { useLisa } from "../../app/useLisa";
 import "./SettingsPanel.css";
 
+interface OllamaModelInfo {
+  name: string;
+  size?: number;
+}
+
+interface ModelTestResult {
+  success: boolean;
+  latency_ms: number;
+  error?: string;
+}
+
+const RECOMMENDED_MODELS = ["llama3.2:1b", "qwen2.5-coder:1.5b", "deepseek-r1:1.5b"];
+const HEAVY_MODEL_BYTES = 4_000_000_000;
+
+function formatModelSize(bytes: number): string {
+  if (bytes >= 1_000_000_000) return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
+  return `${(bytes / 1_000_000).toFixed(0)} MB`;
+}
+
 interface SettingsPanelProps {
   settings: LisaSettings;
 }
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
   const { state, dispatch, addAudit } = useLisa();
-  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [availableModels, setAvailableModels] = useState<OllamaModelInfo[]>([]);
   const [modelsFetching, setModelsFetching] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
+  const [modelTestResult, setModelTestResult] = useState<ModelTestResult | null>(null);
+  const [modelTestLoading, setModelTestLoading] = useState(false);
   // null = not yet probed, true = reachable, false = unreachable
   const [ollamaReachable, setOllamaReachable] = useState<boolean | null>(null);
   const [confirmingClear, setConfirmingClear] = useState(false);
@@ -86,25 +107,30 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
 
     try {
       const { invoke } = await import("@tauri-apps/api/core");
-      const result = await invoke<{ models: Array<{ name: string }>; error: string | null }>(
-        "list_ollama_models"
-      );
+      const result = await invoke<{
+        models: Array<{ name: string; size?: number }>;
+        error: string | null;
+      }>("list_ollama_models");
 
       if (result.error) {
         setModelsError(result.error);
         setAvailableModels([]);
         setOllamaReachable(false);
       } else {
-        const names = result.models.map((m) => m.name);
-        setAvailableModels(names);
+        const models: OllamaModelInfo[] = result.models.map((m) => ({
+          name: m.name,
+          size: m.size,
+        }));
+        setAvailableModels(models);
         setOllamaReachable(true);
+        setModelTestResult(null);
 
         const currentModel = settings.ollamaModel;
-        if (currentModel && !names.includes(currentModel)) {
-          // Previously selected model is no longer installed — auto-select first or clear.
-          dispatch({ type: "SET_SETTINGS", payload: { ollamaModel: names[0] ?? "" } });
-        } else if (!currentModel && names.length > 0) {
-          dispatch({ type: "SET_SETTINGS", payload: { ollamaModel: names[0] } });
+        const modelNames = models.map((m) => m.name);
+        if (currentModel && !modelNames.includes(currentModel)) {
+          dispatch({ type: "SET_SETTINGS", payload: { ollamaModel: modelNames[0] ?? "" } });
+        } else if (!currentModel && modelNames.length > 0) {
+          dispatch({ type: "SET_SETTINGS", payload: { ollamaModel: modelNames[0] } });
         }
       }
     } catch (err) {
@@ -124,6 +150,49 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
   // fetchModels is stable (useCallback); settings.enableLocalAi is the real dependency.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.enableLocalAi]);
+
+  async function testModel() {
+    const model = settings.ollamaModel;
+    if (!model || modelTestLoading) return;
+    const isInTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    if (!isInTauri) {
+      setModelTestResult({ success: false, latency_ms: 0, error: "Model test requires the desktop app." });
+      return;
+    }
+    setModelTestLoading(true);
+    setModelTestResult(null);
+    addAudit({
+      eventType: "ollama_model_test_started",
+      source: "settings_panel",
+      summary: `Model test started — model: "${model}"`,
+      severity: "info",
+    });
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const result = await invoke<ModelTestResult>("test_ollama_model", { model });
+      setModelTestResult(result);
+      addAudit({
+        eventType: result.success ? "ollama_model_test_passed" : "ollama_model_test_failed",
+        source: "settings_panel",
+        summary: result.success
+          ? `Model test passed — model: "${model}" in ${result.latency_ms}ms`
+          : `Model test failed — model: "${model}" in ${result.latency_ms}ms`,
+        details: result.error ?? undefined,
+        severity: result.success ? "info" : "error",
+      });
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      setModelTestResult({ success: false, latency_ms: 0, error });
+      addAudit({
+        eventType: "ollama_model_test_failed",
+        source: "settings_panel",
+        summary: `Model test failed — model: "${model}"`,
+        details: error,
+        severity: "error",
+      });
+    }
+    setModelTestLoading(false);
+  }
 
   function handleClearHistory() {
     if (!confirmingClear) {
@@ -293,20 +362,27 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
                 <select
                   className="ai-model-select"
                   value={settings.ollamaModel}
-                  onChange={(e) =>
-                    dispatch({ type: "SET_SETTINGS", payload: { ollamaModel: e.target.value } })
-                  }
+                  onChange={(e) => {
+                    dispatch({ type: "SET_SETTINGS", payload: { ollamaModel: e.target.value } });
+                    setModelTestResult(null);
+                  }}
                 >
                   {!settings.ollamaModel && (
                     <option value="" disabled>
                       — select a model —
                     </option>
                   )}
-                  {availableModels.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
+                  {availableModels.map(({ name, size }) => {
+                    const isRec = RECOMMENDED_MODELS.includes(name);
+                    const isHeavy = size !== undefined && size > HEAVY_MODEL_BYTES;
+                    const sizeStr = size !== undefined ? ` (${formatModelSize(size)})` : "";
+                    const badge = isRec ? " ⭐" : isHeavy ? " ⚠" : "";
+                    return (
+                      <option key={name} value={name}>
+                        {name}{sizeStr}{badge}
+                      </option>
+                    );
+                  })}
                 </select>
               )}
             </div>
@@ -338,7 +414,27 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
               </div>
             )}
 
-            <div style={{ marginTop: "6px" }}>
+            {(() => {
+              const selected = availableModels.find((m) => m.name === settings.ollamaModel);
+              const isHeavy = selected?.size !== undefined && selected.size > HEAVY_MODEL_BYTES;
+              const isRec = selected ? RECOMMENDED_MODELS.includes(selected.name) : false;
+              return (
+                <>
+                  {isRec && (
+                    <div className="ai-model-hint ai-model-hint-good">
+                      ⭐ Recommended — fast, low memory usage.
+                    </div>
+                  )}
+                  {isHeavy && !isRec && (
+                    <div className="ai-model-hint ai-model-hint-warn">
+                      ⚠ Large model — requires significant RAM. If it fails to load, try llama3.2:1b, qwen2.5-coder:1.5b, or deepseek-r1:1.5b.
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+
+            <div style={{ marginTop: "6px", display: "flex", gap: "6px", flexWrap: "wrap" }}>
               <button
                 className="btn ai-refresh-btn"
                 onClick={fetchModels}
@@ -346,7 +442,26 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
               >
                 {modelsFetching ? "Refreshing…" : "Refresh Models"}
               </button>
+              {ollamaReachable === true && settings.ollamaModel && (
+                <button
+                  className="btn ai-test-btn"
+                  onClick={testModel}
+                  disabled={modelTestLoading}
+                >
+                  {modelTestLoading ? "Testing…" : "Test Model"}
+                </button>
+              )}
             </div>
+
+            {modelTestResult && (
+              <div
+                className={`ai-test-result ${modelTestResult.success ? "ai-test-result-pass" : "ai-test-result-fail"}`}
+              >
+                {modelTestResult.success
+                  ? `✓ Model responded in ${modelTestResult.latency_ms}ms`
+                  : `✗ ${modelTestResult.error ?? "Test failed"}`}
+              </div>
+            )}
 
             <div className="settings-field" style={{ marginTop: "10px" }}>
               <span className="settings-field-label">Context turns</span>

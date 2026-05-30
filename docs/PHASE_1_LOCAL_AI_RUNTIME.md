@@ -424,6 +424,114 @@ Phase 1G wires the Memory Notes system (added in Phase 1F) into the command bar 
 
 ---
 
+---
+
+# Lisa Phase 1H — Local AI Runtime & Model Management Hardening
+
+## What Phase 1H Adds
+
+Phase 1H makes the Ollama runtime UX reliable when models fail, are too large, disappear, or aren't installed. It adds friendly error classification, model size display with recommendations, heavy-model warnings, and a non-invasive Test Model button.
+
+## Error Classification
+
+Both the Rust backend and TypeScript frontend classify raw Ollama error strings into friendly, actionable messages:
+
+| Raw error signal | Friendly message |
+|---|---|
+| `unable to allocate` / `llama runner process has terminated` / `out of memory` | Memory failure + suggests llama3.2:1b, qwen2.5-coder:1.5b, deepseek-r1:1.5b |
+| `model not found` / `pull model manifest` | Install guidance: `ollama pull <model>` |
+| `connection refused` / `not reachable` / `failed to connect` | Start guidance: `ollama serve` |
+| `no space left` / `disk full` | Disk space guidance |
+| `timed out` / `deadline exceeded` | Timeout guidance with smaller-model suggestion |
+| `response parse error` / `invalid json` | Restart Ollama guidance |
+| Anything else | Passed through unchanged |
+
+**Rust:** `classify_ollama_error(raw: &str) -> String` in `src-tauri/src/lib.rs`
+
+Applied to: HTTP 5xx errors in `send_ollama_chat` and `stream_ollama_chat`, in-stream `error` field chunks.
+
+**TypeScript:** `classifyOllamaError(raw: string): string` in `src/core/ollama-error.ts`
+
+Applied to: `.catch` path on `invoke("stream_ollama_chat")` in `CommandInput.tsx`.
+
+## Model Selector Hardening
+
+- **Size display:** `OllamaModel.size` (bytes) now preserved through the full stack — Rust → IPC → `OllamaModelInfo` → `<select>` options show `(X.X GB)`.
+- **Recommended badge:** ⭐ for `llama3.2:1b`, `qwen2.5-coder:1.5b`, `deepseek-r1:1.5b`.
+- **Heavy-model warning:** ⚠ badge + inline guidance hint for models > 4 GB.
+- **Missing model auto-recovery:** if the previously selected model is no longer installed, Settings auto-selects the first available model.
+
+## Test Model Button
+
+A "Test Model" button appears in Settings → Local AI Runtime when Ollama is online and a model is selected.
+
+**Behavior:**
+- Sends the minimal prompt `"Reply with OK."` via `test_ollama_model` Tauri command (15 s timeout).
+- Shows `✓ Model responded in Xms` on success or `✗ <friendly error>` on failure.
+- Result is displayed inline in Settings only — nothing is added to conversation history, memory notes, Console output, or LLM context.
+
+**Audit events emitted (no prompt/response content logged):**
+- `ollama_model_test_started` — model name only
+- `ollama_model_test_passed` — model name + latency_ms
+- `ollama_model_test_failed` — model name + latency_ms + error category
+
+## Runtime Health Distinction
+
+- `ollamaStatus: "available"` — TCP port 11434 is open (Ollama process running).
+- Model-level failures (load error, OOM) are surfaced via the Test Model button and Console error messages, not the runtime health panel.
+
+## New Files
+
+| File | Purpose |
+|---|---|
+| `src/core/ollama-error.ts` | Frontend Ollama error classifier |
+| `src/__tests__/ollama-error.test.ts` | 15 frontend classifier tests |
+
+## Changes to Existing Files
+
+| File | Change |
+|---|---|
+| `src-tauri/src/lib.rs` | `classify_ollama_error()`, `test_ollama_model` command, `OLLAMA_MODEL_TEST_TIMEOUT_SECS=15`, `OllamaModelTestResult` struct, 14 new Rust tests |
+| `src/core/types.ts` | 3 new `AuditEventType` values |
+| `src/components/command/CommandInput.tsx` | Import + apply `classifyOllamaError` in stream `.catch` path |
+| `src/components/settings/SettingsPanel.tsx` | Size-aware model list, recommended/heavy badges, Test Model button + result, `testModel()` function |
+| `src/components/settings/SettingsPanel.css` | `.ai-test-btn`, `.ai-model-hint`, `.ai-test-result` styles |
+
+## PowerShell Diagnostics
+
+If Ollama fails to load a model, run these from a PowerShell terminal to diagnose:
+
+```powershell
+# Check if Ollama is running
+Test-NetConnection -ComputerName 127.0.0.1 -Port 11434
+
+# List installed models and their sizes
+ollama list
+
+# Pull a recommended small model
+ollama pull llama3.2:1b
+
+# Run Ollama in a visible terminal to see error output
+ollama serve
+
+# Check available system RAM
+Get-CimInstance Win32_PhysicalMemory | Measure-Object Capacity -Sum | Select-Object -ExpandProperty Sum | ForEach-Object { "$([math]::Round($_ / 1GB, 1)) GB RAM total" }
+
+# Check disk space
+Get-PSDrive C | Select-Object Used, Free
+```
+
+**What is NOT in Phase 1H:**
+- Voice, STT/TTS, wake word, agents, tool execution, screen awareness, OCR, desktop control
+- Arbitrary Ollama host URLs (localhost only, enforced)
+- Cloud AI providers
+- Orb redesign or whole UI redesign
+- Memory-note or conversation-history semantics changes
+
+**Tests:** 246 frontend tests + 32 Rust tests passing.
+
+---
+
 ## What's Next — Future Phase Candidates
 
 - **Voice shell** — STT (Whisper) + TTS wired to the LLM pipeline

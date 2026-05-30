@@ -158,7 +158,10 @@ export type AuditEventType =
   | "clear_conversation_history"
   | "memory_note_added"
   | "memory_note_deleted"
-  | "memory_notes_cleared";
+  | "memory_notes_cleared"
+  | "ollama_model_test_started"
+  | "ollama_model_test_passed"
+  | "ollama_model_test_failed";
 
 export interface AuditEvent {
   id: string;

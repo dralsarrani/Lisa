@@ -15,8 +15,10 @@ const OLLAMA_CHAT_URL: &str = "http://127.0.0.1:11434/api/chat";
 const OLLAMA_TAGS_URL: &str = "http://127.0.0.1:11434/api/tags";
 
 // Short timeout for model discovery; long timeout for generation (first load can be slow).
+// Model test uses a dedicated short timeout to fail fast without blocking the UI.
 const OLLAMA_TAGS_TIMEOUT_SECS: u64 = 5;
 const OLLAMA_CHAT_TIMEOUT_SECS: u64 = 180;
+const OLLAMA_MODEL_TEST_TIMEOUT_SECS: u64 = 15;
 
 // ─── Data Types ──────────────────────────────────────────────────────────────
 
@@ -185,6 +187,13 @@ pub struct AppStateWriteResult {
     pub path: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct OllamaModelTestResult {
+    pub success: bool,
+    pub latency_ms: u64,
+    pub error: Option<String>,
+}
+
 // ─── Commands ─────────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -323,6 +332,68 @@ fn check_docker_safe() -> String {
     }
 }
 
+/// Maps raw Ollama error strings to user-friendly messages with actionable guidance.
+/// Matched case-insensitively against the full error text.
+fn classify_ollama_error(raw: &str) -> String {
+    let lower = raw.to_lowercase();
+
+    // Memory allocation failure — model too large for available RAM/VRAM.
+    if lower.contains("unable to allocate")
+        || lower.contains("failed to allocate")
+        || lower.contains("llama runner process has terminated")
+        || lower.contains("out of memory")
+        || lower.contains("cannot allocate")
+    {
+        return "This model failed to load because Ollama could not allocate enough memory. \
+                Try a smaller model such as llama3.2:1b, qwen2.5-coder:1.5b, or deepseek-r1:1.5b."
+            .to_string();
+    }
+
+    // Model not installed locally.
+    if lower.contains("model not found") || lower.contains("pull model manifest") {
+        return "Model not found. Make sure it is installed by running: ollama pull <model-name>"
+            .to_string();
+    }
+
+    // Ollama process not running or port not open.
+    if lower.contains("connection refused")
+        || lower.contains("tcp connect error")
+        || lower.contains("not reachable")
+        || lower.contains("failed to connect")
+    {
+        return "Ollama is not running. Start it with: ollama serve".to_string();
+    }
+
+    // Disk full — model cannot be loaded or swapped.
+    if lower.contains("no space left") || lower.contains("disk full") || lower.contains("not enough space") {
+        return "Ollama could not load the model because disk space is insufficient. \
+                Free up disk space and try again."
+            .to_string();
+    }
+
+    // Request or connection timeout.
+    if lower.contains("timed out") || lower.contains("deadline exceeded") {
+        return "Local model did not respond before the timeout. \
+                First responses can be slow while Ollama loads the model. \
+                Try again, choose a smaller model, or restart Ollama."
+            .to_string();
+    }
+
+    // Malformed or unexpected response body.
+    if lower.contains("parse error")
+        || lower.contains("invalid json")
+        || lower.contains("unexpected token")
+        || lower.contains("response parse error")
+    {
+        return "Ollama returned an unexpected response. \
+                The model may have failed to load correctly. Try restarting Ollama."
+            .to_string();
+    }
+
+    // Unknown — pass through as-is so nothing is silently swallowed.
+    raw.to_string()
+}
+
 /// Walks the reqwest error source chain and returns a concise diagnostic string.
 /// Puts the innermost (root) cause first so it is not clipped by the UI.
 fn reqwest_error_detail(e: &reqwest::Error) -> String {
@@ -450,9 +521,7 @@ async fn send_ollama_chat(model: String, messages: Vec<OllamaChatMessage>) -> Ol
         let body_text = resp.text().await.unwrap_or_default();
         return OllamaChatResult {
             response: None,
-            error: Some(format!(
-                "Ollama HTTP {status} from {OLLAMA_CHAT_URL}: {body_text}"
-            )),
+            error: Some(classify_ollama_error(&body_text)),
             model,
             latency_ms,
         };
@@ -467,9 +536,9 @@ async fn send_ollama_chat(model: String, messages: Vec<OllamaChatMessage>) -> Ol
         },
         Err(e) => OllamaChatResult {
             response: None,
-            error: Some(format!(
-                "Ollama response parse error at {OLLAMA_CHAT_URL}: {e}"
-            )),
+            error: Some(classify_ollama_error(&format!(
+                "response parse error: {e}"
+            ))),
             model,
             latency_ms,
         },
@@ -525,9 +594,7 @@ async fn stream_ollama_chat(
     if !status.is_success() {
         let body_text = resp.text().await.unwrap_or_default();
         cancel.end_stream();
-        return Err(format!(
-            "Ollama HTTP {status} from {OLLAMA_CHAT_URL}: {body_text}"
-        ));
+        return Err(classify_ollama_error(&body_text));
     }
 
     let mut byte_stream = resp.bytes_stream();
@@ -581,7 +648,7 @@ async fn stream_ollama_chat(
                                 "lisa-stream-error",
                                 StreamErrorPayload {
                                     id: interaction_id.clone(),
-                                    error: err_msg,
+                                    error: classify_ollama_error(&err_msg),
                                     latency_ms: start.elapsed().as_millis() as u64,
                                 },
                             );
@@ -635,6 +702,96 @@ async fn stream_ollama_chat(
     Ok(())
 }
 
+/// Sends a minimal "Reply with OK." prompt to verify a model loads and responds.
+/// Result is returned to the frontend for display only — nothing is added to
+/// conversation history, memory notes, or audit logs from the Rust side.
+#[tauri::command]
+async fn test_ollama_model(model: String) -> OllamaModelTestResult {
+    let start = std::time::Instant::now();
+
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(OLLAMA_MODEL_TEST_TIMEOUT_SECS))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return OllamaModelTestResult {
+                success: false,
+                latency_ms: 0,
+                error: Some(format!("HTTP client build error: {e}")),
+            }
+        }
+    };
+
+    let messages = vec![OllamaChatMessage {
+        role: "user".to_string(),
+        content: "Reply with OK.".to_string(),
+    }];
+
+    let body = OllamaChatRequest {
+        model: &model,
+        messages: &messages,
+        stream: false,
+        options: OllamaChatOptions {
+            num_predict: 10,
+            temperature: 0.0,
+            top_p: 1.0,
+        },
+    };
+
+    let resp = match client.post(OLLAMA_CHAT_URL).json(&body).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            let latency_ms = start.elapsed().as_millis() as u64;
+            let raw = if e.is_timeout() {
+                "timed out".to_string()
+            } else {
+                reqwest_error_detail(&e)
+            };
+            return OllamaModelTestResult {
+                success: false,
+                latency_ms,
+                error: Some(classify_ollama_error(&raw)),
+            };
+        }
+    };
+
+    let status = resp.status();
+    let latency_ms = start.elapsed().as_millis() as u64;
+
+    if !status.is_success() {
+        let body_text = resp.text().await.unwrap_or_default();
+        return OllamaModelTestResult {
+            success: false,
+            latency_ms,
+            error: Some(classify_ollama_error(&body_text)),
+        };
+    }
+
+    match resp.json::<OllamaRawChatResponse>().await {
+        Ok(raw) => {
+            if raw.message.is_some() {
+                OllamaModelTestResult {
+                    success: true,
+                    latency_ms,
+                    error: None,
+                }
+            } else {
+                OllamaModelTestResult {
+                    success: false,
+                    latency_ms,
+                    error: Some(classify_ollama_error("response parse error: empty message")),
+                }
+            }
+        }
+        Err(e) => OllamaModelTestResult {
+            success: false,
+            latency_ms,
+            error: Some(classify_ollama_error(&format!("response parse error: {e}"))),
+        },
+    }
+}
+
 // ─── App Entry ────────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -652,6 +809,7 @@ pub fn run() {
             send_ollama_chat,
             stream_ollama_chat,
             cancel_ollama_stream,
+            test_ollama_model,
         ])
         .run(tauri::generate_context!())
         .expect("Error while running Lisa application");
@@ -844,6 +1002,111 @@ mod tests {
         let cancelled = state.cancel_if_active("req-2");
         assert!(cancelled);
         assert!(state.is_cancelled());
+    }
+
+    // ─── classify_ollama_error ────────────────────────────────────────────────
+
+    #[test]
+    fn classify_ollama_error_memory_allocation() {
+        let msg = classify_ollama_error("unable to allocate CPU buffer");
+        assert!(msg.contains("could not allocate enough memory"), "got: {msg}");
+        assert!(msg.contains("llama3.2:1b"), "got: {msg}");
+        assert!(msg.contains("qwen2.5-coder:1.5b"), "got: {msg}");
+        assert!(msg.contains("deepseek-r1:1.5b"), "got: {msg}");
+    }
+
+    #[test]
+    fn classify_ollama_error_llama_runner_terminated() {
+        let msg = classify_ollama_error("llama runner process has terminated");
+        assert!(msg.contains("could not allocate enough memory"), "got: {msg}");
+    }
+
+    #[test]
+    fn classify_ollama_error_out_of_memory() {
+        let msg = classify_ollama_error("out of memory: kill process");
+        assert!(msg.contains("could not allocate enough memory"), "got: {msg}");
+    }
+
+    #[test]
+    fn classify_ollama_error_model_not_found() {
+        let msg = classify_ollama_error("model not found");
+        assert!(msg.contains("ollama pull"), "got: {msg}");
+    }
+
+    #[test]
+    fn classify_ollama_error_pull_manifest() {
+        let msg = classify_ollama_error("pull model manifest: file does not exist");
+        assert!(msg.contains("ollama pull"), "got: {msg}");
+    }
+
+    #[test]
+    fn classify_ollama_error_connection_refused() {
+        let msg = classify_ollama_error("connection refused");
+        assert!(msg.contains("ollama serve"), "got: {msg}");
+    }
+
+    #[test]
+    fn classify_ollama_error_not_reachable() {
+        let msg = classify_ollama_error("Ollama not reachable at http://127.0.0.1:11434");
+        assert!(msg.contains("ollama serve"), "got: {msg}");
+    }
+
+    #[test]
+    fn classify_ollama_error_disk_space() {
+        let msg = classify_ollama_error("no space left on device");
+        assert!(msg.contains("disk space"), "got: {msg}");
+    }
+
+    #[test]
+    fn classify_ollama_error_timeout() {
+        let msg = classify_ollama_error("request timed out after 15s");
+        assert!(msg.contains("timeout") || msg.contains("slow"), "got: {msg}");
+    }
+
+    #[test]
+    fn classify_ollama_error_malformed_response() {
+        let msg = classify_ollama_error("response parse error: unexpected token");
+        assert!(msg.contains("unexpected response"), "got: {msg}");
+    }
+
+    #[test]
+    fn classify_ollama_error_unknown_passthrough() {
+        let raw = "some truly unknown error 99999";
+        let msg = classify_ollama_error(raw);
+        assert_eq!(msg, raw);
+    }
+
+    #[test]
+    fn classify_ollama_error_case_insensitive() {
+        let msg = classify_ollama_error("UNABLE TO ALLOCATE CPU BUFFER");
+        assert!(msg.contains("could not allocate enough memory"), "got: {msg}");
+    }
+
+    #[test]
+    fn ollama_model_test_result_serializes() {
+        let result = OllamaModelTestResult {
+            success: true,
+            latency_ms: 423,
+            error: None,
+        };
+        let json = serde_json::to_string(&result).expect("must serialize");
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(v["success"], true);
+        assert_eq!(v["latency_ms"], 423);
+        assert!(v["error"].is_null());
+    }
+
+    #[test]
+    fn ollama_model_test_result_serializes_failure() {
+        let result = OllamaModelTestResult {
+            success: false,
+            latency_ms: 15000,
+            error: Some("Ollama is not running. Start it with: ollama serve".to_string()),
+        };
+        let json = serde_json::to_string(&result).expect("must serialize");
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(v["success"], false);
+        assert!(v["error"].as_str().unwrap().contains("ollama serve"));
     }
 
     #[test]
