@@ -5,11 +5,11 @@ import { createTestMission, applyApprovalDecision } from "../../core/mission-sto
 import { createAuditEvent } from "../../core/audit-store";
 import { getModeDisplayName } from "../../core/mode-store";
 import { fetchRuntimeHealth } from "../../core/runtime-health";
-import { buildOllamaMessages, trimConversationHistory, TOOL_RESULT_CONTEXT_CAP } from "../../core/llm-context";
+import { buildOllamaMessages, trimConversationHistory, filterToolResultsByPolicy, TOOL_RESULT_CONTEXT_CAP } from "../../core/llm-context";
 import type { LisaConversationTurn } from "../../core/llm-context";
 import { MEMORY_NOTES_CAP, MEMORY_NOTE_CHAR_LIMIT } from "../../core/types";
 import { classifyOllamaError } from "../../core/ollama-error";
-import { getToolDefinition, getEnabledToolDefinitions } from "../../core/tool-registry";
+import { getToolDefinition, getEnabledToolDefinitions, getAllToolDefinitions } from "../../core/tool-registry";
 import { detectToolSuggestion, createToolRequestPair } from "../../core/tool-suggestions";
 import type { ToolSuggestion } from "../../core/types";
 import "./CommandInput.css";
@@ -112,14 +112,38 @@ export const CommandInput: React.FC = () => {
       conversationHistoryRef.current,
       Math.max(0, maxContextTurns - 1)
     );
-    const messages = buildOllamaMessages(trimmedHistory, raw, state.memoryNotes, state.toolResults);
-    const injectedResults = state.toolResults.filter((r) => r.outputSummary).slice(-TOOL_RESULT_CONTEXT_CAP);
-    if (injectedResults.length > 0) {
+    const { eligible, excluded, disabled } = filterToolResultsByPolicy(
+      state.toolResults,
+      getAllToolDefinitions(),
+      state.settings.toolResultContextEnabled
+    );
+    const messages = buildOllamaMessages(trimmedHistory, raw, state.memoryNotes, eligible);
+    const actuallyInjected = eligible.filter((r) => r.outputSummary).slice(-TOOL_RESULT_CONTEXT_CAP);
+    if (actuallyInjected.length > 0) {
       addAudit({
         eventType: "llm_tool_context_injected",
         source: "command_input",
-        summary: `Tool result context injected: ${injectedResults.length} result(s)`,
-        details: `count=${injectedResults.length} tool_ids=${injectedResults.map((r) => r.toolId).join(",")}`,
+        summary: `Tool result context injected: ${actuallyInjected.length} result(s)`,
+        details: `count=${actuallyInjected.length} tool_ids=${actuallyInjected.map((r) => r.toolId).join(",")}`,
+        severity: "info",
+      });
+    }
+    if (disabled) {
+      const suppressedCount = state.toolResults.filter((r) => r.outputSummary).length;
+      addAudit({
+        eventType: "llm_tool_context_disabled",
+        source: "command_input",
+        summary: "Tool result context injection suppressed — global setting is off",
+        details: `count=${suppressedCount}`,
+        severity: "info",
+      });
+    }
+    if (excluded.length > 0) {
+      addAudit({
+        eventType: "llm_tool_context_excluded",
+        source: "command_input",
+        summary: `Tool result context excluded by policy: ${excluded.length} result(s)`,
+        details: `count=${excluded.length} tool_ids=${excluded.map((r) => r.toolId).join(",")} reason=policy`,
         severity: "info",
       });
     }

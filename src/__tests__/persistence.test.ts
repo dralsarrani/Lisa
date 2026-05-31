@@ -631,6 +631,108 @@ describe("tool persistence — caps", () => {
   });
 });
 
+// ─── Phase 2E — STATE_VERSION and toolResultContextEnabled ───────────────────
+
+describe("Phase 2E — STATE_VERSION and toolResultContextEnabled defaults", () => {
+  it("STATE_VERSION is 6", () => {
+    expect(STATE_VERSION).toBe(6);
+  });
+
+  it("DEFAULT_SETTINGS.toolResultContextEnabled is true", () => {
+    expect(DEFAULT_SETTINGS.toolResultContextEnabled).toBe(true);
+  });
+
+  it("default state includes toolResultContextEnabled: true", async () => {
+    const state = await loadState();
+    expect(state.settings.toolResultContextEnabled).toBe(true);
+  });
+
+  it("round-trip persists toolResultContextEnabled: false", async () => {
+    await saveState({
+      ...BASE_SAVE,
+      settings: { ...DEFAULT_SETTINGS, toolResultContextEnabled: false },
+      ...EMPTY_TOOLS,
+    });
+    const loaded = await loadState();
+    expect(loaded.settings.toolResultContextEnabled).toBe(false);
+  });
+});
+
+describe("Phase 2E — v5→v6 migration", () => {
+  it("migrates from version 5 and preserves tool collections", async () => {
+    const req = makeToolRequest("req-v5");
+    const res = makeToolResult("res-v5", "req-v5");
+    const apv = makeToolApproval("apv-v5", "req-v5", "approved");
+    localStorage.setItem(
+      "lisa_state_v1",
+      JSON.stringify({
+        version: 5,
+        settings: { activeMode: "focus" },
+        missions: [],
+        approvals: [],
+        auditEvents: [],
+        conversationHistory: [],
+        memoryNotes: [],
+        toolRequests: [req],
+        toolResults: [res],
+        toolApprovals: [apv],
+        savedAt: NOW,
+      })
+    );
+    const state = await loadState();
+    expect(state.version).toBe(STATE_VERSION);
+    expect(state.toolRequests).toHaveLength(1);
+    expect(state.toolResults).toHaveLength(1);
+    expect(state.toolApprovals).toHaveLength(1);
+    expect(state.toolRequests[0].id).toBe("req-v5");
+    expect(state.toolResults[0].id).toBe("res-v5");
+    expect(state.toolApprovals[0].id).toBe("apv-v5");
+  });
+
+  it("v5→v6 migration preserves settings and adds toolResultContextEnabled default", async () => {
+    localStorage.setItem(
+      "lisa_state_v1",
+      JSON.stringify({
+        version: 5,
+        settings: { activeMode: "cyber", developerMode: true },
+        missions: [],
+        approvals: [],
+        auditEvents: [],
+        conversationHistory: [],
+        memoryNotes: [],
+        toolRequests: [],
+        toolResults: [],
+        toolApprovals: [],
+        savedAt: NOW,
+      })
+    );
+    const state = await loadState();
+    expect(state.settings.activeMode).toBe("cyber");
+    expect(state.settings.developerMode).toBe(true);
+    expect(state.settings.toolResultContextEnabled).toBe(true);
+  });
+
+  it("v5→v6 migration with missing tool collections produces empty arrays", async () => {
+    localStorage.setItem(
+      "lisa_state_v1",
+      JSON.stringify({
+        version: 5,
+        settings: {},
+        missions: [],
+        approvals: [],
+        auditEvents: [],
+        conversationHistory: [],
+        memoryNotes: [],
+        savedAt: NOW,
+      })
+    );
+    const state = await loadState();
+    expect(state.toolRequests).toEqual([]);
+    expect(state.toolResults).toEqual([]);
+    expect(state.toolApprovals).toEqual([]);
+  });
+});
+
 describe("tool persistence — validation", () => {
   it("drops tool requests missing required fields", async () => {
     localStorage.setItem(

@@ -151,6 +151,24 @@ function defaultState(): PersistedState {
 }
 
 function migrateState(old: Partial<PersistedState>): PersistedState {
+  // v5 → v6: additive migration — only new field is settings.toolResultContextEnabled.
+  // Preserve all tool collections so approved/pending requests and results survive upgrade.
+  if (old.version === 5) {
+    return {
+      version: STATE_VERSION,
+      settings: { ...DEFAULT_SETTINGS, ...(old.settings ?? {}) },
+      missions: old.missions ?? [],
+      approvals: old.approvals ?? [],
+      auditEvents: (old.auditEvents ?? []).slice(-MAX_AUDIT_EVENTS),
+      conversationHistory: safeConversationHistory(old.conversationHistory),
+      memoryNotes: safeMemoryNotes(old.memoryNotes),
+      toolRequests: safeToolRequests(old.toolRequests),
+      toolResults: safeToolResults(old.toolResults),
+      toolApprovals: safeToolApprovals(old.toolApprovals),
+      savedAt: old.savedAt ?? new Date().toISOString(),
+    };
+  }
+  // versions < 5: tool collections used incompatible data models — reset them.
   return {
     ...defaultState(),
     settings: { ...DEFAULT_SETTINGS, ...(old.settings ?? {}) },

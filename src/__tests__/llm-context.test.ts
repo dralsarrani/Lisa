@@ -4,10 +4,11 @@ import {
   buildOllamaMessages,
   trimConversationHistory,
   formatToolResultsForContext,
+  filterToolResultsByPolicy,
   TOOL_RESULT_CONTEXT_CAP,
   TOOL_RESULT_CONTEXT_SUMMARY_CHAR_LIMIT,
 } from "../core/llm-context";
-import type { LisaConversationTurn, ToolResultContext } from "../core/llm-context";
+import type { LisaConversationTurn, ToolResultContext, ToolContextPolicyEntry } from "../core/llm-context";
 
 // ─── buildLisaSystemPrompt ────────────────────────────────────────────────────
 
@@ -382,5 +383,148 @@ describe("buildLisaSystemPrompt — Phase 2D tool result boundary", () => {
 
   it("forbids inventing tool results when none are present", () => {
     expect(buildLisaSystemPrompt().toLowerCase()).toContain("do not invent or simulate them");
+  });
+});
+
+// ─── Phase 2E — filterToolResultsByPolicy ────────────────────────────────────
+
+function makePolicyEntry(id: string, policy: ToolContextPolicyEntry["contextPolicy"]): ToolContextPolicyEntry {
+  return { id, contextPolicy: policy };
+}
+
+describe("filterToolResultsByPolicy — global toggle disabled", () => {
+  it("returns eligible=[] when enabled is false", () => {
+    const results = [makeToolResult()];
+    const defs = [makePolicyEntry("conversation-stats", "inject")];
+    const { eligible } = filterToolResultsByPolicy(results, defs, false);
+    expect(eligible).toHaveLength(0);
+  });
+
+  it("returns excluded=[] when enabled is false", () => {
+    const results = [makeToolResult()];
+    const defs = [makePolicyEntry("conversation-stats", "inject")];
+    const { excluded } = filterToolResultsByPolicy(results, defs, false);
+    expect(excluded).toHaveLength(0);
+  });
+
+  it("disabled=true when enabled is false and results have summaries", () => {
+    const results = [makeToolResult()];
+    const defs = [makePolicyEntry("conversation-stats", "inject")];
+    const { disabled } = filterToolResultsByPolicy(results, defs, false);
+    expect(disabled).toBe(true);
+  });
+
+  it("disabled=false when enabled is false but no results have summaries", () => {
+    const results = [makeToolResult({ outputSummary: "" })];
+    const defs = [makePolicyEntry("conversation-stats", "inject")];
+    const { disabled } = filterToolResultsByPolicy(results, defs, false);
+    expect(disabled).toBe(false);
+  });
+
+  it("disabled=false when enabled is false and results array is empty", () => {
+    const { disabled } = filterToolResultsByPolicy([], [], false);
+    expect(disabled).toBe(false);
+  });
+});
+
+describe("filterToolResultsByPolicy — inject policy", () => {
+  it("result with inject policy goes to eligible", () => {
+    const results = [makeToolResult({ toolId: "conversation-stats" })];
+    const defs = [makePolicyEntry("conversation-stats", "inject")];
+    const { eligible, excluded } = filterToolResultsByPolicy(results, defs, true);
+    expect(eligible).toHaveLength(1);
+    expect(excluded).toHaveLength(0);
+  });
+
+  it("disabled=false when enabled is true", () => {
+    const results = [makeToolResult()];
+    const defs = [makePolicyEntry("conversation-stats", "inject")];
+    const { disabled } = filterToolResultsByPolicy(results, defs, true);
+    expect(disabled).toBe(false);
+  });
+});
+
+describe("filterToolResultsByPolicy — no_inject policy", () => {
+  it("result with no_inject policy goes to excluded", () => {
+    const results = [makeToolResult({ toolId: "conversation-stats" })];
+    const defs = [makePolicyEntry("conversation-stats", "no_inject")];
+    const { eligible, excluded } = filterToolResultsByPolicy(results, defs, true);
+    expect(eligible).toHaveLength(0);
+    expect(excluded).toHaveLength(1);
+  });
+});
+
+describe("filterToolResultsByPolicy — inject_redacted treated as no_inject", () => {
+  it("result with inject_redacted policy goes to excluded (Phase 2E: reserved)", () => {
+    const results = [makeToolResult({ toolId: "conversation-stats" })];
+    const defs = [makePolicyEntry("conversation-stats", "inject_redacted")];
+    const { eligible, excluded } = filterToolResultsByPolicy(results, defs, true);
+    expect(eligible).toHaveLength(0);
+    expect(excluded).toHaveLength(1);
+  });
+});
+
+describe("filterToolResultsByPolicy — missing tool definition", () => {
+  it("result with no matching definition goes to excluded", () => {
+    const results = [makeToolResult({ toolId: "unknown-tool" })];
+    const defs = [makePolicyEntry("conversation-stats", "inject")];
+    const { eligible, excluded } = filterToolResultsByPolicy(results, defs, true);
+    expect(eligible).toHaveLength(0);
+    expect(excluded).toHaveLength(1);
+  });
+
+  it("result with no matching definition is never silently injected", () => {
+    const results = [makeToolResult({ toolId: "ghost-tool" })];
+    const { eligible } = filterToolResultsByPolicy(results, [], true);
+    expect(eligible).toHaveLength(0);
+  });
+});
+
+describe("filterToolResultsByPolicy — mixed policies", () => {
+  it("correctly splits inject vs no_inject results", () => {
+    const results = [
+      makeToolResult({ toolId: "conversation-stats" }),
+      makeToolResult({ toolId: "runtime-snapshot" }),
+    ];
+    const defs = [
+      makePolicyEntry("conversation-stats", "inject"),
+      makePolicyEntry("runtime-snapshot", "no_inject"),
+    ];
+    const { eligible, excluded } = filterToolResultsByPolicy(results, defs, true);
+    expect(eligible).toHaveLength(1);
+    expect(eligible[0].toolId).toBe("conversation-stats");
+    expect(excluded).toHaveLength(1);
+    expect(excluded[0].toolId).toBe("runtime-snapshot");
+  });
+
+  it("results without outputSummary are excluded from both eligible and excluded", () => {
+    const results = [
+      makeToolResult({ toolId: "conversation-stats", outputSummary: "" }),
+      makeToolResult({ toolId: "runtime-snapshot" }),
+    ];
+    const defs = [
+      makePolicyEntry("conversation-stats", "inject"),
+      makePolicyEntry("runtime-snapshot", "inject"),
+    ];
+    const { eligible, excluded } = filterToolResultsByPolicy(results, defs, true);
+    expect(eligible).toHaveLength(1);
+    expect(eligible[0].toolId).toBe("runtime-snapshot");
+    expect(excluded).toHaveLength(0);
+  });
+});
+
+// ─── Phase 2E — system prompt policy boundary ─────────────────────────────────
+
+describe("buildLisaSystemPrompt — Phase 2E policy boundary", () => {
+  it("states only inject-policy tools provide context", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("context policy is set to \"inject\"");
+  });
+
+  it("instructs LLM not to speculate about withheld tool results", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("do not infer or speculate about withheld");
+  });
+
+  it("forbids claiming access to tool results not explicitly provided", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("do not claim access to tool results that are not explicitly provided");
   });
 });

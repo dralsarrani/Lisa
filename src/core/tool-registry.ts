@@ -12,6 +12,7 @@ const TOOL_REGISTRY: ToolDefinition[] = [
     consequences:
       "This will analyze local conversation-history metadata only. It does not call the model and does not modify data.",
     enabled: true,
+    contextPolicy: "inject",
   },
   {
     id: "runtime-snapshot",
@@ -24,6 +25,7 @@ const TOOL_REGISTRY: ToolDefinition[] = [
     consequences:
       "This will format the latest local runtime status already stored in Lisa state. It does not call external services and does not modify data.",
     enabled: true,
+    contextPolicy: "inject",
   },
 ];
 

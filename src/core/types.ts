@@ -141,6 +141,9 @@ export interface ToolDefinition {
   parameters: ToolParameter[];
   consequences: string;
   enabled: boolean;
+  // Every tool must explicitly declare its LLM context injection policy.
+  // Future tools that may output sensitive data should use "no_inject" until a redaction layer exists.
+  contextPolicy: ToolContextPolicy;
 }
 
 export type ToolRequestStatus =
@@ -256,7 +259,9 @@ export type AuditEventType =
   | "tool_suggestion_shown"
   | "tool_suggestion_converted"
   | "tool_suggestion_dismissed"
-  | "llm_tool_context_injected";
+  | "llm_tool_context_injected"
+  | "llm_tool_context_disabled"
+  | "llm_tool_context_excluded";
 
 export interface AuditEvent {
   id: string;
@@ -305,6 +310,7 @@ export interface LisaSettings {
   enableLocalAi: boolean;
   ollamaModel: string;
   maxContextTurns: number;
+  toolResultContextEnabled: boolean;
 }
 
 export const DEFAULT_SETTINGS: LisaSettings = {
@@ -320,6 +326,7 @@ export const DEFAULT_SETTINGS: LisaSettings = {
   enableLocalAi: false,
   ollamaModel: "",
   maxContextTurns: 20,
+  toolResultContextEnabled: true,
 };
 
 // ─── Command Router ───────────────────────────────────────────────────────────
@@ -382,8 +389,8 @@ export const TOOL_APPROVALS_CAP = 50;
 
 // ─── Persisted State ──────────────────────────────────────────────────────────
 
-import type { LisaConversationTurn, MemoryNote } from "./llm-context";
-export type { LisaConversationTurn, MemoryNote };
+import type { LisaConversationTurn, MemoryNote, ToolContextPolicy } from "./llm-context";
+export type { LisaConversationTurn, MemoryNote, ToolContextPolicy };
 
 export interface PersistedState {
   version: number;
@@ -399,4 +406,4 @@ export interface PersistedState {
   savedAt: string;
 }
 
-export const STATE_VERSION = 5;
+export const STATE_VERSION = 6;

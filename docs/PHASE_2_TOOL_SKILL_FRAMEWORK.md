@@ -348,3 +348,106 @@ When new tools are added to the registry, keep their `outputSummary` short and f
 - New real tools (file, system, network, shell)
 - Desktop control or mouse/keyboard automation
 - Voice/STT/TTS
+
+---
+
+# Phase 2E — Tool Result Context Safety / Policy Hardening
+
+## Overview
+
+Phase 2E adds a policy layer controlling whether and how `ToolResult.outputSummary` values are injected into LLM context. Every tool now carries an explicit `contextPolicy` declaration. A global toggle gives the operator a kill switch over all context injection. This hardens the boundary before any side-effect tools are introduced.
+
+## New Type: ToolContextPolicy
+
+```typescript
+export type ToolContextPolicy = "inject" | "no_inject" | "inject_redacted";
+```
+
+| Value | Meaning |
+|-------|---------|
+| `"inject"` | Output summary is eligible for LLM context injection |
+| `"no_inject"` | Output summary is withheld from LLM context |
+| `"inject_redacted"` | Reserved — treated as `no_inject` in Phase 2E |
+
+Every `ToolDefinition` now requires `contextPolicy` (no silent default — TypeScript enforces this).
+
+## New Setting: toolResultContextEnabled
+
+Added to `LisaSettings` with default `true`. When set to `false`, all tool result context injection is suppressed regardless of per-tool policy. This triggers a `llm_tool_context_disabled` audit event.
+
+## STATE_VERSION Bump: 5 → 6
+
+v5→v6 migration: additive only. Preserves all tool collections (`toolRequests`, `toolResults`, `toolApprovals`). Merges `DEFAULT_SETTINGS` so `toolResultContextEnabled: true` is backfilled on existing installs.
+
+## filterToolResultsByPolicy
+
+Pure function in `llm-context.ts`:
+
+```typescript
+filterToolResultsByPolicy(
+  toolResults: ToolResultContext[],
+  definitions: ToolContextPolicyEntry[],   // { id, contextPolicy }
+  enabled: boolean
+): { eligible: ToolResultContext[]; excluded: ToolResultContext[]; disabled: boolean }
+```
+
+Rules:
+- Results with empty `outputSummary` are pre-filtered before policy evaluation.
+- `enabled = false` → `eligible = []`, `excluded = []`, `disabled = true` (if any summaries existed).
+- Missing tool definition → result goes to `excluded` (no silent injection).
+- `inject_redacted` → treated as `no_inject` (excluded).
+- `buildOllamaMessages` signature unchanged — caller pre-filters and passes only `eligible`.
+
+## Audit Events Added
+
+| Event | When | Details |
+|-------|------|---------|
+| `llm_tool_context_disabled` | Global toggle off suppressed injection | `count=N` (number of suppressed results) |
+| `llm_tool_context_excluded` | Policy excluded one or more results | `count=N tool_ids=... reason=policy` |
+
+## Settings UI
+
+- New toggle row: **Tool Result Context** (`toolResultContextEnabled`) — ON/OFF
+- Per-tool `contextPolicy` badge: `INJECT` (green) / `NO INJECT` (muted) / `RESERVED` (orange)
+- Context block at top of Tool Framework section explains what the toggle controls
+
+## System Prompt Changes
+
+New clause added to the app-produced tool results section:
+
+- "Only results from tools whose context policy is set to 'inject' by the operator are provided."
+- "Some tool results visible in Console may be intentionally withheld — do not infer or speculate about withheld or excluded tool results."
+- "Do not claim access to tool results that are not explicitly provided here."
+
+## Tests Added
+
+### tool-suggestions.test.ts
+- `makeRuntimeDef` / `makeStatsDef` fixtures gain `contextPolicy: "inject"` to satisfy `ToolDefinition` type
+
+### tool-registry.test.ts
+- Every tool definition has a `contextPolicy` field (not undefined)
+- Both Phase 2E tools declare `contextPolicy: "inject"`
+- `contextPolicy` value is a valid `ToolContextPolicy` literal
+- Per-tool checks: `conversation-stats` and `runtime-snapshot` are `"inject"`
+
+### persistence.test.ts
+- `STATE_VERSION` is 6
+- `DEFAULT_SETTINGS.toolResultContextEnabled` is true
+- Default state includes `toolResultContextEnabled: true`
+- Round-trip persists `toolResultContextEnabled: false`
+- v5→v6 migration preserves tool collections
+- v5→v6 migration preserves settings and backfills `toolResultContextEnabled`
+- v5→v6 migration with missing tool collections produces empty arrays
+
+### llm-context.test.ts
+- `filterToolResultsByPolicy` — global disabled (eligible=[], excluded=[], disabled=true), disabled=false when no summaries, inject→eligible, no_inject→excluded, inject_redacted→excluded, missing definition→excluded, mixed policies, empty-summary excluded from both buckets
+- Phase 2E system prompt — only inject-policy tools provide context, no speculation about withheld results, no claiming access to unprovided results
+
+## What Phase 2E Does NOT Include
+
+- New tool executors or agents
+- LLM tool execution
+- inject_redacted implementation (reserved for future phase)
+- Filesystem, network, or shell tools
+- Desktop control or mouse/keyboard automation
+- Voice/STT/TTS

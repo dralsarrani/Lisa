@@ -641,27 +641,61 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
       <div className="settings-section">
         <div className="settings-section-label">Tool Framework</div>
         <div className="settings-tool-framework-note">
-          Phase 2A tools are approval-gated. Tool enable/disable controls are not implemented yet.
+          Tools are approval-gated. Tool enable/disable controls are not implemented yet.
         </div>
-        {getAllToolDefinitions().map((tool) => (
-          <div key={tool.id} className="settings-tool-row">
-            <div className="settings-tool-header">
-              <span className="settings-tool-name">{tool.displayName}</span>
-              <span className={`settings-tool-risk settings-tool-risk-${tool.riskLevel}`}>
-                {tool.riskLevel.toUpperCase()}
-              </span>
-            </div>
-            <div className="settings-tool-meta">
-              <span className="settings-tool-id">{tool.id}</span>
-              <span className="settings-tool-sep">·</span>
-              <span className="settings-tool-category">{tool.category}</span>
-              <span className="settings-tool-sep">·</span>
-              <span className="settings-tool-flag">{tool.enabled ? "enabled" : "disabled"}</span>
-              <span className="settings-tool-sep">·</span>
-              <span className="settings-tool-flag">{tool.requiresApproval ? "approval required" : "no approval"}</span>
-            </div>
+
+        {/* Tool Result Context toggle */}
+        <div className="settings-tool-context-block">
+          <div className="settings-toggle-row">
+            <span className="settings-toggle-label">Include safe tool results in local AI context</span>
+            <button
+              className={`settings-toggle ${settings.toolResultContextEnabled ? "settings-toggle-on" : ""}`}
+              onClick={() =>
+                dispatch({ type: "SET_SETTINGS", payload: { toolResultContextEnabled: !settings.toolResultContextEnabled } })
+              }
+              aria-pressed={settings.toolResultContextEnabled}
+            >
+              {settings.toolResultContextEnabled ? "ON" : "OFF"}
+            </button>
           </div>
-        ))}
+          <p className="settings-tool-context-note">
+            {settings.toolResultContextEnabled
+              ? "Results from tools marked safe for context are added to Lisa's local AI prompt as read-only context. Tool execution still requires approval."
+              : "Tool results remain visible in Console but will not be sent to the local model."}
+          </p>
+        </div>
+
+        {/* Per-tool list */}
+        {getAllToolDefinitions().map((tool) => {
+          const policyLabel =
+            tool.contextPolicy === "inject"
+              ? "INJECT"
+              : tool.contextPolicy === "no_inject"
+              ? "NO INJECT"
+              : "RESERVED";
+          return (
+            <div key={tool.id} className="settings-tool-row">
+              <div className="settings-tool-header">
+                <span className="settings-tool-name">{tool.displayName}</span>
+                <span className={`settings-tool-risk settings-tool-risk-${tool.riskLevel}`}>
+                  {tool.riskLevel.toUpperCase()}
+                </span>
+                <span className={`settings-tool-policy settings-tool-policy-${tool.contextPolicy}`}>
+                  {policyLabel}
+                </span>
+              </div>
+              <div className="settings-tool-meta">
+                <span className="settings-tool-id">{tool.id}</span>
+                <span className="settings-tool-sep">·</span>
+                <span className="settings-tool-category">{tool.category}</span>
+                <span className="settings-tool-sep">·</span>
+                <span className="settings-tool-flag">{tool.enabled ? "enabled" : "disabled"}</span>
+                <span className="settings-tool-sep">·</span>
+                <span className="settings-tool-flag">{tool.requiresApproval ? "approval required" : "no approval"}</span>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* ── Build Info ── */}
@@ -670,7 +704,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
         <div className="settings-build-info">
           <div className="settings-field">
             <span className="settings-field-label">Phase</span>
-            <span className="settings-field-value">2B — Tool Framework Hardening</span>
+            <span className="settings-field-value">2E — Tool Result Context Safety</span>
           </div>
           <div className="settings-field">
             <span className="settings-field-label">Version</span>

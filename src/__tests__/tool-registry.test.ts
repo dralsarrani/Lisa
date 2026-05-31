@@ -87,3 +87,40 @@ describe("getEnabledToolDefinitions", () => {
     expect(ids).toContain("runtime-snapshot");
   });
 });
+
+// ─── Phase 2E — contextPolicy ─────────────────────────────────────────────────
+
+describe("tool definitions — Phase 2E contextPolicy", () => {
+  it("every tool definition has a contextPolicy field", () => {
+    for (const def of getAllToolDefinitions()) {
+      expect(def.contextPolicy).toBeDefined();
+    }
+  });
+
+  it("no tool definition has undefined contextPolicy", () => {
+    for (const def of getAllToolDefinitions()) {
+      expect(def.contextPolicy).not.toBeUndefined();
+    }
+  });
+
+  it("both Phase 2E tools declare contextPolicy 'inject'", () => {
+    for (const def of getAllToolDefinitions()) {
+      expect(def.contextPolicy).toBe("inject");
+    }
+  });
+
+  it("contextPolicy is a valid ToolContextPolicy literal", () => {
+    const valid = ["inject", "no_inject", "inject_redacted"];
+    for (const def of getAllToolDefinitions()) {
+      expect(valid).toContain(def.contextPolicy);
+    }
+  });
+
+  it("conversation-stats contextPolicy is 'inject'", () => {
+    expect(getToolDefinition("conversation-stats")?.contextPolicy).toBe("inject");
+  });
+
+  it("runtime-snapshot contextPolicy is 'inject'", () => {
+    expect(getToolDefinition("runtime-snapshot")?.contextPolicy).toBe("inject");
+  });
+});

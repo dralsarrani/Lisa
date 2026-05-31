@@ -15,6 +15,7 @@ function makeRuntimeDef(overrides: Partial<ToolDefinition> = {}): ToolDefinition
     parameters: [],
     consequences: "Read-only runtime info.",
     enabled: true,
+    contextPolicy: "inject",
     ...overrides,
   };
 }
@@ -30,6 +31,7 @@ function makeStatsDef(overrides: Partial<ToolDefinition> = {}): ToolDefinition {
     parameters: [],
     consequences: "Read-only conversation metadata.",
     enabled: true,
+    contextPolicy: "inject",
     ...overrides,
   };
 }
