@@ -407,6 +407,71 @@
   background: rgba(239,68,68,0.07);
 }
 
+/* ── Tool framework ─────────────────────────────────────────────────────────── */
+.settings-tool-framework-note {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-bottom: 6px;
+  line-height: 1.46;
+}
+
+.settings-tool-row {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  margin-bottom: 5px;
+}
+
+.settings-tool-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 3px;
+}
+
+.settings-tool-name {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.settings-tool-risk {
+  font-family: var(--font-mono);
+  font-size: 0.50rem;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.settings-tool-risk-safe     { background: rgba(34,197,94,0.12);  color: var(--color-success); }
+.settings-tool-risk-low      { background: rgba(96,165,250,0.12); color: var(--color-accent); }
+.settings-tool-risk-medium   { background: rgba(245,158,11,0.14); color: var(--color-warning); }
+.settings-tool-risk-high     { background: rgba(239,68,68,0.14);  color: var(--color-error); }
+.settings-tool-risk-critical { background: rgba(239,68,68,0.22);  color: var(--color-error); }
+
+.settings-tool-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.settings-tool-id,
+.settings-tool-category,
+.settings-tool-flag {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--text-muted);
+}
+
+.settings-tool-sep {
+  color: var(--text-dim);
+  font-size: 0.55rem;
+}
+
 /* ── Build info ────────────────────────────────────────────────────────────── */
 .settings-build-info {
   background: var(--bg-elevated);

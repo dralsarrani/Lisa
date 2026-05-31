@@ -324,3 +324,120 @@ describe("EMERGENCY_STOP — tool requests", () => {
     expect(next.toolRequests[0].status).toBe("succeeded");
   });
 });
+
+// ─── EMERGENCY_STOP race guards ───────────────────────────────────────────────
+
+describe("COMPLETE_TOOL_EXECUTION — guard against non-running state", () => {
+  function makeResult(requestId: string) {
+    return {
+      id: "res-1",
+      requestId,
+      toolId: "conversation-stats",
+      outputSummary: "ok",
+      succeededAt: NOW,
+    };
+  }
+
+  it("no-ops if request is already cancelled (EMERGENCY_STOP race)", () => {
+    const s1 = lisaReducer(initialState, {
+      type: "CREATE_TOOL_REQUEST",
+      payload: { request: makeRequest("req-1", "running"), approval: makeApproval("apv-1", "req-1", "approved"), auditEvent: makeAudit() },
+    });
+    const cancelled = lisaReducer(s1, { type: "EMERGENCY_STOP" });
+    expect(cancelled.toolRequests[0].status).toBe("cancelled");
+
+    const afterComplete = lisaReducer(cancelled, {
+      type: "COMPLETE_TOOL_EXECUTION",
+      payload: { requestId: "req-1", result: makeResult("req-1"), completedAt: NOW, auditEvent: makeAudit() },
+    });
+    expect(afterComplete.toolRequests[0].status).toBe("cancelled");
+    expect(afterComplete.toolResults).toHaveLength(0);
+  });
+
+  it("no-ops if request is already succeeded (duplicate complete)", () => {
+    const s1 = lisaReducer(initialState, {
+      type: "CREATE_TOOL_REQUEST",
+      payload: { request: makeRequest("req-1", "running"), approval: makeApproval("apv-1", "req-1", "approved"), auditEvent: makeAudit() },
+    });
+    const s2 = lisaReducer(s1, {
+      type: "COMPLETE_TOOL_EXECUTION",
+      payload: { requestId: "req-1", result: makeResult("req-1"), completedAt: NOW, auditEvent: makeAudit() },
+    });
+    expect(s2.toolRequests[0].status).toBe("succeeded");
+    expect(s2.toolResults).toHaveLength(1);
+
+    const s3 = lisaReducer(s2, {
+      type: "COMPLETE_TOOL_EXECUTION",
+      payload: { requestId: "req-1", result: { ...makeResult("req-1"), id: "res-2" }, completedAt: NOW, auditEvent: makeAudit() },
+    });
+    expect(s3.toolResults).toHaveLength(1); // no duplicate result added
+  });
+});
+
+describe("FAIL_TOOL_EXECUTION — guard against non-running state", () => {
+  it("no-ops if request is already cancelled (EMERGENCY_STOP race)", () => {
+    const s1 = lisaReducer(initialState, {
+      type: "CREATE_TOOL_REQUEST",
+      payload: { request: makeRequest("req-1", "running"), approval: makeApproval("apv-1", "req-1", "approved"), auditEvent: makeAudit() },
+    });
+    const cancelled = lisaReducer(s1, { type: "EMERGENCY_STOP" });
+    const afterFail = lisaReducer(cancelled, {
+      type: "FAIL_TOOL_EXECUTION",
+      payload: { requestId: "req-1", error: "timeout", completedAt: NOW, auditEvent: makeAudit() },
+    });
+    expect(afterFail.toolRequests[0].status).toBe("cancelled");
+  });
+
+  it("no-ops if request is already succeeded", () => {
+    const s1 = lisaReducer(initialState, {
+      type: "CREATE_TOOL_REQUEST",
+      payload: { request: makeRequest("req-1", "running"), approval: makeApproval("apv-1", "req-1", "approved"), auditEvent: makeAudit() },
+    });
+    const s2 = lisaReducer(s1, {
+      type: "COMPLETE_TOOL_EXECUTION",
+      payload: {
+        requestId: "req-1",
+        result: { id: "res-1", requestId: "req-1", toolId: "conversation-stats", outputSummary: "ok", succeededAt: NOW },
+        completedAt: NOW,
+        auditEvent: makeAudit(),
+      },
+    });
+    const s3 = lisaReducer(s2, {
+      type: "FAIL_TOOL_EXECUTION",
+      payload: { requestId: "req-1", error: "late error", completedAt: NOW, auditEvent: makeAudit() },
+    });
+    expect(s3.toolRequests[0].status).toBe("succeeded");
+  });
+});
+
+describe("CANCEL_TOOL_REQUEST — does not cancel running requests", () => {
+  it("no-ops on running request", () => {
+    const s1 = lisaReducer(initialState, {
+      type: "CREATE_TOOL_REQUEST",
+      payload: { request: makeRequest("req-1", "running"), approval: makeApproval("apv-1", "req-1", "approved"), auditEvent: makeAudit() },
+    });
+    const next = lisaReducer(s1, {
+      type: "CANCEL_TOOL_REQUEST",
+      payload: { requestId: "req-1", auditEvent: makeAudit() },
+    });
+    expect(next.toolRequests[0].status).toBe("running");
+  });
+});
+
+describe("CREATE_TOOL_REQUEST — cap enforcement", () => {
+  it("caps toolRequests at 50 on create", () => {
+    let state = initialState;
+    for (let i = 0; i < 52; i++) {
+      state = lisaReducer(state, {
+        type: "CREATE_TOOL_REQUEST",
+        payload: {
+          request: makeRequest(`req-${i}`),
+          approval: makeApproval(`apv-${i}`, `req-${i}`),
+          auditEvent: makeAudit(),
+        },
+      });
+    }
+    expect(state.toolRequests.length).toBeLessThanOrEqual(50);
+    expect(state.toolApprovals.length).toBeLessThanOrEqual(50);
+  });
+});

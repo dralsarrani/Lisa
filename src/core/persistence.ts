@@ -248,7 +248,8 @@ function safeToolApprovals(raw: unknown): ToolApprovalContract[] {
         typeof a.id === "string" &&
         typeof a.requestId === "string" &&
         typeof a.toolId === "string" &&
-        typeof a.createdAt === "string"
+        typeof a.createdAt === "string" &&
+        (a.decision === null || a.decision === "approved" || a.decision === "rejected")
     )
     .slice(0, TOOL_APPROVALS_CAP);
 }

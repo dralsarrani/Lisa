@@ -482,24 +482,85 @@ describe("routeCommand — mode_change 'switch to cyber mode'", () => {
   });
 });
 
-// ─── Phase 1J audit — action-like guard pass-through (handled by LLM tier) ───
+// ─── Phase 2B — action-like guard expansion ──────────────────────────────────
 //
-// These inputs are NOT matched by the desktop-action guard regex.
-// They pass through to the LLM, whose system prompt explicitly refuses them.
-// Confirming null here proves the guard does not eat them silently; the LLM
-// boundary tests in llm-context.test.ts verify the LLM refuses them correctly.
+// Phase 2B promotes several action-request patterns from LLM-tier to guard-tier.
+// These patterns are blocked deterministically with a safe refusal message.
+// Conceptual/educational questions still pass through to the LLM.
 
-describe("getDesktopActionGuardMessage — LLM-tier handled, not guard-blocked", () => {
-  it("passes 'Can you click this button?' through to LLM tier", () => {
-    expect(getDesktopActionGuardMessage("Can you click this button?")).toBeNull();
+describe("getDesktopActionGuardMessage — Phase 2B file/shell guards", () => {
+  it("blocks 'run this file'", () => {
+    expect(getDesktopActionGuardMessage("run this file")).not.toBeNull();
   });
-  it("passes 'Can you run this file?' through to LLM tier", () => {
-    expect(getDesktopActionGuardMessage("Can you run this file?")).toBeNull();
+  it("blocks 'execute this script'", () => {
+    expect(getDesktopActionGuardMessage("execute this script")).not.toBeNull();
   });
-  it("passes 'Can you connect to a restricted network?' through to LLM tier", () => {
-    expect(getDesktopActionGuardMessage("Can you connect to a restricted network?")).toBeNull();
+  it("blocks 'run a shell command'", () => {
+    expect(getDesktopActionGuardMessage("run a shell command")).not.toBeNull();
   });
-  it("passes 'Can you verify permissions?' through to LLM tier", () => {
-    expect(getDesktopActionGuardMessage("Can you verify permissions?")).toBeNull();
+  it("blocks 'execute a shell command'", () => {
+    expect(getDesktopActionGuardMessage("execute a shell command")).not.toBeNull();
+  });
+  it("blocks 'Can you run this file?'", () => {
+    expect(getDesktopActionGuardMessage("Can you run this file?")).not.toBeNull();
+  });
+});
+
+describe("getDesktopActionGuardMessage — Phase 2B UI interaction guards", () => {
+  it("blocks 'click this button'", () => {
+    expect(getDesktopActionGuardMessage("click this button")).not.toBeNull();
+  });
+  it("blocks 'press this button'", () => {
+    expect(getDesktopActionGuardMessage("press this button")).not.toBeNull();
+  });
+  it("blocks 'type this for me'", () => {
+    expect(getDesktopActionGuardMessage("type this for me")).not.toBeNull();
+  });
+  it("blocks 'Can you click this button?'", () => {
+    expect(getDesktopActionGuardMessage("Can you click this button?")).not.toBeNull();
+  });
+});
+
+describe("getDesktopActionGuardMessage — Phase 2B network/permissions/install guards", () => {
+  it("blocks 'connect to the restricted network'", () => {
+    expect(getDesktopActionGuardMessage("connect to the restricted network")).not.toBeNull();
+  });
+  it("blocks 'verify permissions'", () => {
+    expect(getDesktopActionGuardMessage("verify permissions")).not.toBeNull();
+  });
+  it("blocks 'request permissions'", () => {
+    expect(getDesktopActionGuardMessage("request permissions")).not.toBeNull();
+  });
+  it("blocks 'approve permissions'", () => {
+    expect(getDesktopActionGuardMessage("approve permissions")).not.toBeNull();
+  });
+  it("blocks 'install this tool'", () => {
+    expect(getDesktopActionGuardMessage("install this tool")).not.toBeNull();
+  });
+  it("blocks 'install this skill'", () => {
+    expect(getDesktopActionGuardMessage("install this skill")).not.toBeNull();
+  });
+  it("blocks 'Can you connect to a restricted network?'", () => {
+    expect(getDesktopActionGuardMessage("Can you connect to a restricted network?")).not.toBeNull();
+  });
+  it("blocks 'Can you verify permissions?'", () => {
+    expect(getDesktopActionGuardMessage("Can you verify permissions?")).not.toBeNull();
+  });
+});
+
+describe("getDesktopActionGuardMessage — conceptual questions pass through", () => {
+  it("passes 'what is a shell command?'", () => {
+    expect(getDesktopActionGuardMessage("what is a shell command?")).toBeNull();
+  });
+  it("passes 'how do permissions work?'", () => {
+    expect(getDesktopActionGuardMessage("how do permissions work?")).toBeNull();
+  });
+  it("passes 'explain browser automation'", () => {
+    expect(getDesktopActionGuardMessage("explain browser automation")).toBeNull();
+  });
+  it("returns updated refusal message containing 'explicit approval'", () => {
+    const msg = getDesktopActionGuardMessage("run this file");
+    expect(msg).toContain("not implemented yet");
+    expect(msg).toContain("explicit approval");
   });
 });

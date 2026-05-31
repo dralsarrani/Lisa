@@ -3,6 +3,7 @@ import type { LisaSettings, LisaModeId } from "../../core/types";
 import { CONVERSATION_HISTORY_CAP, MEMORY_NOTES_CAP, MEMORY_NOTE_CHAR_LIMIT } from "../../core/types";
 import { LISA_MODES } from "../../core/mode-store";
 import { useLisa } from "../../app/useLisa";
+import { getAllToolDefinitions } from "../../core/tool-registry";
 import "./SettingsPanel.css";
 
 interface OllamaModelInfo {
@@ -636,13 +637,40 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
         </div>
       </div>
 
+      {/* ── Tool Framework ── */}
+      <div className="settings-section">
+        <div className="settings-section-label">Tool Framework</div>
+        <div className="settings-tool-framework-note">
+          Phase 2A tools are approval-gated. Tool enable/disable controls are not implemented yet.
+        </div>
+        {getAllToolDefinitions().map((tool) => (
+          <div key={tool.id} className="settings-tool-row">
+            <div className="settings-tool-header">
+              <span className="settings-tool-name">{tool.displayName}</span>
+              <span className={`settings-tool-risk settings-tool-risk-${tool.riskLevel}`}>
+                {tool.riskLevel.toUpperCase()}
+              </span>
+            </div>
+            <div className="settings-tool-meta">
+              <span className="settings-tool-id">{tool.id}</span>
+              <span className="settings-tool-sep">·</span>
+              <span className="settings-tool-category">{tool.category}</span>
+              <span className="settings-tool-sep">·</span>
+              <span className="settings-tool-flag">{tool.enabled ? "enabled" : "disabled"}</span>
+              <span className="settings-tool-sep">·</span>
+              <span className="settings-tool-flag">{tool.requiresApproval ? "approval required" : "no approval"}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* ── Build Info ── */}
       <div className="settings-section">
         <div className="settings-section-label">Build Info</div>
         <div className="settings-build-info">
           <div className="settings-field">
             <span className="settings-field-label">Phase</span>
-            <span className="settings-field-value">1E — Conversation History Controls</span>
+            <span className="settings-field-value">2B — Tool Framework Hardening</span>
           </div>
           <div className="settings-field">
             <span className="settings-field-label">Version</span>

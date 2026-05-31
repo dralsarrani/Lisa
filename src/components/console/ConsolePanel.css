@@ -165,10 +165,30 @@
   opacity: 0.65;
 }
 
-.console-meta-kind-local_ai { color: var(--color-success); }
-.console-meta-kind-command  { color: var(--color-accent); }
-.console-meta-kind-system   { color: var(--color-warning); }
-.console-meta-kind-error    { color: var(--color-error); }
+.console-meta-kind-local_ai    { color: var(--color-success); }
+.console-meta-kind-command     { color: var(--color-accent); }
+.console-meta-kind-system      { color: var(--color-warning); }
+.console-meta-kind-error       { color: var(--color-error); }
+.console-meta-kind-tool_request { color: var(--color-warning); }
+.console-meta-kind-tool_result  { color: var(--color-success); }
+
+/* ── Tool result block ──────────────────────────────────────────────────────── */
+.console-tool-result-text {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.55;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  background: rgba(34,197,94,0.04);
+  border: 1px solid rgba(34,197,94,0.10);
+  border-left: 2px solid var(--color-success);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  max-height: 200px;
+  overflow-y: auto;
+}
 
 .console-meta-model,
 .console-meta-latency {

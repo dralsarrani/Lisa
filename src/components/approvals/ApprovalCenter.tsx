@@ -112,6 +112,7 @@ const RESOLVED_PREVIEW = 10;
 
 export const ApprovalCenter: React.FC<ApprovalCenterProps> = ({ approvals, toolApprovals, toolRequests }) => {
   const [showAllResolved, setShowAllResolved] = React.useState(false);
+  const [showAllResolvedTools, setShowAllResolvedTools] = React.useState(false);
 
   const pending = approvals.filter((a) => a.status === "pending");
   const resolved = approvals.filter((a) => a.status !== "pending");
@@ -119,8 +120,14 @@ export const ApprovalCenter: React.FC<ApprovalCenterProps> = ({ approvals, toolA
 
   const pendingToolApprovals = toolApprovals.filter((a) => a.decision === null);
   const resolvedToolApprovals = toolApprovals.filter((a) => a.decision !== null);
+  const resolvedToolsVisible = showAllResolvedTools
+    ? resolvedToolApprovals
+    : resolvedToolApprovals.slice(0, RESOLVED_PREVIEW);
 
-  const isEmpty = approvals.length === 0 && toolApprovals.length === 0;
+  const isEmpty =
+    approvals.length === 0 &&
+    toolApprovals.length === 0 &&
+    toolRequests.length === 0;
 
   return (
     <div className="approval-center">
@@ -134,7 +141,7 @@ export const ApprovalCenter: React.FC<ApprovalCenterProps> = ({ approvals, toolA
           {pendingToolApprovals.length > 0 && (
             <div className="approval-section">
               <div className="approval-section-label">
-                Tool Requests — Pending
+                Pending Tool Requests
                 <span className="approval-count">{pendingToolApprovals.length}</span>
               </div>
               {pendingToolApprovals.map((contract) => (
@@ -149,7 +156,7 @@ export const ApprovalCenter: React.FC<ApprovalCenterProps> = ({ approvals, toolA
           {pending.length > 0 && (
             <div className="approval-section">
               <div className="approval-section-label">
-                Pending
+                Pending Mission Approvals
                 <span className="approval-count">{pending.length}</span>
               </div>
               {pending.map((a) => (
@@ -159,19 +166,27 @@ export const ApprovalCenter: React.FC<ApprovalCenterProps> = ({ approvals, toolA
           )}
           {resolvedToolApprovals.length > 0 && (
             <div className="approval-section">
-              <div className="approval-section-label">Tool Requests — Resolved</div>
-              {resolvedToolApprovals.slice(0, RESOLVED_PREVIEW).map((contract) => (
+              <div className="approval-section-label">Resolved Tool Requests</div>
+              {resolvedToolsVisible.map((contract) => (
                 <ToolApprovalCard
                   key={contract.id}
                   contract={contract}
                   request={toolRequests.find((r) => r.id === contract.requestId)}
                 />
               ))}
+              {resolvedToolApprovals.length > RESOLVED_PREVIEW && !showAllResolvedTools && (
+                <button
+                  className="approval-show-more"
+                  onClick={() => setShowAllResolvedTools(true)}
+                >
+                  Show all ({resolvedToolApprovals.length})
+                </button>
+              )}
             </div>
           )}
           {resolved.length > 0 && (
             <div className="approval-section">
-              <div className="approval-section-label">Resolved</div>
+              <div className="approval-section-label">Resolved Mission Approvals</div>
               {resolvedVisible.map((a) => (
                 <ApprovalCard key={a.id} approval={a} />
               ))}

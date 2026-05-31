@@ -162,7 +162,9 @@ function ThinkingIndicator({
   onCancel?: (id: string) => void;
 }) {
   let label: string;
-  if (kind === "local_ai" && model) {
+  if (kind === "tool_request") {
+    label = "Waiting for approval — go to Approvals to approve or reject.";
+  } else if (kind === "local_ai" && model) {
     label = `Thinking locally with ${model}… first response may take a while while Ollama loads the model.`;
   } else if (model) {
     label = `${model} is thinking…`;
@@ -225,10 +227,13 @@ function CancelledResponse({ interaction }: { interaction: LisaInteraction }) {
 // ─── Complete response ────────────────────────────────────────────────────────
 
 function CompleteResponse({ interaction }: { interaction: LisaInteraction }) {
+  const isToolResult = interaction.kind === "tool_result";
   return (
     <>
       {interaction.kind === "local_ai" ? (
         <MarkdownResponse content={interaction.response} />
+      ) : isToolResult ? (
+        <pre className="console-tool-result-text">{interaction.response}</pre>
       ) : (
         <div className="console-response-text">{interaction.response}</div>
       )}

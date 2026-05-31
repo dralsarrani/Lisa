@@ -273,12 +273,28 @@ const BLOCKED_DESKTOP_ACTIONS: RegExp[] = [
   // Screen capture / reading
   /\bread\s+(?:my|the|your)\s+screen\b/i,
   /\bcapture\s+(?:the\s+|my\s+)?screen\b/i,
+  // File / script execution
+  /\b(?:run|execute)\s+(?:this\s+)?(?:file|script|program|code|executable|\.exe|\.sh|\.ps1|\.bat)\b/i,
+  /\brun\s+a\s+shell\s+command\b/i,
+  /\bexecute\s+a\s+shell\s+command\b/i,
+  /\brun\s+shell\b/i,
+  // UI interaction
+  /\b(?:click|press|tap)\s+(?:this|the|that)\s+button\b/i,
+  /\btype\s+this\s+for\s+me\b/i,
+  /\btype\s+for\s+me\b/i,
+  // Network actions
+  /\bconnect\s+to\s+(?:a\s+|the\s+|this\s+)?restricted\s+network\b/i,
+  /\bconnect\s+to\s+(?:a\s+|the\s+|this\s+)?(?:corporate|internal|private)\s+(?:network|vpn|wifi)\b/i,
+  // Permission requests
+  /\b(?:verify|request|approve|grant)\s+permissions?\b/i,
+  // Tool / skill installation
+  /\binstall\s+(?:this\s+)?(?:tool|skill|plugin|extension|package|app)\b/i,
 ];
 
 export function getDesktopActionGuardMessage(raw: string): string | null {
   for (const re of BLOCKED_DESKTOP_ACTIONS) {
     if (re.test(raw)) {
-      return "That capability is not implemented yet. I can explain steps, but I cannot perform it.";
+      return "That action is not implemented yet. Future tool execution requires explicit approval.";
     }
   }
   return null;

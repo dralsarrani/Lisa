@@ -400,6 +400,9 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
 
     case "COMPLETE_TOOL_EXECUTION": {
       const { requestId, result, completedAt, auditEvent } = action.payload;
+      // Guard: only transition from "running". Prevents EMERGENCY_STOP race and duplicate execution.
+      const targetReq = state.toolRequests.find((r) => r.id === requestId);
+      if (!targetReq || targetReq.status !== "running") return state;
       return {
         ...state,
         toolRequests: state.toolRequests.map((r) =>
@@ -414,6 +417,9 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
 
     case "FAIL_TOOL_EXECUTION": {
       const { requestId, error, completedAt, auditEvent } = action.payload;
+      // Guard: only transition from "running". Prevents EMERGENCY_STOP race and duplicate failure.
+      const failTarget = state.toolRequests.find((r) => r.id === requestId);
+      if (!failTarget || failTarget.status !== "running") return state;
       return {
         ...state,
         toolRequests: state.toolRequests.map((r) =>
