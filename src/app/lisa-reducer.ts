@@ -455,7 +455,7 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
       return {
         ...state,
         toolRequests: state.toolRequests.map((r) =>
-          r.id === requestId && (r.status === "pending_approval" || r.status === "approved")
+          r.id === requestId && (r.status === "pending_approval" || r.status === "approved" || r.status === "running")
             ? { ...r, status: "cancelled" as const, completedAt: new Date().toISOString() }
             : r
         ),

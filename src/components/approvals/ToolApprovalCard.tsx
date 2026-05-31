@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import type { ToolApprovalContract, ToolRequest } from "../../core/types";
 import { useLisa } from "../../app/useLisa";
 import { runTool } from "../../core/tool-runner";
@@ -34,6 +34,8 @@ function RiskBadge({ level }: { level: string }) {
 export function ToolApprovalCard({ contract, request }: ToolApprovalCardProps) {
   const { state, dispatch } = useLisa();
   const [isRunning, setIsRunning] = useState(false);
+  const controllerRef = useRef<AbortController | null>(null);
+  const wasCancelledRef = useRef(false);
 
   const isPending = contract.decision === null;
   const toolDef = getToolDefinition(contract.toolId);
@@ -67,8 +69,29 @@ export function ToolApprovalCard({ contract, request }: ToolApprovalCardProps) {
     : requestStatus === "cancelled" || requestStatus === "expired" ? "cancelled"
     : "pending";
 
+  function handleCancel() {
+    if (!request || !isRunning) return;
+    wasCancelledRef.current = true;
+    controllerRef.current?.abort();
+    dispatch({
+      type: "CANCEL_TOOL_REQUEST",
+      payload: {
+        requestId: request.id,
+        auditEvent: createAuditEvent({
+          eventType: "tool_request_cancelled",
+          source: "approval_center",
+          summary: `Tool cancelled during execution: "${contract.toolDisplayName}"`,
+          severity: "warning",
+        }),
+      },
+    });
+  }
+
   async function handleApprove() {
     if (!request || isRunning) return;
+    wasCancelledRef.current = false;
+    const controller = new AbortController();
+    controllerRef.current = controller;
     setIsRunning(true);
 
     const resolvedAt = new Date().toISOString();
@@ -114,7 +137,7 @@ export function ToolApprovalCard({ contract, request }: ToolApprovalCardProps) {
     });
 
     try {
-      const { outputSummary } = await runTool(request.toolId, request.params, state);
+      const { outputSummary } = await runTool(request.toolId, request.params, state, { signal: controller.signal });
       const completedAt = new Date().toISOString();
       const resultId = crypto.randomUUID();
 
@@ -152,31 +175,47 @@ export function ToolApprovalCard({ contract, request }: ToolApprovalCardProps) {
     } catch (err) {
       const completedAt = new Date().toISOString();
       const errMsg = err instanceof Error ? err.message : String(err);
+      const isTimeout = errMsg.includes("timed out");
+      const isCancelled = wasCancelledRef.current || errMsg.includes("cancelled");
 
-      dispatch({
-        type: "FAIL_TOOL_EXECUTION",
-        payload: {
-          requestId: request.id,
-          error: errMsg,
-          completedAt,
-          auditEvent: createAuditEvent({
-            eventType: "tool_execution_failed",
-            source: "tool_runner",
-            summary: `Tool failed: "${contract.toolDisplayName}" — ${errMsg}`,
-            severity: "error",
-          }),
-        },
-      });
+      if (isCancelled) {
+        dispatch({
+          type: "UPDATE_INTERACTION",
+          payload: {
+            id: request.id,
+            status: "failed",
+            error: "Cancelled.",
+            completedAt,
+          },
+        });
+      } else {
+        dispatch({
+          type: "FAIL_TOOL_EXECUTION",
+          payload: {
+            requestId: request.id,
+            error: errMsg,
+            completedAt,
+            auditEvent: createAuditEvent({
+              eventType: isTimeout ? "tool_execution_timed_out" : "tool_execution_failed",
+              source: "tool_runner",
+              summary: isTimeout
+                ? `Tool timed out: "${contract.toolDisplayName}"`
+                : `Tool failed: "${contract.toolDisplayName}" — ${errMsg}`,
+              severity: "error",
+            }),
+          },
+        });
 
-      dispatch({
-        type: "UPDATE_INTERACTION",
-        payload: {
-          id: request.id,
-          status: "failed",
-          error: errMsg,
-          completedAt,
-        },
-      });
+        dispatch({
+          type: "UPDATE_INTERACTION",
+          payload: {
+            id: request.id,
+            status: "failed",
+            error: errMsg,
+            completedAt,
+          },
+        });
+      }
     }
 
     setIsRunning(false);
@@ -280,13 +319,22 @@ export function ToolApprovalCard({ contract, request }: ToolApprovalCardProps) {
           >
             {isRunning ? "Running…" : "✓ Approve & Run"}
           </button>
-          <button
-            className="btn btn-danger approval-btn"
-            onClick={handleReject}
-            disabled={isRunning || !request}
-          >
-            ✗ Reject
-          </button>
+          {isRunning ? (
+            <button
+              className="btn btn-danger approval-btn"
+              onClick={handleCancel}
+            >
+              ✕ Cancel
+            </button>
+          ) : (
+            <button
+              className="btn btn-danger approval-btn"
+              onClick={handleReject}
+              disabled={!request}
+            >
+              ✗ Reject
+            </button>
+          )}
         </div>
       )}
 

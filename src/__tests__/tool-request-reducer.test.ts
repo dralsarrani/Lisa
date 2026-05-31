@@ -410,8 +410,8 @@ describe("FAIL_TOOL_EXECUTION — guard against non-running state", () => {
   });
 });
 
-describe("CANCEL_TOOL_REQUEST — does not cancel running requests", () => {
-  it("no-ops on running request", () => {
+describe("CANCEL_TOOL_REQUEST — Phase 2G: cancels running requests", () => {
+  it("cancels a running request", () => {
     const s1 = lisaReducer(initialState, {
       type: "CREATE_TOOL_REQUEST",
       payload: { request: makeRequest("req-1", "running"), approval: makeApproval("apv-1", "req-1", "approved"), auditEvent: makeAudit() },
@@ -420,7 +420,31 @@ describe("CANCEL_TOOL_REQUEST — does not cancel running requests", () => {
       type: "CANCEL_TOOL_REQUEST",
       payload: { requestId: "req-1", auditEvent: makeAudit() },
     });
-    expect(next.toolRequests[0].status).toBe("running");
+    expect(next.toolRequests[0].status).toBe("cancelled");
+  });
+
+  it("sets completedAt on running cancellation", () => {
+    const s1 = lisaReducer(initialState, {
+      type: "CREATE_TOOL_REQUEST",
+      payload: { request: makeRequest("req-1", "running"), approval: makeApproval("apv-1", "req-1", "approved"), auditEvent: makeAudit() },
+    });
+    const next = lisaReducer(s1, {
+      type: "CANCEL_TOOL_REQUEST",
+      payload: { requestId: "req-1", auditEvent: makeAudit() },
+    });
+    expect(next.toolRequests[0].completedAt).toBeDefined();
+  });
+
+  it("does not cancel an already-succeeded request", () => {
+    const s1 = lisaReducer(initialState, {
+      type: "CREATE_TOOL_REQUEST",
+      payload: { request: makeRequest("req-1", "succeeded"), approval: makeApproval("apv-1", "req-1", "approved"), auditEvent: makeAudit() },
+    });
+    const next = lisaReducer(s1, {
+      type: "CANCEL_TOOL_REQUEST",
+      payload: { requestId: "req-1", auditEvent: makeAudit() },
+    });
+    expect(next.toolRequests[0].status).toBe("succeeded");
   });
 });
 

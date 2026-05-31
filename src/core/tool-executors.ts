@@ -2,13 +2,16 @@ import type { LisaState } from "../app/lisa-reducer";
 
 export type ToolExecutor = (
   params: Record<string, string | number | boolean>,
-  state: LisaState
+  state: LisaState,
+  signal: AbortSignal
 ) => Promise<{ outputSummary: string }>;
 
 export async function executeConversationStats(
   _params: Record<string, string | number | boolean>,
-  state: LisaState
+  state: LisaState,
+  signal: AbortSignal
 ): Promise<{ outputSummary: string }> {
+  if (signal.aborted) throw new Error("Tool execution was cancelled.");
   const { conversationHistory } = state;
   const total = conversationHistory.length;
 
@@ -39,8 +42,10 @@ export async function executeConversationStats(
 
 export async function executeRuntimeSnapshot(
   _params: Record<string, string | number | boolean>,
-  state: LisaState
+  state: LisaState,
+  signal: AbortSignal
 ): Promise<{ outputSummary: string }> {
+  if (signal.aborted) throw new Error("Tool execution was cancelled.");
   const { runtimeHealth } = state;
 
   if (!runtimeHealth) {

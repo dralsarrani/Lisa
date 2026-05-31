@@ -264,7 +264,8 @@ export type AuditEventType =
   | "llm_tool_context_disabled"
   | "llm_tool_context_excluded"
   | "tool_request_duplicate_blocked"
-  | "tool_request_expired_live";
+  | "tool_request_expired_live"
+  | "tool_execution_timed_out";
 
 export interface AuditEvent {
   id: string;

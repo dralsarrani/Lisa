@@ -451,3 +451,67 @@ New clause added to the app-produced tool results section:
 - Filesystem, network, or shell tools
 - Desktop control or mouse/keyboard automation
 - Voice/STT/TTS
+
+---
+
+# Phase 2G — Tool Timeout / Cancellation Infrastructure
+
+## Overview
+
+Phase 2G hardens Lisa's tool executor boundary so tools cannot hang indefinitely and can be cancelled mid-execution. It introduces `AbortSignal` propagation through the full execution stack (`runTool` → `ToolExecutor` → individual executors), a 30-second timeout, and a Cancel button in `ToolApprovalCard` that appears while a tool is running.
+
+## What Phase 2G Adds
+
+### `src/core/tool-executors.ts`
+- `ToolExecutor` type gains a required `signal: AbortSignal` third parameter
+- `executeConversationStats` and `executeRuntimeSnapshot` each accept `signal` and check `signal.aborted` immediately on entry
+
+### `src/core/tool-runner.ts`
+- `TOOL_EXECUTION_TIMEOUT_MS = 30_000` exported constant
+- `RunToolOptions` interface: `{ signal?: AbortSignal; timeoutMs?: number }`
+- `runTool` gains an optional 4th `options` parameter
+- Internally creates an `AbortController`; forwards external signal via `addEventListener("abort")`
+- `setTimeout` fires `controller.abort("timeout")` after `timeoutMs` (defaults to 30 s)
+- `Promise.race` between executor and an `abortPromise` that rejects with a timeout or cancelled message
+- `clearTimeout` in `finally` block prevents timer leaks
+
+### `src/app/lisa-reducer.ts`
+- `CANCEL_TOOL_REQUEST` status guard extended from `pending_approval | approved` to also include `running`
+
+### `src/components/approvals/ToolApprovalCard.tsx`
+- `controllerRef` — holds the `AbortController` for the current execution
+- `wasCancelledRef` — boolean flag set by `handleCancel` to distinguish user cancellation from genuine failure
+- `handleCancel` — aborts the controller, dispatches `CANCEL_TOOL_REQUEST`, sets `wasCancelledRef`
+- `runTool` called with `{ signal: controller.signal }`
+- Catch block: if `wasCancelledRef` or message contains "cancelled" → only updates interaction (no `FAIL_TOOL_EXECUTION`); if message contains "timed out" → uses `tool_execution_timed_out` audit event; otherwise → uses `tool_execution_failed`
+- Cancel button rendered in place of Reject button while `isRunning === true`
+
+### `src/core/types.ts`
+- `AuditEventType` gains `"tool_execution_timed_out"`
+
+## New Test File
+
+### `src/__tests__/tool-runner.test.ts`
+- Validation: unknown tool, disabled tool, no executor registered
+- Success: returns `outputSummary`, passes params/state/signal to executor
+- Timeout: hangs → rejects with "timed out after Nms"; `TOOL_EXECUTION_TIMEOUT_MS` is 30000
+- Cancellation: pre-aborted signal → rejects with "cancelled"; signal aborted mid-run → rejects with "cancelled"; signal forwarded to executor
+
+## Updated Tests
+
+### `src/__tests__/tool-executors.test.ts`
+- Added `NOOP_SIGNAL = new AbortController().signal`
+- All executor calls updated to pass `NOOP_SIGNAL` as 3rd argument
+
+### `src/__tests__/tool-request-reducer.test.ts`
+- Replaced `"does not cancel running requests"` describe block with Phase 2G block confirming: running request is cancelled, `completedAt` is set, succeeded request is still not cancelled
+
+## What Phase 2G Does NOT Include
+
+- New tool executors or agents
+- inject_redacted or new context policies
+- Filesystem, network, or shell tools
+- Desktop control or mouse/keyboard automation
+- Voice/STT/TTS
+- Retry logic or backoff
+
