@@ -173,3 +173,97 @@ Phase 2B hardens, stress-tests, and polishes the Phase 2A tool approval framewor
 - Tool chaining or background execution
 - Tool enable/disable toggles
 - Voice/STT/TTS
+
+---
+
+# Phase 2C — Deterministic Tool Suggestions
+
+## Overview
+
+Phase 2C adds a safe suggestion-chip bridge between local AI conversations and the existing approval-gated tool framework. When a user's question matches known intent patterns, Lisa's app logic attaches a suggestion chip to the completed AI response. The chip lets the operator prepare a pending tool request with one click — but execution still requires explicit approval in the Approval Center.
+
+**Core rule:** Suggestions are generated deterministically from user input. The LLM does not create, approve, or execute tool requests, and LLM output is never parsed for tool calls.
+
+## Suggestion vs Request vs Approval vs Execution
+
+| Stage | Who acts | What happens |
+|-------|----------|-------------|
+| **Suggestion** | App logic (deterministic) | Chip appears after AI response if user text matches a pattern |
+| **Request** | Operator (Prepare click) | `ToolRequest` created with `status: pending_approval` |
+| **Approval** | Operator (Approval Center) | Operator reviews and approves or rejects |
+| **Execution** | App logic (tool-runner) | Tool runs, result stored, shown in Console |
+
+## Architecture
+
+```
+detectToolSuggestion()   — pure function in tool-suggestions.ts
+                           reads userText + tool registry + existing requests
+                           never reads LLM output
+                           returns SuggestionCore | null
+
+CommandInput.tsx         — runs detector after lisa-stream-done
+                           attaches ToolSuggestion to the completed local_ai interaction
+
+ToolSuggestionChip.tsx   — renders inside ConsolePanel for visible/converted suggestions
+                           Prepare → createToolRequestPair → CREATE_TOOL_REQUEST + CONVERT_TOOL_SUGGESTION
+                           Dismiss → DISMISS_TOOL_SUGGESTION
+
+lisa-reducer.ts          — DISMISS_TOOL_SUGGESTION: visible → dismissed (no-op otherwise)
+                         — CONVERT_TOOL_SUGGESTION: visible → converted (no-op otherwise)
+
+tool-suggestions.ts      — detectToolSuggestion + createToolRequestPair helper
+```
+
+## ToolSuggestion Type
+
+```typescript
+interface ToolSuggestion {
+  id: string;
+  toolId: string;
+  toolDisplayName: string;
+  reason: string;
+  source: "user_intent_detected";   // never "llm_output"
+  createdAt: string;
+  originatingInteractionId: string;
+  status: "visible" | "dismissed" | "converted";
+}
+```
+
+Suggestions are **ephemeral and not persisted**. They live only on the `LisaInteraction` object in session state.
+
+## Detector Rules
+
+- Only triggers on `local_ai` interactions, never deterministic commands.
+- Only runs if `routeCommand(userText).intent === "unknown"` (command router had no match).
+- Only runs if `getDesktopActionGuardMessage(userText) === null` (no action-like guard match).
+- Only suggests enabled tools with `riskLevel === "safe" | "low"`.
+- Suppressed if a `pending_approval` request for the same tool already exists.
+- Rejects very short inputs (< 10 chars or < 3 words).
+
+## System Prompt Change
+
+The LLM may now name available tools and tell the user the exact commands to request them (e.g. "Type 'runtime snapshot' to request it."). The suggestion chip may appear automatically. The LLM still cannot create, approve, execute, or invent results for tool requests, and must not output JSON tool-call payloads.
+
+## Audit Events Added
+
+| Event | When |
+|-------|------|
+| `tool_suggestion_shown` | Suggestion attached to interaction |
+| `tool_suggestion_converted` | Operator clicks Prepare |
+| `tool_suggestion_dismissed` | Operator clicks Dismiss |
+
+## Tests Added
+
+- `src/__tests__/tool-suggestions.test.ts` — detector positive/negative/registry guard/state guard + `createToolRequestPair` helper
+- `src/__tests__/tool-request-reducer.test.ts` — `DISMISS_TOOL_SUGGESTION` and `CONVERT_TOOL_SUGGESTION` lifecycle and no-op cases
+- `src/__tests__/llm-context.test.ts` — Phase 2C tool framework boundary assertions
+
+## What Phase 2C Does NOT Include
+
+- Agents or autonomous multi-step execution
+- LLM-generated tool calls or parsing of LLM output for tool invocations
+- Structured JSON tool-calling protocol
+- New real tools (file, system, network, shell)
+- Desktop control or mouse/keyboard automation
+- Tool chaining or background execution
+- Voice/STT/TTS

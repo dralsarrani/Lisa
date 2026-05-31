@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import type { LisaInteraction, LisaSettings, OrbState } from "../../core/types";
 import { MarkdownResponse } from "./MarkdownResponse";
+import { ToolSuggestionChip } from "./ToolSuggestionChip";
 import "./ConsolePanel.css";
 
 interface ConsolePanelProps {
@@ -228,6 +229,12 @@ function CancelledResponse({ interaction }: { interaction: LisaInteraction }) {
 
 function CompleteResponse({ interaction }: { interaction: LisaInteraction }) {
   const isToolResult = interaction.kind === "tool_result";
+  const suggestion = interaction.toolSuggestion;
+  const showChip =
+    interaction.kind === "local_ai" &&
+    suggestion != null &&
+    (suggestion.status === "visible" || suggestion.status === "converted");
+
   return (
     <>
       {interaction.kind === "local_ai" ? (
@@ -254,6 +261,9 @@ function CompleteResponse({ interaction }: { interaction: LisaInteraction }) {
           </>
         )}
       </div>
+      {showChip && suggestion && (
+        <ToolSuggestionChip suggestion={suggestion} interactionId={interaction.id} />
+      )}
     </>
   );
 }

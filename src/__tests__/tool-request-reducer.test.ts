@@ -441,3 +441,95 @@ describe("CREATE_TOOL_REQUEST — cap enforcement", () => {
     expect(state.toolApprovals.length).toBeLessThanOrEqual(50);
   });
 });
+
+// ─── DISMISS_TOOL_SUGGESTION ──────────────────────────────────────────────────
+
+import type { LisaInteraction, ToolSuggestion } from "../core/types";
+
+function makeInteractionWithSuggestion(
+  id: string,
+  suggestionStatus: ToolSuggestion["status"] = "visible"
+): LisaInteraction {
+  const suggestion: ToolSuggestion = {
+    id: "sug-1",
+    toolId: "runtime-snapshot",
+    toolDisplayName: "Runtime Snapshot",
+    reason: "test",
+    source: "user_intent_detected",
+    createdAt: NOW,
+    originatingInteractionId: id,
+    status: suggestionStatus,
+  };
+  return {
+    id,
+    kind: "local_ai",
+    prompt: "check my system",
+    response: "Sure!",
+    status: "complete",
+    createdAt: NOW,
+    completedAt: NOW,
+    toolSuggestion: suggestion,
+  };
+}
+
+describe("DISMISS_TOOL_SUGGESTION", () => {
+  it("sets visible suggestion to dismissed", () => {
+    const ix = makeInteractionWithSuggestion("ix-1", "visible");
+    const s = { ...initialState, interactions: [ix] };
+    const next = lisaReducer(s, { type: "DISMISS_TOOL_SUGGESTION", payload: { interactionId: "ix-1" } });
+    expect(next.interactions[0].toolSuggestion?.status).toBe("dismissed");
+  });
+
+  it("no-ops if suggestion is already dismissed", () => {
+    const ix = makeInteractionWithSuggestion("ix-1", "dismissed");
+    const s = { ...initialState, interactions: [ix] };
+    const next = lisaReducer(s, { type: "DISMISS_TOOL_SUGGESTION", payload: { interactionId: "ix-1" } });
+    expect(next.interactions[0].toolSuggestion?.status).toBe("dismissed");
+  });
+
+  it("no-ops if suggestion is already converted", () => {
+    const ix = makeInteractionWithSuggestion("ix-1", "converted");
+    const s = { ...initialState, interactions: [ix] };
+    const next = lisaReducer(s, { type: "DISMISS_TOOL_SUGGESTION", payload: { interactionId: "ix-1" } });
+    expect(next.interactions[0].toolSuggestion?.status).toBe("converted");
+  });
+
+  it("no-ops if interaction has no toolSuggestion", () => {
+    const ix: LisaInteraction = { id: "ix-1", kind: "local_ai", prompt: "hi", response: "ok", status: "complete", createdAt: NOW };
+    const s = { ...initialState, interactions: [ix] };
+    const next = lisaReducer(s, { type: "DISMISS_TOOL_SUGGESTION", payload: { interactionId: "ix-1" } });
+    expect(next.interactions[0].toolSuggestion).toBeUndefined();
+  });
+});
+
+// ─── CONVERT_TOOL_SUGGESTION ──────────────────────────────────────────────────
+
+describe("CONVERT_TOOL_SUGGESTION", () => {
+  it("sets visible suggestion to converted", () => {
+    const ix = makeInteractionWithSuggestion("ix-1", "visible");
+    const s = { ...initialState, interactions: [ix] };
+    const next = lisaReducer(s, { type: "CONVERT_TOOL_SUGGESTION", payload: { interactionId: "ix-1", requestId: "req-1" } });
+    expect(next.interactions[0].toolSuggestion?.status).toBe("converted");
+  });
+
+  it("no-ops if suggestion is already converted", () => {
+    const ix = makeInteractionWithSuggestion("ix-1", "converted");
+    const s = { ...initialState, interactions: [ix] };
+    const next = lisaReducer(s, { type: "CONVERT_TOOL_SUGGESTION", payload: { interactionId: "ix-1", requestId: "req-1" } });
+    expect(next.interactions[0].toolSuggestion?.status).toBe("converted");
+  });
+
+  it("no-ops if suggestion is already dismissed", () => {
+    const ix = makeInteractionWithSuggestion("ix-1", "dismissed");
+    const s = { ...initialState, interactions: [ix] };
+    const next = lisaReducer(s, { type: "CONVERT_TOOL_SUGGESTION", payload: { interactionId: "ix-1", requestId: "req-1" } });
+    expect(next.interactions[0].toolSuggestion?.status).toBe("dismissed");
+  });
+
+  it("no-ops if interaction has no toolSuggestion", () => {
+    const ix: LisaInteraction = { id: "ix-1", kind: "local_ai", prompt: "hi", response: "ok", status: "complete", createdAt: NOW };
+    const s = { ...initialState, interactions: [ix] };
+    const next = lisaReducer(s, { type: "CONVERT_TOOL_SUGGESTION", payload: { interactionId: "ix-1", requestId: "req-1" } });
+    expect(next.interactions[0].toolSuggestion).toBeUndefined();
+  });
+});

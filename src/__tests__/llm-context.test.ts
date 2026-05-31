@@ -216,3 +216,31 @@ describe("buildOllamaMessages — memory notes", () => {
     expect(messages[0].content).toBe(buildLisaSystemPrompt([]));
   });
 });
+
+// ─── Phase 2C — tool suggestion boundary ─────────────────────────────────────
+
+describe("buildLisaSystemPrompt — Phase 2C tool framework boundary", () => {
+  it("allows LLM to name tools and give users the exact command strings", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("type 'runtime snapshot'");
+  });
+
+  it("mentions suggestion chip so LLM knows it may appear automatically", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("suggestion chip");
+  });
+
+  it("forbids LLM from creating tool requests", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("must never create");
+  });
+
+  it("forbids LLM from approving tool requests", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("must never approve");
+  });
+
+  it("forbids JSON tool-call payloads or structured invocation protocol", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("json tool-call payload");
+  });
+
+  it("forbids inventing tool outputs", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("do not invent tool outputs");
+  });
+});

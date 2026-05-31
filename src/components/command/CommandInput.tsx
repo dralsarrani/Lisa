@@ -9,7 +9,9 @@ import { buildOllamaMessages, trimConversationHistory } from "../../core/llm-con
 import type { LisaConversationTurn } from "../../core/llm-context";
 import { MEMORY_NOTES_CAP, MEMORY_NOTE_CHAR_LIMIT } from "../../core/types";
 import { classifyOllamaError } from "../../core/ollama-error";
-import { getToolDefinition } from "../../core/tool-registry";
+import { getToolDefinition, getEnabledToolDefinitions } from "../../core/tool-registry";
+import { detectToolSuggestion, createToolRequestPair } from "../../core/tool-suggestions";
+import type { ToolSuggestion } from "../../core/types";
 import "./CommandInput.css";
 
 // ─── Pure formatter — exported for testing ────────────────────────────────────
@@ -187,6 +189,27 @@ export const CommandInput: React.FC = () => {
             const completedTurn = { userInput: raw, assistantResponse: accumulatedResponse, timestamp: now(), model };
             conversationHistoryRef.current = [...trimmedHistory, completedTurn];
             dispatch({ type: "APPEND_CONVERSATION_TURN", payload: completedTurn });
+            // Attach deterministic tool suggestion if user input matches known patterns
+            if (accumulatedResponse) {
+              const suggestionCore = detectToolSuggestion(raw, getEnabledToolDefinitions(), state.toolRequests);
+              if (suggestionCore) {
+                const suggestion: ToolSuggestion = {
+                  id: crypto.randomUUID(),
+                  ...suggestionCore,
+                  createdAt: now(),
+                  originatingInteractionId: interactionId,
+                  status: "visible",
+                };
+                dispatch({ type: "UPDATE_INTERACTION", payload: { id: interactionId, toolSuggestion: suggestion } });
+                addAudit({
+                  eventType: "tool_suggestion_shown",
+                  source: "command_input",
+                  summary: `Tool suggestion shown: "${suggestionCore.toolDisplayName}"`,
+                  details: `tool_id=${suggestionCore.toolId} interaction_id=${interactionId}`,
+                  severity: "info",
+                });
+              }
+            }
             setTimeout(() => dispatch({ type: "SET_ORB_STATE", payload: "idle" }), 3000);
             resolve();
           }
@@ -739,29 +762,7 @@ export const CommandInput: React.FC = () => {
           });
           break;
         }
-        const requestId = makeId();
-        const contractId = makeId();
-        const createdAt = now();
-        const request = {
-          id: requestId,
-          toolId: definition.id,
-          toolDisplayName: definition.displayName,
-          params: {} as Record<string, string | number | boolean>,
-          status: "pending_approval" as const,
-          source: "user_command" as const,
-          consequences: definition.consequences,
-          createdAt,
-        };
-        const contract = {
-          id: contractId,
-          requestId,
-          toolId: definition.id,
-          toolDisplayName: definition.displayName,
-          consequences: definition.consequences,
-          decision: null,
-          resolvedBy: null,
-          createdAt,
-        };
+        const { request, approval: contract } = createToolRequestPair(definition, "user_command");
         dispatch({
           type: "CREATE_TOOL_REQUEST",
           payload: {

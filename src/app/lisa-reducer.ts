@@ -117,6 +117,8 @@ export type LisaAction =
       type: "CANCEL_TOOL_REQUEST";
       payload: { requestId: string; auditEvent: AuditEvent };
     }
+  | { type: "DISMISS_TOOL_SUGGESTION"; payload: { interactionId: string } }
+  | { type: "CONVERT_TOOL_SUGGESTION"; payload: { interactionId: string; requestId: string } }
   | {
       type: "LOAD_STATE";
       payload: {
@@ -446,6 +448,30 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
             : a
         ),
         auditEvents: [auditEvent, ...state.auditEvents].slice(0, 500),
+      };
+    }
+
+    case "DISMISS_TOOL_SUGGESTION": {
+      const { interactionId } = action.payload;
+      return {
+        ...state,
+        interactions: state.interactions.map((i): LisaInteraction => {
+          if (i.id !== interactionId) return i;
+          if (!i.toolSuggestion || i.toolSuggestion.status !== "visible") return i;
+          return { ...i, toolSuggestion: { ...i.toolSuggestion, status: "dismissed" as const } };
+        }),
+      };
+    }
+
+    case "CONVERT_TOOL_SUGGESTION": {
+      const { interactionId } = action.payload;
+      return {
+        ...state,
+        interactions: state.interactions.map((i): LisaInteraction => {
+          if (i.id !== interactionId) return i;
+          if (!i.toolSuggestion || i.toolSuggestion.status !== "visible") return i;
+          return { ...i, toolSuggestion: { ...i.toolSuggestion, status: "converted" as const } };
+        }),
       };
     }
 

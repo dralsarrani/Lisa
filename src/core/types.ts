@@ -153,13 +153,24 @@ export type ToolRequestStatus =
   | "cancelled"
   | "expired";
 
+export interface ToolSuggestion {
+  id: string;
+  toolId: string;
+  toolDisplayName: string;
+  reason: string;
+  source: "user_intent_detected";
+  createdAt: string;
+  originatingInteractionId: string;
+  status: "visible" | "dismissed" | "converted";
+}
+
 export interface ToolRequest {
   id: string;
   toolId: string;
   toolDisplayName: string;
   params: Record<string, string | number | boolean>;
   status: ToolRequestStatus;
-  source: "user_command";
+  source: "user_command" | "suggestion_converted";
   consequences: string;
   createdAt: string;
   approvedAt?: string;
@@ -241,7 +252,10 @@ export type AuditEventType =
   | "tool_execution_started"
   | "tool_execution_succeeded"
   | "tool_execution_failed"
-  | "tool_approval_contract_created";
+  | "tool_approval_contract_created"
+  | "tool_suggestion_shown"
+  | "tool_suggestion_converted"
+  | "tool_suggestion_dismissed";
 
 export interface AuditEvent {
   id: string;
@@ -354,6 +368,7 @@ export interface LisaInteraction {
   completedAt?: string;
   latencyMs?: number;
   error?: string;
+  toolSuggestion?: ToolSuggestion;
 }
 
 export const INTERACTION_CAP = 25;

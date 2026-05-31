@@ -414,3 +414,104 @@
   border-radius: 3px;
   background: rgba(6, 10, 22, 0.45);
 }
+
+/* ── Tool suggestion chip ───────────────────────────────────────────────────── */
+.tool-suggestion-chip {
+  margin-top: 10px;
+  border: 1px solid rgba(26, 159, 255, 0.22);
+  border-left: 2px solid rgba(26, 159, 255, 0.50);
+  border-radius: var(--radius-sm);
+  background: rgba(26, 159, 255, 0.04);
+  padding: 9px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.tool-suggestion-chip.tool-suggestion-converted {
+  border-color: rgba(34, 197, 94, 0.22);
+  border-left-color: rgba(34, 197, 94, 0.50);
+  background: rgba(34, 197, 94, 0.04);
+}
+
+.tool-suggestion-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tool-suggestion-icon {
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.tool-suggestion-title {
+  font-family: var(--font-mono);
+  font-size: 0.60rem;
+  color: var(--color-accent);
+  letter-spacing: 0.04em;
+}
+
+.tool-suggestion-note {
+  font-family: var(--font-mono);
+  font-size: 0.51rem;
+  color: var(--text-dim);
+  letter-spacing: 0.03em;
+  line-height: 1.5;
+}
+
+.tool-suggestion-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tool-suggestion-prepare-btn {
+  font-family: var(--font-mono);
+  font-size: 0.52rem;
+  letter-spacing: 0.06em;
+  color: var(--color-accent);
+  background: rgba(26, 159, 255, 0.09);
+  border: 1px solid rgba(26, 159, 255, 0.28);
+  border-radius: 2px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  line-height: 1.6;
+}
+
+.tool-suggestion-prepare-btn:hover:not(:disabled) {
+  background: rgba(26, 159, 255, 0.17);
+  border-color: rgba(26, 159, 255, 0.50);
+}
+
+.tool-suggestion-prepare-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.tool-suggestion-dismiss-btn {
+  font-family: var(--font-mono);
+  font-size: 0.52rem;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 2px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  line-height: 1.6;
+}
+
+.tool-suggestion-dismiss-btn:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+}
+
+.tool-suggestion-converted-label {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  color: var(--color-success);
+  letter-spacing: 0.05em;
+}
