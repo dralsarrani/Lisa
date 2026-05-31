@@ -442,6 +442,107 @@ describe("CREATE_TOOL_REQUEST — cap enforcement", () => {
   });
 });
 
+// ─── Phase 2F — expiresAt on approval ────────────────────────────────────────
+
+describe("OPERATOR_APPROVE_TOOL — Phase 2F expiresAt", () => {
+  function stateWithPending(): LisaState {
+    return lisaReducer(initialState, {
+      type: "CREATE_TOOL_REQUEST",
+      payload: { request: makeRequest("req-1"), approval: makeApproval("apv-1", "req-1"), auditEvent: makeAudit() },
+    });
+  }
+
+  it("sets expiresAt 5 minutes after resolvedAt", () => {
+    const resolvedAt = "2025-01-01T00:00:00.000Z";
+    const next = lisaReducer(stateWithPending(), {
+      type: "OPERATOR_APPROVE_TOOL",
+      payload: { requestId: "req-1", resolvedAt, auditEvent: makeAudit() },
+    });
+    const req = next.toolRequests.find((r) => r.id === "req-1")!;
+    expect(req.expiresAt).toBeDefined();
+    const diff = new Date(req.expiresAt!).getTime() - new Date(resolvedAt).getTime();
+    expect(diff).toBe(5 * 60 * 1000);
+  });
+
+  it("expiresAt is after approvedAt", () => {
+    const resolvedAt = "2025-06-15T12:00:00.000Z";
+    const next = lisaReducer(stateWithPending(), {
+      type: "OPERATOR_APPROVE_TOOL",
+      payload: { requestId: "req-1", resolvedAt, auditEvent: makeAudit() },
+    });
+    const req = next.toolRequests.find((r) => r.id === "req-1")!;
+    expect(new Date(req.expiresAt!).getTime()).toBeGreaterThan(new Date(resolvedAt).getTime());
+  });
+});
+
+// ─── Phase 2F — expiry check in START_TOOL_EXECUTION ─────────────────────────
+
+describe("START_TOOL_EXECUTION — Phase 2F expiry", () => {
+  function approvedStateWithExpiry(expiresAt: string): LisaState {
+    const reqWithExpiry: ToolRequest = { ...makeRequest("req-1", "approved"), approvedAt: NOW, expiresAt };
+    const approval: ToolApprovalContract = {
+      id: "apv-1",
+      requestId: "req-1",
+      toolId: "conversation-stats",
+      toolDisplayName: "Conversation Stats",
+      consequences: "Safe diagnostic only.",
+      decision: "approved",
+      resolvedBy: "operator",
+      createdAt: NOW,
+      resolvedAt: NOW,
+    };
+    return lisaReducer(initialState, {
+      type: "CREATE_TOOL_REQUEST",
+      payload: { request: reqWithExpiry, approval, auditEvent: makeAudit() },
+    });
+  }
+
+  it("marks request as expired when startedAt is after expiresAt", () => {
+    const expiresAt = "2025-01-01T00:04:00.000Z";
+    const startedAt = "2025-01-01T00:06:00.000Z";
+    const s = approvedStateWithExpiry(expiresAt);
+    const next = lisaReducer(s, {
+      type: "START_TOOL_EXECUTION",
+      payload: { requestId: "req-1", startedAt, auditEvent: makeAudit() },
+    });
+    expect(next.toolRequests[0].status).toBe("expired");
+  });
+
+  it("proceeds to running when startedAt is before expiresAt", () => {
+    const expiresAt = "2025-01-01T00:10:00.000Z";
+    const startedAt = "2025-01-01T00:03:00.000Z";
+    const s = approvedStateWithExpiry(expiresAt);
+    const next = lisaReducer(s, {
+      type: "START_TOOL_EXECUTION",
+      payload: { requestId: "req-1", startedAt, auditEvent: makeAudit() },
+    });
+    expect(next.toolRequests[0].status).toBe("running");
+  });
+
+  it("proceeds to running when no expiresAt is set", () => {
+    const s1 = lisaReducer(initialState, {
+      type: "CREATE_TOOL_REQUEST",
+      payload: { request: makeRequest("req-1"), approval: makeApproval("apv-1", "req-1"), auditEvent: makeAudit() },
+    });
+    const s2 = lisaReducer(s1, {
+      type: "OPERATOR_APPROVE_TOOL",
+      payload: { requestId: "req-1", resolvedAt: NOW, auditEvent: makeAudit() },
+    });
+    const s3 = {
+      ...s2,
+      toolRequests: s2.toolRequests.map((r) => {
+        const { expiresAt: _exp, ...rest } = r as ToolRequest & { expiresAt?: string };
+        return rest as ToolRequest;
+      }),
+    };
+    const next = lisaReducer(s3, {
+      type: "START_TOOL_EXECUTION",
+      payload: { requestId: "req-1", startedAt: NOW, auditEvent: makeAudit() },
+    });
+    expect(next.toolRequests[0].status).toBe("running");
+  });
+});
+
 // ─── DISMISS_TOOL_SUGGESTION ──────────────────────────────────────────────────
 
 import type { LisaInteraction, ToolSuggestion } from "../core/types";

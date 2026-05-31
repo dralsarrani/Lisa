@@ -525,20 +525,22 @@ describe("tool persistence — round trip", () => {
   });
 
   it("persists and reloads tool results", async () => {
+    const requests = [makeToolRequest("req-1", "succeeded"), makeToolRequest("req-2", "succeeded")];
     const results = [makeToolResult("res-1", "req-1"), makeToolResult("res-2", "req-2")];
-    await saveState({ ...BASE_SAVE, toolRequests: [], toolResults: results, toolApprovals: [] });
+    await saveState({ ...BASE_SAVE, toolRequests: requests, toolResults: results, toolApprovals: [] });
     const loaded = await loadState();
     expect(loaded.toolResults).toHaveLength(2);
     expect(loaded.toolResults[0].id).toBe("res-1");
   });
 
   it("persists and reloads tool approvals", async () => {
+    const requests = [makeToolRequest("req-1"), makeToolRequest("req-2"), makeToolRequest("req-3")];
     const approvals = [
       makeToolApproval("apv-1", "req-1", null),
       makeToolApproval("apv-2", "req-2", "approved"),
       makeToolApproval("apv-3", "req-3", "rejected"),
     ];
-    await saveState({ ...BASE_SAVE, toolRequests: [], toolResults: [], toolApprovals: approvals });
+    await saveState({ ...BASE_SAVE, toolRequests: requests, toolResults: [], toolApprovals: approvals });
     const loaded = await loadState();
     expect(loaded.toolApprovals).toHaveLength(3);
     expect(loaded.toolApprovals[0].decision).toBeNull();
@@ -548,7 +550,8 @@ describe("tool persistence — round trip", () => {
 
   it("two pending tool requests coexist after round trip", async () => {
     const requests = [makeToolRequest("req-a", "pending_approval"), makeToolRequest("req-b", "pending_approval")];
-    await saveState({ ...BASE_SAVE, toolRequests: requests, toolResults: [], toolApprovals: [] });
+    const approvals = [makeToolApproval("apv-a", "req-a"), makeToolApproval("apv-b", "req-b")];
+    await saveState({ ...BASE_SAVE, toolRequests: requests, toolResults: [], toolApprovals: approvals });
     const loaded = await loadState();
     const pending = loaded.toolRequests.filter((r) => r.status === "pending_approval");
     expect(pending).toHaveLength(2);
@@ -557,7 +560,12 @@ describe("tool persistence — round trip", () => {
 
 describe("tool persistence — restart policy", () => {
   it("pending_approval survives restart unchanged", async () => {
-    await saveState({ ...BASE_SAVE, toolRequests: [makeToolRequest("req-1", "pending_approval")], toolResults: [], toolApprovals: [] });
+    await saveState({
+      ...BASE_SAVE,
+      toolRequests: [makeToolRequest("req-1", "pending_approval")],
+      toolResults: [],
+      toolApprovals: [makeToolApproval("apv-1", "req-1")],
+    });
     const loaded = await loadState();
     expect(loaded.toolRequests[0].status).toBe("pending_approval");
   });
@@ -591,7 +599,12 @@ describe("tool persistence — restart policy", () => {
       makeToolRequest("req-approved", "approved"),
       makeToolRequest("req-done", "succeeded"),
     ];
-    await saveState({ ...BASE_SAVE, toolRequests: requests, toolResults: [], toolApprovals: [] });
+    await saveState({
+      ...BASE_SAVE,
+      toolRequests: requests,
+      toolResults: [],
+      toolApprovals: [makeToolApproval("apv-pending", "req-pending")],
+    });
     const loaded = await loadState();
     const byId = Object.fromEntries(loaded.toolRequests.map((r) => [r.id, r.status]));
     expect(byId["req-pending"]).toBe("pending_approval");
@@ -613,19 +626,25 @@ describe("tool persistence — caps", () => {
   });
 
   it(`caps toolResults at ${TOOL_RESULTS_CAP} on save`, async () => {
+    const requests = Array.from({ length: TOOL_RESULTS_CAP + 5 }, (_, i) =>
+      makeToolRequest(`req-${i}`, "succeeded")
+    );
     const results = Array.from({ length: TOOL_RESULTS_CAP + 5 }, (_, i) =>
       makeToolResult(`res-${i}`, `req-${i}`)
     );
-    await saveState({ ...BASE_SAVE, toolRequests: [], toolResults: results, toolApprovals: [] });
+    await saveState({ ...BASE_SAVE, toolRequests: requests, toolResults: results, toolApprovals: [] });
     const loaded = await loadState();
     expect(loaded.toolResults).toHaveLength(TOOL_RESULTS_CAP);
   });
 
   it(`caps toolApprovals at ${TOOL_APPROVALS_CAP} on save`, async () => {
+    const requests = Array.from({ length: TOOL_APPROVALS_CAP + 5 }, (_, i) =>
+      makeToolRequest(`req-${i}`)
+    );
     const approvals = Array.from({ length: TOOL_APPROVALS_CAP + 5 }, (_, i) =>
       makeToolApproval(`apv-${i}`, `req-${i}`)
     );
-    await saveState({ ...BASE_SAVE, toolRequests: [], toolResults: [], toolApprovals: approvals });
+    await saveState({ ...BASE_SAVE, toolRequests: requests, toolResults: [], toolApprovals: approvals });
     const loaded = await loadState();
     expect(loaded.toolApprovals).toHaveLength(TOOL_APPROVALS_CAP);
   });
@@ -771,7 +790,9 @@ describe("tool persistence — validation", () => {
         auditEvents: [],
         conversationHistory: [],
         memoryNotes: [],
-        toolRequests: [],
+        toolRequests: [
+          { id: "req-1", toolId: "t", toolDisplayName: "T", params: {}, status: "pending_approval", source: "user_command", consequences: "x", createdAt: NOW },
+        ],
         toolResults: [],
         toolApprovals: [
           { id: "apv-valid", requestId: "req-1", toolId: "t", createdAt: NOW, decision: null },
@@ -783,5 +804,185 @@ describe("tool persistence — validation", () => {
     const loaded = await loadState();
     expect(loaded.toolApprovals).toHaveLength(1);
     expect(loaded.toolApprovals[0].id).toBe("apv-valid");
+  });
+});
+
+// ─── Phase 2F — cleanOrphans ──────────────────────────────────────────────────
+
+const NOW_2F = new Date().toISOString();
+
+function makeStoredRequest(id: string, status: ToolRequest["status"]): ToolRequest {
+  return {
+    id,
+    toolId: "runtime-snapshot",
+    toolDisplayName: "Runtime Snapshot",
+    params: {},
+    status,
+    source: "user_command",
+    consequences: "test",
+    createdAt: NOW_2F,
+  };
+}
+
+function makeStoredApproval(id: string, requestId: string): ToolApprovalContract {
+  return {
+    id,
+    requestId,
+    toolId: "runtime-snapshot",
+    toolDisplayName: "Runtime Snapshot",
+    consequences: "test",
+    decision: null,
+    resolvedBy: null,
+    createdAt: NOW_2F,
+  };
+}
+
+function makeStoredResult(id: string, requestId: string): ToolResult {
+  return {
+    id,
+    requestId,
+    toolId: "runtime-snapshot",
+    outputSummary: "ok",
+    succeededAt: NOW_2F,
+  };
+}
+
+describe("Phase 2F — cleanOrphans on loadState", () => {
+  it("removes approval with no matching request", async () => {
+    localStorage.setItem(
+      "lisa_state_v1",
+      JSON.stringify({
+        version: STATE_VERSION,
+        settings: DEFAULT_SETTINGS,
+        missions: [],
+        approvals: [],
+        auditEvents: [],
+        conversationHistory: [],
+        memoryNotes: [],
+        toolRequests: [makeStoredRequest("req-1", "pending_approval")],
+        toolApprovals: [
+          makeStoredApproval("apv-1", "req-1"),
+          makeStoredApproval("apv-orphan", "req-999"),
+        ],
+        toolResults: [],
+        savedAt: NOW_2F,
+      })
+    );
+    const loaded = await loadState();
+    expect(loaded.toolApprovals).toHaveLength(1);
+    expect(loaded.toolApprovals[0].id).toBe("apv-1");
+  });
+
+  it("removes result with no matching request", async () => {
+    localStorage.setItem(
+      "lisa_state_v1",
+      JSON.stringify({
+        version: STATE_VERSION,
+        settings: DEFAULT_SETTINGS,
+        missions: [],
+        approvals: [],
+        auditEvents: [],
+        conversationHistory: [],
+        memoryNotes: [],
+        toolRequests: [makeStoredRequest("req-1", "succeeded")],
+        toolApprovals: [makeStoredApproval("apv-1", "req-1")],
+        toolResults: [
+          makeStoredResult("res-1", "req-1"),
+          makeStoredResult("res-orphan", "req-999"),
+        ],
+        savedAt: NOW_2F,
+      })
+    );
+    const loaded = await loadState();
+    expect(loaded.toolResults).toHaveLength(1);
+    expect(loaded.toolResults[0].id).toBe("res-1");
+  });
+
+  it("cancels a pending_approval request missing its approval contract", async () => {
+    localStorage.setItem(
+      "lisa_state_v1",
+      JSON.stringify({
+        version: STATE_VERSION,
+        settings: DEFAULT_SETTINGS,
+        missions: [],
+        approvals: [],
+        auditEvents: [],
+        conversationHistory: [],
+        memoryNotes: [],
+        toolRequests: [makeStoredRequest("req-orphan", "pending_approval")],
+        toolApprovals: [],
+        toolResults: [],
+        savedAt: NOW_2F,
+      })
+    );
+    const loaded = await loadState();
+    expect(loaded.toolRequests[0].status).toBe("cancelled");
+  });
+
+  it("approved request without contract becomes expired (restart policy runs before orphan cleanup)", async () => {
+    // safeToolRequests converts approved→expired on restart; cleanOrphans then sees expired, not approved
+    localStorage.setItem(
+      "lisa_state_v1",
+      JSON.stringify({
+        version: STATE_VERSION,
+        settings: DEFAULT_SETTINGS,
+        missions: [],
+        approvals: [],
+        auditEvents: [],
+        conversationHistory: [],
+        memoryNotes: [],
+        toolRequests: [makeStoredRequest("req-orphan", "approved")],
+        toolApprovals: [],
+        toolResults: [],
+        savedAt: NOW_2F,
+      })
+    );
+    const loaded = await loadState();
+    expect(loaded.toolRequests[0].status).toBe("expired");
+  });
+
+  it("does not cancel a succeeded request missing its contract", async () => {
+    localStorage.setItem(
+      "lisa_state_v1",
+      JSON.stringify({
+        version: STATE_VERSION,
+        settings: DEFAULT_SETTINGS,
+        missions: [],
+        approvals: [],
+        auditEvents: [],
+        conversationHistory: [],
+        memoryNotes: [],
+        toolRequests: [makeStoredRequest("req-done", "succeeded")],
+        toolApprovals: [],
+        toolResults: [],
+        savedAt: NOW_2F,
+      })
+    );
+    const loaded = await loadState();
+    expect(loaded.toolRequests[0].status).toBe("succeeded");
+  });
+
+  it("clean state passes through without modification", async () => {
+    const req = makeStoredRequest("req-1", "pending_approval");
+    const apv = makeStoredApproval("apv-1", "req-1");
+    localStorage.setItem(
+      "lisa_state_v1",
+      JSON.stringify({
+        version: STATE_VERSION,
+        settings: DEFAULT_SETTINGS,
+        missions: [],
+        approvals: [],
+        auditEvents: [],
+        conversationHistory: [],
+        memoryNotes: [],
+        toolRequests: [req],
+        toolApprovals: [apv],
+        toolResults: [],
+        savedAt: NOW_2F,
+      })
+    );
+    const loaded = await loadState();
+    expect(loaded.toolRequests[0].status).toBe("pending_approval");
+    expect(loaded.toolApprovals[0].id).toBe("apv-1");
   });
 });

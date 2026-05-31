@@ -226,6 +226,45 @@ describe("detectToolSuggestion — state guard", () => {
   });
 });
 
+// ─── Phase 2F: canSuggest blocks approved and running ─────────────────────────
+
+describe("detectToolSuggestion — Phase 2F: blocks approved and running statuses", () => {
+  it("returns null when existing request is approved", () => {
+    const existing: ToolRequest[] = [{ ...makePendingRequest("runtime-snapshot"), status: "approved" }];
+    expect(detectToolSuggestion("check my system status", ALL_TOOLS, existing)).toBeNull();
+  });
+
+  it("returns null when existing request is running", () => {
+    const existing: ToolRequest[] = [{ ...makePendingRequest("runtime-snapshot"), status: "running" }];
+    expect(detectToolSuggestion("check my system status", ALL_TOOLS, existing)).toBeNull();
+  });
+
+  it("still suggests after request is succeeded", () => {
+    const existing: ToolRequest[] = [{ ...makePendingRequest("runtime-snapshot"), status: "succeeded" }];
+    const result = detectToolSuggestion("check my system status", ALL_TOOLS, existing);
+    expect(result).not.toBeNull();
+    expect(result?.toolId).toBe("runtime-snapshot");
+  });
+
+  it("still suggests after request is failed", () => {
+    const existing: ToolRequest[] = [{ ...makePendingRequest("runtime-snapshot"), status: "failed" }];
+    const result = detectToolSuggestion("check my system status", ALL_TOOLS, existing);
+    expect(result).not.toBeNull();
+  });
+
+  it("still suggests after request is expired", () => {
+    const existing: ToolRequest[] = [{ ...makePendingRequest("runtime-snapshot"), status: "expired" }];
+    const result = detectToolSuggestion("check my system status", ALL_TOOLS, existing);
+    expect(result).not.toBeNull();
+  });
+
+  it("does not block the other tool when runtime-snapshot is approved", () => {
+    const existing: ToolRequest[] = [{ ...makePendingRequest("runtime-snapshot"), status: "approved" }];
+    const result = detectToolSuggestion("summarize our conversation please", ALL_TOOLS, existing);
+    expect(result?.toolId).toBe("conversation-stats");
+  });
+});
+
 // ─── createToolRequestPair helper ─────────────────────────────────────────────
 
 describe("createToolRequestPair", () => {

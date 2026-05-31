@@ -47,7 +47,14 @@ export function detectToolSuggestion(
     const def = availableTools.find((t) => t.id === toolId);
     if (!def || !def.enabled) return false;
     if (def.riskLevel !== "safe" && def.riskLevel !== "low") return false;
-    if (existingToolRequests.some((r) => r.toolId === toolId && r.status === "pending_approval")) return false;
+    if (
+      existingToolRequests.some(
+        (r) =>
+          r.toolId === toolId &&
+          (r.status === "pending_approval" || r.status === "approved" || r.status === "running")
+      )
+    )
+      return false;
     return true;
   }
 

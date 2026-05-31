@@ -72,6 +72,10 @@ export async function loadState(): Promise<PersistedState> {
       return migrateState(parsed);
     }
 
+    const rawRequests = safeToolRequests(parsed.toolRequests);
+    const rawApprovals = safeToolApprovals(parsed.toolApprovals);
+    const rawResults = safeToolResults(parsed.toolResults);
+    const clean = cleanOrphans(rawRequests, rawApprovals, rawResults);
     return {
       version: STATE_VERSION,
       settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
@@ -80,9 +84,9 @@ export async function loadState(): Promise<PersistedState> {
       auditEvents: (parsed.auditEvents ?? []).slice(-MAX_AUDIT_EVENTS),
       conversationHistory: safeConversationHistory(parsed.conversationHistory),
       memoryNotes: safeMemoryNotes(parsed.memoryNotes),
-      toolRequests: safeToolRequests(parsed.toolRequests),
-      toolResults: safeToolResults(parsed.toolResults),
-      toolApprovals: safeToolApprovals(parsed.toolApprovals),
+      toolRequests: clean.requests,
+      toolResults: clean.results,
+      toolApprovals: clean.approvals,
       savedAt: parsed.savedAt ?? new Date().toISOString(),
     };
   } catch {
@@ -154,6 +158,10 @@ function migrateState(old: Partial<PersistedState>): PersistedState {
   // v5 → v6: additive migration — only new field is settings.toolResultContextEnabled.
   // Preserve all tool collections so approved/pending requests and results survive upgrade.
   if (old.version === 5) {
+    const migRequests = safeToolRequests(old.toolRequests);
+    const migApprovals = safeToolApprovals(old.toolApprovals);
+    const migResults = safeToolResults(old.toolResults);
+    const migClean = cleanOrphans(migRequests, migApprovals, migResults);
     return {
       version: STATE_VERSION,
       settings: { ...DEFAULT_SETTINGS, ...(old.settings ?? {}) },
@@ -162,9 +170,9 @@ function migrateState(old: Partial<PersistedState>): PersistedState {
       auditEvents: (old.auditEvents ?? []).slice(-MAX_AUDIT_EVENTS),
       conversationHistory: safeConversationHistory(old.conversationHistory),
       memoryNotes: safeMemoryNotes(old.memoryNotes),
-      toolRequests: safeToolRequests(old.toolRequests),
-      toolResults: safeToolResults(old.toolResults),
-      toolApprovals: safeToolApprovals(old.toolApprovals),
+      toolRequests: migClean.requests,
+      toolResults: migClean.results,
+      toolApprovals: migClean.approvals,
       savedAt: old.savedAt ?? new Date().toISOString(),
     };
   }
@@ -180,6 +188,30 @@ function migrateState(old: Partial<PersistedState>): PersistedState {
     toolRequests: [],
     toolResults: [],
     toolApprovals: [],
+  };
+}
+
+// ─── Orphan cleanup ───────────────────────────────────────────────────────────
+
+function cleanOrphans(
+  toolRequests: ToolRequest[],
+  toolApprovals: ToolApprovalContract[],
+  toolResults: ToolResult[]
+): { requests: ToolRequest[]; approvals: ToolApprovalContract[]; results: ToolResult[] } {
+  const requestIds = new Set(toolRequests.map((r) => r.id));
+  const approvalRequestIds = new Set(toolApprovals.map((a) => a.requestId));
+  return {
+    requests: toolRequests.map((r) => {
+      if (
+        !approvalRequestIds.has(r.id) &&
+        (r.status === "pending_approval" || r.status === "approved")
+      ) {
+        return { ...r, status: "cancelled" as const, completedAt: new Date().toISOString() };
+      }
+      return r;
+    }),
+    approvals: toolApprovals.filter((a) => requestIds.has(a.requestId)),
+    results: toolResults.filter((r) => requestIds.has(r.requestId)),
   };
 }
 

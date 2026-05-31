@@ -25,6 +25,8 @@ import {
   TOOL_APPROVALS_CAP,
 } from "../core/types";
 
+const APPROVED_EXPIRY_MS = 5 * 60 * 1000;
+
 // ─── State ────────────────────────────────────────────────────────────────────
 
 export interface LisaState {
@@ -351,7 +353,12 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
         ...state,
         toolRequests: state.toolRequests.map((r) =>
           r.id === requestId && r.status === "pending_approval"
-            ? { ...r, status: "approved" as const, approvedAt: resolvedAt }
+            ? {
+                ...r,
+                status: "approved" as const,
+                approvedAt: resolvedAt,
+                expiresAt: new Date(new Date(resolvedAt).getTime() + APPROVED_EXPIRY_MS).toISOString(),
+              }
             : r
         ),
         toolApprovals: state.toolApprovals.map((a) =>
@@ -391,6 +398,16 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
         contract?.decision === "approved" &&
         contract?.resolvedBy === "operator";
       if (!gatePass) return state;
+      // Expiry check: approval window has passed — mark expired instead of starting.
+      if (req!.expiresAt && startedAt > req!.expiresAt) {
+        return {
+          ...state,
+          toolRequests: state.toolRequests.map((r) =>
+            r.id === requestId ? { ...r, status: "expired" as const, completedAt: startedAt } : r
+          ),
+          auditEvents: [auditEvent, ...state.auditEvents].slice(0, 500),
+        };
+      }
       return {
         ...state,
         toolRequests: state.toolRequests.map((r) =>

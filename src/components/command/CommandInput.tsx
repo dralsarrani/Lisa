@@ -11,6 +11,7 @@ import { MEMORY_NOTES_CAP, MEMORY_NOTE_CHAR_LIMIT } from "../../core/types";
 import { classifyOllamaError } from "../../core/ollama-error";
 import { getToolDefinition, getEnabledToolDefinitions, getAllToolDefinitions } from "../../core/tool-registry";
 import { detectToolSuggestion, createToolRequestPair } from "../../core/tool-suggestions";
+import { hasActiveToolRequest } from "../../core/tool-request-utils";
 import type { ToolSuggestion } from "../../core/types";
 import "./CommandInput.css";
 
@@ -793,6 +794,22 @@ export const CommandInput: React.FC = () => {
           dispatch({
             type: "ADD_INTERACTION",
             payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: disabledMsg, createdAt: now(), completedAt: now() },
+          });
+          break;
+        }
+        const activeRequest = hasActiveToolRequest(state.toolRequests, toolId);
+        if (activeRequest) {
+          const dupMsg = `A request for "${definition.displayName}" is already ${activeRequest.status === "running" ? "running" : "pending"}. Review it in Approvals.`;
+          dispatch({ type: "SET_COMMAND_RESPONSE", payload: dupMsg });
+          dispatch({
+            type: "ADD_INTERACTION",
+            payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: dupMsg, createdAt: now(), completedAt: now() },
+          });
+          addAudit({
+            eventType: "tool_request_duplicate_blocked",
+            source: "command_input",
+            summary: `Duplicate tool request blocked: "${definition.displayName}" is ${activeRequest.status}`,
+            severity: "warning",
           });
           break;
         }

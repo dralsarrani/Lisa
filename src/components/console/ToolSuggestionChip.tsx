@@ -4,6 +4,7 @@ import { useLisa } from "../../app/useLisa";
 import { createAuditEvent } from "../../core/audit-store";
 import { getToolDefinition } from "../../core/tool-registry";
 import { createToolRequestPair } from "../../core/tool-suggestions";
+import { hasActiveToolRequest } from "../../core/tool-request-utils";
 
 interface ToolSuggestionChipProps {
   suggestion: ToolSuggestion;
@@ -11,7 +12,7 @@ interface ToolSuggestionChipProps {
 }
 
 export const ToolSuggestionChip: React.FC<ToolSuggestionChipProps> = ({ suggestion, interactionId }) => {
-  const { dispatch, addAudit } = useLisa();
+  const { state, dispatch, addAudit } = useLisa();
   const [localConverted, setLocalConverted] = useState(false);
 
   const isConverted = localConverted || suggestion.status === "converted";
@@ -28,6 +29,13 @@ export const ToolSuggestionChip: React.FC<ToolSuggestionChipProps> = ({ suggesti
     if (localConverted) return;
     const def = getToolDefinition(suggestion.toolId);
     if (!def || !def.enabled) return;
+
+    const active = hasActiveToolRequest(state.toolRequests, suggestion.toolId);
+    if (active) {
+      setLocalConverted(true);
+      dispatch({ type: "CONVERT_TOOL_SUGGESTION", payload: { interactionId, requestId: active.id } });
+      return;
+    }
 
     setLocalConverted(true);
     const { request, approval } = createToolRequestPair(def, "suggestion_converted");

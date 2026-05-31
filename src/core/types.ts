@@ -177,6 +177,7 @@ export interface ToolRequest {
   consequences: string;
   createdAt: string;
   approvedAt?: string;
+  expiresAt?: string;
   startedAt?: string;
   completedAt?: string;
   resultId?: string;
@@ -261,7 +262,9 @@ export type AuditEventType =
   | "tool_suggestion_dismissed"
   | "llm_tool_context_injected"
   | "llm_tool_context_disabled"
-  | "llm_tool_context_excluded";
+  | "llm_tool_context_excluded"
+  | "tool_request_duplicate_blocked"
+  | "tool_request_expired_live";
 
 export interface AuditEvent {
   id: string;
