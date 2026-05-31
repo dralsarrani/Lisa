@@ -5,7 +5,7 @@ import { createTestMission, applyApprovalDecision } from "../../core/mission-sto
 import { createAuditEvent } from "../../core/audit-store";
 import { getModeDisplayName } from "../../core/mode-store";
 import { fetchRuntimeHealth } from "../../core/runtime-health";
-import { buildOllamaMessages, trimConversationHistory } from "../../core/llm-context";
+import { buildOllamaMessages, trimConversationHistory, TOOL_RESULT_CONTEXT_CAP } from "../../core/llm-context";
 import type { LisaConversationTurn } from "../../core/llm-context";
 import { MEMORY_NOTES_CAP, MEMORY_NOTE_CHAR_LIMIT } from "../../core/types";
 import { classifyOllamaError } from "../../core/ollama-error";
@@ -112,7 +112,17 @@ export const CommandInput: React.FC = () => {
       conversationHistoryRef.current,
       Math.max(0, maxContextTurns - 1)
     );
-    const messages = buildOllamaMessages(trimmedHistory, raw, state.memoryNotes);
+    const messages = buildOllamaMessages(trimmedHistory, raw, state.memoryNotes, state.toolResults);
+    const injectedResults = state.toolResults.filter((r) => r.outputSummary).slice(-TOOL_RESULT_CONTEXT_CAP);
+    if (injectedResults.length > 0) {
+      addAudit({
+        eventType: "llm_tool_context_injected",
+        source: "command_input",
+        summary: `Tool result context injected: ${injectedResults.length} result(s)`,
+        details: `count=${injectedResults.length} tool_ids=${injectedResults.map((r) => r.toolId).join(",")}`,
+        severity: "info",
+      });
+    }
 
     dispatch({ type: "SET_ORB_STATE", payload: "thinking" });
     isLlmResponseRef.current = false;

@@ -255,7 +255,8 @@ export type AuditEventType =
   | "tool_approval_contract_created"
   | "tool_suggestion_shown"
   | "tool_suggestion_converted"
-  | "tool_suggestion_dismissed";
+  | "tool_suggestion_dismissed"
+  | "llm_tool_context_injected";
 
 export interface AuditEvent {
   id: string;
