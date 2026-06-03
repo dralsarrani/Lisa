@@ -658,3 +658,59 @@ source: "user_command" | "suggestion_converted" | "result_action"
 - High-risk tools
 - STATE_VERSION bump (additive-only change -- no migration needed)
 
+---
+
+# Phase 2I — Memory Note Management UI / Lifecycle Polish
+
+## Overview
+
+Phase 2I improves the memory note management UX now that Phase 2H can create notes from approved tool results. It closes the full lifecycle: manual command → tool result save → inspect → delete → clear — all within Lisa's existing Settings panel.
+
+No new tools, executors, schema fields, or STATE_VERSION bump.
+
+## Changes Delivered
+
+### SettingsPanel.tsx — Memory Notes section
+
+- **Empty state**: When no notes exist, shows: "No memory notes saved. Use 'remember that …' or save an approved tool result as a memory note."
+- **Note count header**: "Memory Notes: N / 20"
+- **Numbered list**: Each note shows its 1-based index
+- **Per-note metadata**: Character count and formatted `createdAt` timestamp (month/day · hour:minute)
+- **Cap warning**: Orange warning text appears when the cap is reached: "Memory note limit reached (20). Delete a note before adding another."
+- **Disclaimer**: "Memory notes are explicit, user-created notes. They may be included in local AI prompts until deleted. Notes are not inferred automatically."
+- **Source badge**: Omitted — `MemoryNote` type has no `source` field; no schema change made
+- Build info phase updated: "2E" → "2I — Memory Note Management UI"
+
+### SettingsPanel.css
+
+New classes: `.memory-note-index`, `.memory-note-body`, `.memory-note-meta`, `.memory-note-chars`, `.memory-note-date`, `.memory-note-meta-sep`, `.memory-notes-empty`, `.memory-notes-empty-cmd`, `.memory-cap-msg`
+
+`.memory-note-content` updated: removed `flex: 1` (now lives inside `.memory-note-body`).
+
+## Lifecycle Behaviors Confirmed
+
+- Notes created by `ADD_MEMORY_NOTE` (manual command or Settings add) and by `COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE` (Phase 2H tool result save) are stored identically
+- Any note can be deleted from Settings via its Delete button (dispatches `DELETE_MEMORY_NOTE` with the note's `id`)
+- Deleted notes are immediately removed from state and no longer injected into LLM context
+- `CLEAR_MEMORY_NOTES` removes all notes regardless of origin
+- All paths respect `MEMORY_NOTES_CAP = 20` and `MEMORY_NOTE_CHAR_LIMIT = 200`
+- Audit events for delete/clear include only `note_id` or count — never note content
+
+## Tests Added
+
+- `tool-request-reducer.test.ts` — Phase 2I lifecycle block (4 tests):
+  - Tool-result note appears alongside manual notes
+  - Tool-result note deletable by id
+  - Deleting tool-result note preserves other notes
+  - CLEAR_MEMORY_NOTES removes tool-result notes with manual notes
+
+## What Phase 2I Does NOT Include
+
+- New tools or side-effect executors
+- Agents or autonomous execution
+- `source` field on `MemoryNote` (no schema change, no STATE_VERSION bump)
+- Dedicated Memory tab (kept in Settings per spec)
+- File/shell/browser/network/Tauri/OS access
+- Desktop control
+- Voice/STT/TTS
+

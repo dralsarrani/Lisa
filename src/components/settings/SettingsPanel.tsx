@@ -527,17 +527,18 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
             <>
               <div className="history-meta-row">
                 <div className="history-meta-item">
-                  <span className="settings-field-label">Notes</span>
+                  <span className="settings-field-label">Memory Notes</span>
                   <span className="settings-field-value">{noteCount} / {MEMORY_NOTES_CAP}</span>
-                </div>
-                <div className="history-meta-item">
-                  <span className="settings-field-label">Char limit</span>
-                  <span className="settings-field-value">{MEMORY_NOTE_CHAR_LIMIT}</span>
                 </div>
               </div>
               <p className="history-note">
-                Only save facts you explicitly want Lisa to reference. These notes are injected into local AI prompts and are not inferred automatically.
+                Memory notes are explicit, user-created notes. They may be included in local AI prompts until deleted. Notes are not inferred automatically.
               </p>
+              {isAtCap && (
+                <div className="memory-cap-msg">
+                  Memory note limit reached ({MEMORY_NOTES_CAP}). Delete a note before adding another.
+                </div>
+              )}
               <div className="memory-add-row">
                 <input
                   className="memory-note-input"
@@ -556,11 +557,25 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
                   Add
                 </button>
               </div>
-              {state.memoryNotes.length > 0 && (
+              {noteCount === 0 ? (
+                <div className="memory-notes-empty">
+                  No memory notes saved. Use <span className="memory-notes-empty-cmd">'remember that …'</span> or save an approved tool result as a memory note.
+                </div>
+              ) : (
                 <ul className="memory-notes-list">
-                  {state.memoryNotes.map((note) => (
+                  {state.memoryNotes.map((note, idx) => (
                     <li key={note.id} className="memory-note-item">
-                      <span className="memory-note-content">{note.content}</span>
+                      <span className="memory-note-index">{idx + 1}.</span>
+                      <span className="memory-note-body">
+                        <span className="memory-note-content">{note.content}</span>
+                        <span className="memory-note-meta">
+                          <span className="memory-note-chars">{note.content.length} chars</span>
+                          <span className="memory-note-meta-sep">·</span>
+                          <span className="memory-note-date">
+                            {new Date(note.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </span>
+                      </span>
                       <button
                         className="memory-note-delete"
                         onClick={() => handleDeleteNote(note.id)}
@@ -704,7 +719,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
         <div className="settings-build-info">
           <div className="settings-field">
             <span className="settings-field-label">Phase</span>
-            <span className="settings-field-value">2E — Tool Result Context Safety</span>
+            <span className="settings-field-value">2I — Memory Note Management UI</span>
           </div>
           <div className="settings-field">
             <span className="settings-field-label">Version</span>

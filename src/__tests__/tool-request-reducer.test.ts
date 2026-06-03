@@ -884,3 +884,101 @@ describe("COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE", () => {
     expect(next.auditEvents).toHaveLength(1);
   });
 });
+
+// ─── Phase 2I — tool-result note lifecycle ────────────────────────────────────
+
+describe("Phase 2I — tool-result note lifecycle", () => {
+  it("tool-result note appears in memoryNotes alongside manual notes", () => {
+    // Manually add a note first
+    let state = lisaReducer(initialState, { type: "ADD_MEMORY_NOTE", payload: "manual note" });
+
+    // Then create a note via the tool execution path
+    const req = makeRequest("req-1", "running");
+    state = { ...state, toolRequests: [...state.toolRequests, req] };
+
+    state = lisaReducer(state, {
+      type: "COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE",
+      payload: {
+        requestId: "req-1",
+        result: makeMemoryNoteToolResult("res-1", "req-1"),
+        completedAt: NOW,
+        memoryNoteContent: "tool result note",
+        auditEvent: makeAudit(),
+        memoryNoteAuditEvent: makeAudit(),
+      },
+    });
+
+    expect(state.memoryNotes).toHaveLength(2);
+    expect(state.memoryNotes.some((n) => n.content === "manual note")).toBe(true);
+    expect(state.memoryNotes.some((n) => n.content === "tool result note")).toBe(true);
+  });
+
+  it("tool-result note can be deleted by id via DELETE_MEMORY_NOTE", () => {
+    const req = makeRequest("req-1", "running");
+    let state: LisaState = { ...initialState, toolRequests: [req] };
+
+    state = lisaReducer(state, {
+      type: "COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE",
+      payload: {
+        requestId: "req-1",
+        result: makeMemoryNoteToolResult("res-1", "req-1"),
+        completedAt: NOW,
+        memoryNoteContent: "tool result note",
+        auditEvent: makeAudit(),
+        memoryNoteAuditEvent: makeAudit(),
+      },
+    });
+
+    expect(state.memoryNotes).toHaveLength(1);
+    const noteId = state.memoryNotes[0].id;
+
+    state = lisaReducer(state, { type: "DELETE_MEMORY_NOTE", payload: noteId });
+    expect(state.memoryNotes).toHaveLength(0);
+  });
+
+  it("deleting tool-result note preserves other notes", () => {
+    const req = makeRequest("req-1", "running");
+    let state: LisaState = { ...initialState, toolRequests: [req] };
+    state = lisaReducer(state, { type: "ADD_MEMORY_NOTE", payload: "keep this" });
+
+    state = lisaReducer(state, {
+      type: "COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE",
+      payload: {
+        requestId: "req-1",
+        result: makeMemoryNoteToolResult("res-1", "req-1"),
+        completedAt: NOW,
+        memoryNoteContent: "delete this",
+        auditEvent: makeAudit(),
+        memoryNoteAuditEvent: makeAudit(),
+      },
+    });
+
+    const toolNoteId = state.memoryNotes.find((n) => n.content === "delete this")!.id;
+    state = lisaReducer(state, { type: "DELETE_MEMORY_NOTE", payload: toolNoteId });
+
+    expect(state.memoryNotes).toHaveLength(1);
+    expect(state.memoryNotes[0].content).toBe("keep this");
+  });
+
+  it("CLEAR_MEMORY_NOTES removes tool-result notes along with manual notes", () => {
+    const req = makeRequest("req-1", "running");
+    let state: LisaState = { ...initialState, toolRequests: [req] };
+    state = lisaReducer(state, { type: "ADD_MEMORY_NOTE", payload: "manual" });
+
+    state = lisaReducer(state, {
+      type: "COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE",
+      payload: {
+        requestId: "req-1",
+        result: makeMemoryNoteToolResult("res-1", "req-1"),
+        completedAt: NOW,
+        memoryNoteContent: "from tool",
+        auditEvent: makeAudit(),
+        memoryNoteAuditEvent: makeAudit(),
+      },
+    });
+
+    expect(state.memoryNotes).toHaveLength(2);
+    const cleared = lisaReducer(state, { type: "CLEAR_MEMORY_NOTES" });
+    expect(cleared.memoryNotes).toHaveLength(0);
+  });
+});
