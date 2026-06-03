@@ -10,7 +10,10 @@ import { SettingsPanel } from "./components/settings/SettingsPanel";
 import { Header } from "./components/layout/Header";
 import { ConsolePanel } from "./components/console/ConsolePanel";
 import { getModeDisplayName } from "./core/mode-store";
-import type { RuntimeHealth as RuntimeHealthData } from "./core/types";
+import { getToolDefinition } from "./core/tool-registry";
+import { hasActiveToolRequestForParams } from "./core/tool-request-utils";
+import { createAuditEvent } from "./core/audit-store";
+import type { RuntimeHealth as RuntimeHealthData, ToolRequest, ToolApprovalContract } from "./core/types";
 import "./App.css";
 
 type TabId = "console" | "missions" | "approvals" | "audit" | "runtime" | "settings";
@@ -111,6 +114,63 @@ function App() {
     dispatch({ type: "SET_ORB_STATE", payload: "idle" });
   }, [dispatch, addAudit]);
 
+  const handlePrepareMemoryNoteSave = useCallback((resultId: string) => {
+    const toolDef = getToolDefinition("save-tool-result-memory-note");
+    if (!toolDef) return;
+
+    const existing = hasActiveToolRequestForParams(
+      state.toolRequests,
+      "save-tool-result-memory-note",
+      { sourceResultId: resultId }
+    );
+    if (existing) {
+      setActiveTab("approvals");
+      return;
+    }
+
+    const requestId = crypto.randomUUID();
+    const contractId = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
+
+    const request: ToolRequest = {
+      id: requestId,
+      toolId: "save-tool-result-memory-note",
+      toolDisplayName: toolDef.displayName,
+      params: { sourceResultId: resultId },
+      status: "pending_approval",
+      source: "result_action",
+      consequences: toolDef.consequences,
+      createdAt,
+    };
+
+    const approval: ToolApprovalContract = {
+      id: contractId,
+      requestId,
+      toolId: "save-tool-result-memory-note",
+      toolDisplayName: toolDef.displayName,
+      consequences: toolDef.consequences,
+      decision: null,
+      resolvedBy: null,
+      createdAt,
+    };
+
+    dispatch({
+      type: "CREATE_TOOL_REQUEST",
+      payload: {
+        request,
+        approval,
+        auditEvent: createAuditEvent({
+          eventType: "tool_request_created",
+          source: "console_result_action",
+          summary: `Tool request created: "${toolDef.displayName}"`,
+          severity: "info",
+        }),
+      },
+    });
+
+    setActiveTab("approvals");
+  }, [state.toolRequests, dispatch]);
+
   if (!state.isLoaded) {
     return (
       <div className="app-loading">
@@ -209,6 +269,9 @@ function App() {
                   orbState={state.orbState}
                   settings={state.settings}
                   onCancelStream={handleCancelStream}
+                  toolResults={state.toolResults}
+                  toolRequests={state.toolRequests}
+                  onPrepareMemoryNoteSave={handlePrepareMemoryNoteSave}
                 />
               )}
               {activeTab === "missions" && (

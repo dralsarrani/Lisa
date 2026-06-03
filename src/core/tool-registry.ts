@@ -27,6 +27,26 @@ const TOOL_REGISTRY: ToolDefinition[] = [
     enabled: true,
     contextPolicy: "inject",
   },
+  {
+    id: "save-tool-result-memory-note",
+    displayName: "Save Tool Result as Memory Note",
+    description: "Save the output summary of a completed tool result as a persistent Lisa memory note.",
+    category: "information",
+    riskLevel: "low",
+    requiresApproval: true,
+    parameters: [
+      {
+        name: "sourceResultId",
+        type: "string",
+        description: "The ID of the tool result whose summary will be saved as a memory note.",
+        required: true,
+      },
+    ],
+    consequences:
+      "This will save the selected tool result summary as an explicit Lisa memory note. The note will persist across restarts and can influence future local AI responses until deleted. It does not access files, clipboard, network, shell, or desktop apps.",
+    enabled: true,
+    contextPolicy: "no_inject",
+  },
 ];
 
 export function getAllToolDefinitions(): ToolDefinition[] {

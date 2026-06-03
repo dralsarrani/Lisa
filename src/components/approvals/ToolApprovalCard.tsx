@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import type { ToolApprovalContract, ToolRequest } from "../../core/types";
+import type { ToolApprovalContract, ToolRequest, ToolResult } from "../../core/types";
 import { useLisa } from "../../app/useLisa";
 import { runTool } from "../../core/tool-runner";
 import { createAuditEvent } from "../../core/audit-store";
@@ -137,30 +137,57 @@ export function ToolApprovalCard({ contract, request }: ToolApprovalCardProps) {
     });
 
     try {
-      const { outputSummary } = await runTool(request.toolId, request.params, state, { signal: controller.signal });
+      const { outputSummary, sideEffect } = await runTool(request.toolId, request.params, state, { signal: controller.signal });
       const completedAt = new Date().toISOString();
       const resultId = crypto.randomUUID();
 
-      dispatch({
-        type: "COMPLETE_TOOL_EXECUTION",
-        payload: {
-          requestId: request.id,
-          result: {
-            id: resultId,
+      const toolResult: ToolResult = {
+        id: resultId,
+        requestId: request.id,
+        toolId: request.toolId,
+        outputSummary,
+        succeededAt: completedAt,
+      };
+
+      if (sideEffect?.type === "add_memory_note") {
+        dispatch({
+          type: "COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE",
+          payload: {
             requestId: request.id,
-            toolId: request.toolId,
-            outputSummary,
-            succeededAt: completedAt,
+            result: toolResult,
+            completedAt,
+            memoryNoteContent: sideEffect.content,
+            auditEvent: createAuditEvent({
+              eventType: "tool_execution_succeeded",
+              source: "tool_runner",
+              summary: `Tool succeeded: "${contract.toolDisplayName}"`,
+              severity: "info",
+            }),
+            memoryNoteAuditEvent: createAuditEvent({
+              eventType: "memory_note_added",
+              source: "tool_runner",
+              summary: "Memory note added from tool result",
+              details: `chars=${sideEffect.content.length}, source=tool_result`,
+              severity: "info",
+            }),
           },
-          completedAt,
-          auditEvent: createAuditEvent({
-            eventType: "tool_execution_succeeded",
-            source: "tool_runner",
-            summary: `Tool succeeded: "${contract.toolDisplayName}"`,
-            severity: "info",
-          }),
-        },
-      });
+        });
+      } else {
+        dispatch({
+          type: "COMPLETE_TOOL_EXECUTION",
+          payload: {
+            requestId: request.id,
+            result: toolResult,
+            completedAt,
+            auditEvent: createAuditEvent({
+              eventType: "tool_execution_succeeded",
+              source: "tool_runner",
+              summary: `Tool succeeded: "${contract.toolDisplayName}"`,
+              severity: "info",
+            }),
+          },
+        });
+      }
 
       dispatch({
         type: "UPDATE_INTERACTION",

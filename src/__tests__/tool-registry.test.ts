@@ -6,10 +6,11 @@ describe("getAllToolDefinitions", () => {
     expect(Array.isArray(getAllToolDefinitions())).toBe(true);
   });
 
-  it("includes conversation-stats and runtime-snapshot", () => {
+  it("includes conversation-stats, runtime-snapshot, and save-tool-result-memory-note", () => {
     const ids = getAllToolDefinitions().map((t) => t.id);
     expect(ids).toContain("conversation-stats");
     expect(ids).toContain("runtime-snapshot");
+    expect(ids).toContain("save-tool-result-memory-note");
   });
 
   it("every definition has required fields", () => {
@@ -24,28 +25,26 @@ describe("getAllToolDefinitions", () => {
     }
   });
 
-  it("both Phase 2A tools require approval", () => {
+  it("all tools require approval", () => {
     for (const def of getAllToolDefinitions()) {
       expect(def.requiresApproval).toBe(true);
     }
   });
 
-  it("both Phase 2A tools are enabled by default", () => {
+  it("all tools are enabled by default", () => {
     for (const def of getAllToolDefinitions()) {
       expect(def.enabled).toBe(true);
     }
   });
 
-  it("both Phase 2A tools are in the diagnostic category", () => {
-    for (const def of getAllToolDefinitions()) {
-      expect(def.category).toBe("diagnostic");
-    }
+  it("Phase 2A tools are in the diagnostic category", () => {
+    expect(getToolDefinition("conversation-stats")?.category).toBe("diagnostic");
+    expect(getToolDefinition("runtime-snapshot")?.category).toBe("diagnostic");
   });
 
-  it("both Phase 2A tools are safe risk level", () => {
-    for (const def of getAllToolDefinitions()) {
-      expect(def.riskLevel).toBe("safe");
-    }
+  it("Phase 2A tools are safe risk level", () => {
+    expect(getToolDefinition("conversation-stats")?.riskLevel).toBe("safe");
+    expect(getToolDefinition("runtime-snapshot")?.riskLevel).toBe("safe");
   });
 });
 
@@ -81,10 +80,11 @@ describe("getEnabledToolDefinitions", () => {
     }
   });
 
-  it("includes both Phase 2A tools since they are enabled", () => {
+  it("includes all three registered tools", () => {
     const ids = getEnabledToolDefinitions().map((t) => t.id);
     expect(ids).toContain("conversation-stats");
     expect(ids).toContain("runtime-snapshot");
+    expect(ids).toContain("save-tool-result-memory-note");
   });
 });
 
@@ -103,12 +103,6 @@ describe("tool definitions — Phase 2E contextPolicy", () => {
     }
   });
 
-  it("both Phase 2E tools declare contextPolicy 'inject'", () => {
-    for (const def of getAllToolDefinitions()) {
-      expect(def.contextPolicy).toBe("inject");
-    }
-  });
-
   it("contextPolicy is a valid ToolContextPolicy literal", () => {
     const valid = ["inject", "no_inject", "inject_redacted"];
     for (const def of getAllToolDefinitions()) {
@@ -122,5 +116,47 @@ describe("tool definitions — Phase 2E contextPolicy", () => {
 
   it("runtime-snapshot contextPolicy is 'inject'", () => {
     expect(getToolDefinition("runtime-snapshot")?.contextPolicy).toBe("inject");
+  });
+});
+
+// ─── Phase 2H — save-tool-result-memory-note ──────────────────────────────────
+
+describe("save-tool-result-memory-note definition", () => {
+  it("exists in registry", () => {
+    expect(getToolDefinition("save-tool-result-memory-note")).toBeDefined();
+  });
+
+  it("requires approval", () => {
+    expect(getToolDefinition("save-tool-result-memory-note")?.requiresApproval).toBe(true);
+  });
+
+  it("contextPolicy is no_inject", () => {
+    expect(getToolDefinition("save-tool-result-memory-note")?.contextPolicy).toBe("no_inject");
+  });
+
+  it("is enabled", () => {
+    expect(getToolDefinition("save-tool-result-memory-note")?.enabled).toBe(true);
+  });
+
+  it("riskLevel is low", () => {
+    expect(getToolDefinition("save-tool-result-memory-note")?.riskLevel).toBe("low");
+  });
+
+  it("category is information", () => {
+    expect(getToolDefinition("save-tool-result-memory-note")?.category).toBe("information");
+  });
+
+  it("has sourceResultId parameter that is required and type string", () => {
+    const def = getToolDefinition("save-tool-result-memory-note");
+    const param = def?.parameters.find((p) => p.name === "sourceResultId");
+    expect(param).toBeDefined();
+    expect(param?.required).toBe(true);
+    expect(param?.type).toBe("string");
+  });
+
+  it("consequences mention memory note and deny access to files/network/shell", () => {
+    const c = getToolDefinition("save-tool-result-memory-note")?.consequences ?? "";
+    expect(c).toContain("memory note");
+    expect(c.toLowerCase()).toContain("does not access");
   });
 });

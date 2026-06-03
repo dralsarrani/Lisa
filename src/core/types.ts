@@ -173,7 +173,7 @@ export interface ToolRequest {
   toolDisplayName: string;
   params: Record<string, string | number | boolean>;
   status: ToolRequestStatus;
-  source: "user_command" | "suggestion_converted";
+  source: "user_command" | "suggestion_converted" | "result_action";
   consequences: string;
   createdAt: string;
   approvedAt?: string;

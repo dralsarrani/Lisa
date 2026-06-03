@@ -22,6 +22,7 @@ vi.mock("../core/tool-registry", () => ({
 vi.mock("../core/tool-executors", () => ({
   executeConversationStats: vi.fn(),
   executeRuntimeSnapshot: vi.fn(),
+  executeSaveToolResultMemoryNote: vi.fn(),
 }));
 
 import { executeConversationStats } from "../core/tool-executors";
@@ -114,5 +115,35 @@ describe("runTool — external signal cancellation", () => {
     await runTool("conversation-stats", {}, initialState, { signal: controller.signal });
     const receivedSignal = vi.mocked(executeConversationStats).mock.calls[0][2];
     expect(receivedSignal).toBeInstanceOf(AbortSignal);
+  });
+});
+
+// ─── Phase 2H — sideEffect passthrough ───────────────────────────────────────
+
+describe("runTool — sideEffect passthrough", () => {
+  it("returns sideEffect from executor result", async () => {
+    vi.mocked(executeConversationStats).mockResolvedValue({
+      outputSummary: "ok",
+      sideEffect: { type: "add_memory_note", content: "test note" },
+    });
+    const result = await runTool("conversation-stats", {}, initialState);
+    expect(result.sideEffect?.type).toBe("add_memory_note");
+    expect(result.sideEffect?.content).toBe("test note");
+  });
+
+  it("returns undefined sideEffect when executor omits it", async () => {
+    vi.mocked(executeConversationStats).mockResolvedValue({ outputSummary: "ok" });
+    const result = await runTool("conversation-stats", {}, initialState);
+    expect(result.sideEffect).toBeUndefined();
+  });
+
+  it("outputSummary is still accessible alongside sideEffect", async () => {
+    vi.mocked(executeConversationStats).mockResolvedValue({
+      outputSummary: "summary text",
+      sideEffect: { type: "add_memory_note", content: "note" },
+    });
+    const { outputSummary, sideEffect } = await runTool("conversation-stats", {}, initialState);
+    expect(outputSummary).toBe("summary text");
+    expect(sideEffect?.content).toBe("note");
   });
 });

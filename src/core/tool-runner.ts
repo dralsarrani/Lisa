@@ -1,13 +1,14 @@
 import { getToolDefinition } from "./tool-registry";
-import { executeConversationStats, executeRuntimeSnapshot } from "./tool-executors";
+import { executeConversationStats, executeRuntimeSnapshot, executeSaveToolResultMemoryNote } from "./tool-executors";
 import type { LisaState } from "../app/lisa-reducer";
-import type { ToolExecutor } from "./tool-executors";
+import type { ToolExecutor, ToolExecutorResult } from "./tool-executors";
 
 export const TOOL_EXECUTION_TIMEOUT_MS = 30_000;
 
 const EXECUTORS: Record<string, ToolExecutor> = {
   "conversation-stats": executeConversationStats,
   "runtime-snapshot": executeRuntimeSnapshot,
+  "save-tool-result-memory-note": executeSaveToolResultMemoryNote,
 };
 
 export interface RunToolOptions {
@@ -20,7 +21,7 @@ export async function runTool(
   params: Record<string, string | number | boolean>,
   state: LisaState,
   options: RunToolOptions = {}
-): Promise<{ outputSummary: string }> {
+): Promise<ToolExecutorResult> {
   const definition = getToolDefinition(toolId);
   if (!definition) {
     throw new Error(`Unknown tool: ${toolId}`);

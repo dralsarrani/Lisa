@@ -658,3 +658,229 @@ describe("CONVERT_TOOL_SUGGESTION", () => {
     expect(next.interactions[0].toolSuggestion).toBeUndefined();
   });
 });
+
+// ─── COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE (Phase 2H) ───────────────────
+
+function makeMemoryNoteToolResult(id: string, requestId: string): ToolResult {
+  return {
+    id,
+    requestId,
+    toolId: "save-tool-result-memory-note",
+    outputSummary: "Saved tool result as memory note (7 chars).",
+    succeededAt: NOW,
+  };
+}
+
+describe("COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE", () => {
+  it("marks request succeeded and adds ToolResult and memory note", () => {
+    const req = makeRequest("req-1", "running");
+    const apv = makeApproval("apv-1", "req-1", "approved");
+    const s0: LisaState = { ...initialState, toolRequests: [req], toolApprovals: [apv] };
+    const result = makeMemoryNoteToolResult("res-1", "req-1");
+
+    const next = lisaReducer(s0, {
+      type: "COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE",
+      payload: {
+        requestId: "req-1",
+        result,
+        completedAt: NOW,
+        memoryNoteContent: "7 chars",
+        auditEvent: makeAudit(),
+        memoryNoteAuditEvent: makeAudit(),
+      },
+    });
+
+    expect(next.toolRequests[0].status).toBe("succeeded");
+    expect(next.toolRequests[0].resultId).toBe("res-1");
+    expect(next.toolResults).toHaveLength(1);
+    expect(next.memoryNotes).toHaveLength(1);
+    expect(next.memoryNotes[0].content).toBe("7 chars");
+  });
+
+  it("no-op when request is not running (pending_approval)", () => {
+    const req = makeRequest("req-1", "pending_approval");
+    const s0: LisaState = { ...initialState, toolRequests: [req] };
+
+    const next = lisaReducer(s0, {
+      type: "COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE",
+      payload: {
+        requestId: "req-1",
+        result: makeMemoryNoteToolResult("res-1", "req-1"),
+        completedAt: NOW,
+        memoryNoteContent: "test",
+        auditEvent: makeAudit(),
+        memoryNoteAuditEvent: makeAudit(),
+      },
+    });
+
+    expect(next).toBe(s0);
+  });
+
+  it("no-op when request is cancelled", () => {
+    const req = makeRequest("req-1", "cancelled");
+    const s0: LisaState = { ...initialState, toolRequests: [req] };
+
+    const next = lisaReducer(s0, {
+      type: "COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE",
+      payload: {
+        requestId: "req-1",
+        result: makeMemoryNoteToolResult("res-1", "req-1"),
+        completedAt: NOW,
+        memoryNoteContent: "test",
+        auditEvent: makeAudit(),
+        memoryNoteAuditEvent: makeAudit(),
+      },
+    });
+
+    expect(next).toBe(s0);
+    expect(next.memoryNotes).toHaveLength(0);
+  });
+
+  it("no-op when request is expired", () => {
+    const req = makeRequest("req-1", "expired");
+    const s0: LisaState = { ...initialState, toolRequests: [req] };
+
+    const next = lisaReducer(s0, {
+      type: "COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE",
+      payload: {
+        requestId: "req-1",
+        result: makeMemoryNoteToolResult("res-1", "req-1"),
+        completedAt: NOW,
+        memoryNoteContent: "test",
+        auditEvent: makeAudit(),
+        memoryNoteAuditEvent: makeAudit(),
+      },
+    });
+
+    expect(next).toBe(s0);
+    expect(next.memoryNotes).toHaveLength(0);
+  });
+
+  it("still completes tool even when note content is empty", () => {
+    const req = makeRequest("req-1", "running");
+    const s0: LisaState = { ...initialState, toolRequests: [req] };
+
+    const next = lisaReducer(s0, {
+      type: "COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE",
+      payload: {
+        requestId: "req-1",
+        result: makeMemoryNoteToolResult("res-1", "req-1"),
+        completedAt: NOW,
+        memoryNoteContent: "",
+        auditEvent: makeAudit(),
+        memoryNoteAuditEvent: makeAudit(),
+      },
+    });
+
+    expect(next.toolRequests[0].status).toBe("succeeded");
+    expect(next.toolResults).toHaveLength(1);
+    expect(next.memoryNotes).toHaveLength(0);
+  });
+
+  it("does not add note when content exceeds MEMORY_NOTE_CHAR_LIMIT", () => {
+    const req = makeRequest("req-1", "running");
+    const s0: LisaState = { ...initialState, toolRequests: [req] };
+
+    const next = lisaReducer(s0, {
+      type: "COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE",
+      payload: {
+        requestId: "req-1",
+        result: makeMemoryNoteToolResult("res-1", "req-1"),
+        completedAt: NOW,
+        memoryNoteContent: "x".repeat(201),
+        auditEvent: makeAudit(),
+        memoryNoteAuditEvent: makeAudit(),
+      },
+    });
+
+    expect(next.toolRequests[0].status).toBe("succeeded");
+    expect(next.memoryNotes).toHaveLength(0);
+  });
+
+  it("respects MEMORY_NOTES_CAP and evicts oldest note", () => {
+    const req = makeRequest("req-1", "running");
+    const existingNotes = Array.from({ length: 20 }, (_, i) => ({
+      id: `note-${i}`,
+      content: `note ${i}`,
+      createdAt: NOW,
+    }));
+    const s0: LisaState = { ...initialState, toolRequests: [req], memoryNotes: existingNotes };
+
+    const next = lisaReducer(s0, {
+      type: "COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE",
+      payload: {
+        requestId: "req-1",
+        result: makeMemoryNoteToolResult("res-1", "req-1"),
+        completedAt: NOW,
+        memoryNoteContent: "new note",
+        auditEvent: makeAudit(),
+        memoryNoteAuditEvent: makeAudit(),
+      },
+    });
+
+    expect(next.memoryNotes).toHaveLength(20);
+    expect(next.memoryNotes[next.memoryNotes.length - 1].content).toBe("new note");
+  });
+
+  it("does not add duplicate note on stale second dispatch", () => {
+    const req = makeRequest("req-1", "running");
+    const s0: LisaState = { ...initialState, toolRequests: [req] };
+
+    const action = {
+      type: "COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE" as const,
+      payload: {
+        requestId: "req-1",
+        result: makeMemoryNoteToolResult("res-1", "req-1"),
+        completedAt: NOW,
+        memoryNoteContent: "note content",
+        auditEvent: makeAudit(),
+        memoryNoteAuditEvent: makeAudit(),
+      },
+    };
+
+    const s1 = lisaReducer(s0, action);
+    expect(s1.memoryNotes).toHaveLength(1);
+
+    // Second dispatch — request is now succeeded, guard fires
+    const s2 = lisaReducer(s1, action);
+    expect(s2.memoryNotes).toHaveLength(1); // no duplicate
+  });
+
+  it("adds two audit events when note is successfully created", () => {
+    const req = makeRequest("req-1", "running");
+    const s0: LisaState = { ...initialState, toolRequests: [req] };
+
+    const next = lisaReducer(s0, {
+      type: "COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE",
+      payload: {
+        requestId: "req-1",
+        result: makeMemoryNoteToolResult("res-1", "req-1"),
+        completedAt: NOW,
+        memoryNoteContent: "valid note",
+        auditEvent: makeAudit(),
+        memoryNoteAuditEvent: makeAudit(),
+      },
+    });
+
+    expect(next.auditEvents).toHaveLength(2);
+  });
+
+  it("adds only one audit event when note content is invalid", () => {
+    const req = makeRequest("req-1", "running");
+    const s0: LisaState = { ...initialState, toolRequests: [req] };
+
+    const next = lisaReducer(s0, {
+      type: "COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE",
+      payload: {
+        requestId: "req-1",
+        result: makeMemoryNoteToolResult("res-1", "req-1"),
+        completedAt: NOW,
+        memoryNoteContent: "",
+        auditEvent: makeAudit(),
+        memoryNoteAuditEvent: makeAudit(),
+      },
+    });
+
+    expect(next.auditEvents).toHaveLength(1);
+  });
+});

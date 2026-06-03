@@ -515,3 +515,44 @@
   color: var(--color-success);
   letter-spacing: 0.05em;
 }
+
+/* ── Tool result save-as-memory-note action ─────────────────────────────────── */
+.console-result-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.console-save-note-btn {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  color: var(--color-accent);
+  background: transparent;
+  border: 1px solid var(--color-accent);
+  border-radius: 3px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, opacity 0.15s;
+  opacity: 0.85;
+}
+
+.console-save-note-btn:hover:not(:disabled) {
+  background: rgba(0, 200, 255, 0.08);
+  opacity: 1;
+}
+
+.console-save-note-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  border-color: var(--border-subtle);
+  color: var(--text-muted);
+}
+
+.console-save-note-hint {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}

@@ -119,6 +119,17 @@ export type LisaAction =
       type: "CANCEL_TOOL_REQUEST";
       payload: { requestId: string; auditEvent: AuditEvent };
     }
+  | {
+      type: "COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE";
+      payload: {
+        requestId: string;
+        result: ToolResult;
+        completedAt: string;
+        memoryNoteContent: string;
+        auditEvent: AuditEvent;
+        memoryNoteAuditEvent: AuditEvent;
+      };
+    }
   | { type: "DISMISS_TOOL_SUGGESTION"; payload: { interactionId: string } }
   | { type: "CONVERT_TOOL_SUGGESTION"; payload: { interactionId: string; requestId: string } }
   | {
@@ -431,6 +442,40 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
         ),
         toolResults: [result, ...state.toolResults].slice(0, TOOL_RESULTS_CAP),
         auditEvents: [auditEvent, ...state.auditEvents].slice(0, 500),
+      };
+    }
+
+    case "COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE": {
+      const { requestId, result, completedAt, memoryNoteContent, auditEvent, memoryNoteAuditEvent } = action.payload;
+      // Guard: only transition from "running". Prevents stale/cancelled/emergency-stopped execution adding a note.
+      const noteTarget = state.toolRequests.find((r) => r.id === requestId);
+      if (!noteTarget || noteTarget.status !== "running") return state;
+
+      const trimmed = memoryNoteContent.trim();
+      const noteValid = trimmed.length > 0 && trimmed.length <= MEMORY_NOTE_CHAR_LIMIT;
+      const newNote: MemoryNote | undefined = noteValid
+        ? { id: crypto.randomUUID(), content: trimmed, createdAt: completedAt }
+        : undefined;
+      const updatedNotes = newNote
+        ? [...state.memoryNotes, newNote].slice(-MEMORY_NOTES_CAP)
+        : state.memoryNotes;
+
+      // Note content is never logged — only metadata appears in the audit event payload.
+      const baseAudit = [auditEvent, ...state.auditEvents];
+      const allAudit = newNote
+        ? [memoryNoteAuditEvent, ...baseAudit].slice(0, 500)
+        : baseAudit.slice(0, 500);
+
+      return {
+        ...state,
+        toolRequests: state.toolRequests.map((r) =>
+          r.id === requestId
+            ? { ...r, status: "succeeded" as const, completedAt, resultId: result.id }
+            : r
+        ),
+        toolResults: [result, ...state.toolResults].slice(0, TOOL_RESULTS_CAP),
+        memoryNotes: updatedNotes,
+        auditEvents: allAudit,
       };
     }
 

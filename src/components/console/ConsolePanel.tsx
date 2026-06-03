@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
-import type { LisaInteraction, LisaSettings, OrbState } from "../../core/types";
+import type { LisaInteraction, LisaSettings, OrbState, ToolResult, ToolRequest } from "../../core/types";
+import { hasActiveToolRequestForParams } from "../../core/tool-request-utils";
 import { MarkdownResponse } from "./MarkdownResponse";
 import { ToolSuggestionChip } from "./ToolSuggestionChip";
 import "./ConsolePanel.css";
@@ -9,6 +10,9 @@ interface ConsolePanelProps {
   orbState: OrbState;
   settings: LisaSettings;
   onCancelStream?: (id: string) => void;
+  toolResults?: ToolResult[];
+  toolRequests?: ToolRequest[];
+  onPrepareMemoryNoteSave?: (resultId: string) => void;
 }
 
 export const ConsolePanel: React.FC<ConsolePanelProps> = ({
@@ -16,6 +20,9 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
   orbState,
   settings,
   onCancelStream,
+  toolResults,
+  toolRequests,
+  onPrepareMemoryNoteSave,
 }) => {
   const feedRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -47,9 +54,26 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
         )}
       </div>
       <div className="console-feed" ref={feedRef}>
-        {interactions.map((ix) => (
-          <InteractionCard key={ix.id} interaction={ix} onCancelStream={onCancelStream} />
-        ))}
+        {interactions.map((ix) => {
+          const linkedResult = ix.kind === "tool_result"
+            ? toolResults?.find((r) => r.requestId === ix.id)
+            : undefined;
+          const saveDisabled = linkedResult
+            ? (toolRequests
+                ? hasActiveToolRequestForParams(toolRequests, "save-tool-result-memory-note", { sourceResultId: linkedResult.id }) !== null
+                : false)
+            : true;
+          return (
+            <InteractionCard
+              key={ix.id}
+              interaction={ix}
+              onCancelStream={onCancelStream}
+              linkedToolResult={linkedResult}
+              saveDisabled={saveDisabled}
+              onPrepareMemoryNoteSave={onPrepareMemoryNoteSave}
+            />
+          );
+        })}
         <div ref={bottomRef} />
       </div>
     </div>
@@ -61,9 +85,15 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
 function InteractionCard({
   interaction,
   onCancelStream,
+  linkedToolResult,
+  saveDisabled,
+  onPrepareMemoryNoteSave,
 }: {
   interaction: LisaInteraction;
   onCancelStream?: (id: string) => void;
+  linkedToolResult?: ToolResult;
+  saveDisabled?: boolean;
+  onPrepareMemoryNoteSave?: (resultId: string) => void;
 }) {
   const time = new Date(interaction.createdAt).toLocaleTimeString([], {
     hour: "2-digit",
@@ -97,7 +127,12 @@ function InteractionCard({
         ) : interaction.status === "failed" ? (
           <FailedResponse interaction={interaction} />
         ) : (
-          <CompleteResponse interaction={interaction} />
+          <CompleteResponse
+            interaction={interaction}
+            linkedToolResult={linkedToolResult}
+            saveDisabled={saveDisabled}
+            onPrepareMemoryNoteSave={onPrepareMemoryNoteSave}
+          />
         )}
       </div>
     </div>
@@ -227,13 +262,28 @@ function CancelledResponse({ interaction }: { interaction: LisaInteraction }) {
 
 // ─── Complete response ────────────────────────────────────────────────────────
 
-function CompleteResponse({ interaction }: { interaction: LisaInteraction }) {
+function CompleteResponse({
+  interaction,
+  linkedToolResult,
+  saveDisabled,
+  onPrepareMemoryNoteSave,
+}: {
+  interaction: LisaInteraction;
+  linkedToolResult?: ToolResult;
+  saveDisabled?: boolean;
+  onPrepareMemoryNoteSave?: (resultId: string) => void;
+}) {
   const isToolResult = interaction.kind === "tool_result";
   const suggestion = interaction.toolSuggestion;
   const showChip =
     interaction.kind === "local_ai" &&
     suggestion != null &&
     (suggestion.status === "visible" || suggestion.status === "converted");
+  const showSaveButton =
+    isToolResult &&
+    interaction.status === "complete" &&
+    linkedToolResult?.outputSummary &&
+    onPrepareMemoryNoteSave != null;
 
   return (
     <>
@@ -261,6 +311,22 @@ function CompleteResponse({ interaction }: { interaction: LisaInteraction }) {
           </>
         )}
       </div>
+      {showSaveButton && linkedToolResult && (
+        <div className="console-result-actions">
+          <button
+            className="console-save-note-btn"
+            type="button"
+            disabled={saveDisabled}
+            onClick={() => onPrepareMemoryNoteSave!(linkedToolResult.id)}
+            title={saveDisabled ? "A save request for this result is already pending" : "Create a pending approval request to save this result as a memory note"}
+          >
+            {saveDisabled ? "Save Request Pending" : "Prepare Save Memory Note Request"}
+          </button>
+          {saveDisabled && (
+            <span className="console-save-note-hint">Review in Approvals.</span>
+          )}
+        </div>
+      )}
       {showChip && suggestion && (
         <ToolSuggestionChip suggestion={suggestion} interactionId={interaction.id} />
       )}

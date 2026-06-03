@@ -1,16 +1,27 @@
+import { MEMORY_NOTE_CHAR_LIMIT } from "./types";
 import type { LisaState } from "../app/lisa-reducer";
+
+export interface ToolExecutorSideEffect {
+  type: "add_memory_note";
+  content: string;
+}
+
+export type ToolExecutorResult = {
+  outputSummary: string;
+  sideEffect?: ToolExecutorSideEffect;
+};
 
 export type ToolExecutor = (
   params: Record<string, string | number | boolean>,
   state: LisaState,
   signal: AbortSignal
-) => Promise<{ outputSummary: string }>;
+) => Promise<ToolExecutorResult>;
 
 export async function executeConversationStats(
   _params: Record<string, string | number | boolean>,
   state: LisaState,
   signal: AbortSignal
-): Promise<{ outputSummary: string }> {
+): Promise<ToolExecutorResult> {
   if (signal.aborted) throw new Error("Tool execution was cancelled.");
   const { conversationHistory } = state;
   const total = conversationHistory.length;
@@ -44,7 +55,7 @@ export async function executeRuntimeSnapshot(
   _params: Record<string, string | number | boolean>,
   state: LisaState,
   signal: AbortSignal
-): Promise<{ outputSummary: string }> {
+): Promise<ToolExecutorResult> {
   if (signal.aborted) throw new Error("Tool execution was cancelled.");
   const { runtimeHealth } = state;
 
@@ -71,4 +82,37 @@ export async function executeRuntimeSnapshot(
   }
 
   return { outputSummary: lines.join("\n") };
+}
+
+export async function executeSaveToolResultMemoryNote(
+  params: Record<string, string | number | boolean>,
+  state: LisaState,
+  signal: AbortSignal
+): Promise<ToolExecutorResult> {
+  if (signal.aborted) throw new Error("Tool execution was cancelled.");
+
+  const sourceResultId = typeof params.sourceResultId === "string" ? params.sourceResultId : "";
+  if (!sourceResultId) {
+    throw new Error("sourceResultId parameter is required.");
+  }
+
+  const toolResult = state.toolResults.find((r) => r.id === sourceResultId);
+  if (!toolResult) {
+    throw new Error("Tool result not found.");
+  }
+
+  const raw = toolResult.outputSummary?.trim() ?? "";
+  if (!raw) {
+    throw new Error("Tool result has no summary to save.");
+  }
+
+  const content =
+    raw.length > MEMORY_NOTE_CHAR_LIMIT
+      ? raw.slice(0, MEMORY_NOTE_CHAR_LIMIT - 1) + "…"
+      : raw;
+
+  return {
+    outputSummary: `Saved tool result as memory note (${content.length} chars).`,
+    sideEffect: { type: "add_memory_note", content },
+  };
 }

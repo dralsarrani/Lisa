@@ -515,3 +515,146 @@ Phase 2G hardens Lisa's tool executor boundary so tools cannot hang indefinitely
 - Voice/STT/TTS
 - Retry logic or backoff
 
+---
+
+# Phase 2H — First Low-Risk Internal Side-Effect Tool: Save Tool Result as Memory Note
+
+## Overview
+
+Phase 2H proves the approval-gated side-effect pattern using Lisa's internal state only. It introduces a new tool `save-tool-result-memory-note` that allows an operator to save a completed tool result's output summary as a persistent memory note — after explicit approval. No OS, file, network, shell, clipboard, or Tauri access is involved.
+
+**Core rule:** The executor is pure — it returns a `sideEffect` payload but never dispatches or mutates state. The orchestrator (`ToolApprovalCard`) applies the side effect only after successful execution via a new atomic reducer action. The LLM cannot invoke this tool, request it, or create tool requests for it.
+
+## New Tool: save-tool-result-memory-note
+
+| Field | Value |
+|-------|-------|
+| ID | `save-tool-result-memory-note` |
+| Display Name | Save Tool Result as Memory Note |
+| Category | `information` |
+| Risk Level | `low` |
+| Requires Approval | `true` |
+| Context Policy | `no_inject` |
+| Parameter | `sourceResultId: string` (required) |
+
+The tool is **UI-button-initiated only** — triggered by a "Prepare Save Memory Note Request" button on succeeded tool result cards in the Console. It cannot be invoked by a user command or a suggestion chip.
+
+## Side-Effect Architecture
+
+### Executor returns sideEffect payload
+```typescript
+export interface ToolExecutorSideEffect {
+  type: "add_memory_note";
+  content: string;
+}
+
+export type ToolExecutorResult = {
+  outputSummary: string;
+  sideEffect?: ToolExecutorSideEffect;
+};
+```
+
+All existing executors remain compatible — `sideEffect` is optional.
+
+### ToolApprovalCard applies the side effect
+After `runTool` resolves, if `sideEffect?.type === "add_memory_note"`:
+- Dispatches `COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE` (new atomic action)
+- Otherwise dispatches the existing `COMPLETE_TOOL_EXECUTION`
+
+### Atomic reducer action
+`COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE` atomically:
+1. Guards: `status === "running"` required — no-op otherwise (EMERGENCY_STOP race safety)
+2. Validates note content: non-empty after trim, <= `MEMORY_NOTE_CHAR_LIMIT` (200 chars)
+3. If valid: creates `MemoryNote`, respects `MEMORY_NOTES_CAP` (20), adds two audit events
+4. If invalid: completes tool but skips note, adds only the tool audit event
+
+## Per-Result Duplicate Guard
+
+`hasActiveToolRequestForParams(toolRequests, toolId, params)` in `tool-request-utils.ts`:
+- Matches on both `toolId` and `params` (specifically `sourceResultId`)
+- Returns active request if found, otherwise `null`
+- Used in `App.tsx` to prevent duplicate save requests for the same result
+- Used in `ConsolePanel.tsx` to show "Save Request Pending" state on the button
+
+## Content Limits
+
+| Constant | Value | Where enforced |
+|----------|-------|----------------|
+| `MEMORY_NOTE_CHAR_LIMIT` | 200 | Executor (truncates with `...`) + reducer (validation guard) |
+| `MEMORY_NOTES_CAP` | 20 | Reducer (slices oldest entries) |
+
+## Audit Privacy
+
+Memory note content is **never logged** in audit events. Only metadata appears:
+- Tool completion: `"Tool 'save-tool-result-memory-note' completed"` (no content)
+- Note added: `"Memory note added from tool result"`, details: `chars=N, source=tool_result`
+
+## Context Policy
+
+`contextPolicy: "no_inject"` — the executor's `outputSummary` ("Saved tool result as memory note (N chars).") is never injected into LLM context. The saved memory note content reaches the LLM only through the existing `memoryNotes` system prompt injection path.
+
+## Data Flow
+
+```
+Console card (tool_result, succeeded)
+  --- "Prepare Save Memory Note Request" button
+       --- App.tsx handlePrepareMemoryNoteSave(resultId)
+            --- hasActiveToolRequestForParams (duplicate guard)
+            --- Creates ToolRequest { source: "result_action" }
+            --- Creates ToolApprovalContract
+            --- Dispatches CREATE_TOOL_REQUEST
+            --- Switches to approvals tab
+
+Approval Center -> ToolApprovalCard
+  --- Operator clicks "Approve & Run"
+       --- runTool("save-tool-result-memory-note", { sourceResultId }, state, { signal })
+            --- executeSaveToolResultMemoryNote (pure -- reads state.toolResults, returns sideEffect)
+       --- sideEffect?.type === "add_memory_note"
+            --- Dispatches COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE
+                 --- Validates status === "running"
+                 --- Validates note content
+                 --- Atomically: updates toolRequest, toolResults, memoryNotes, auditEvents
+```
+
+## New ToolRequest Source
+
+`"result_action"` added to `ToolRequest.source` union:
+```typescript
+source: "user_command" | "suggestion_converted" | "result_action"
+```
+
+## Files Changed
+
+| File | Change |
+|------|--------|
+| `src/core/types.ts` | Added `"result_action"` to `ToolRequest.source` union |
+| `src/core/tool-executors.ts` | Added `ToolExecutorSideEffect`, `ToolExecutorResult` types; `ToolExecutor` return type updated; added `executeSaveToolResultMemoryNote`; explicit return type annotations on all executors |
+| `src/core/tool-runner.ts` | Updated return type to `ToolExecutorResult`; wired `executeSaveToolResultMemoryNote` |
+| `src/core/tool-registry.ts` | Added `save-tool-result-memory-note` definition |
+| `src/core/tool-request-utils.ts` | Added `hasActiveToolRequestForParams` |
+| `src/core/llm-context.ts` | System prompt: noted UI-button-initiated third tool, updated source attribution |
+| `src/app/lisa-reducer.ts` | Added `COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE` action + reducer case |
+| `src/components/approvals/ToolApprovalCard.tsx` | sideEffect branch dispatches new action |
+| `src/components/console/ConsolePanel.tsx` | Save button on tool_result cards; duplicate-guard state |
+| `src/components/console/ConsolePanel.css` | Button and hint styles |
+| `src/App.tsx` | `handlePrepareMemoryNoteSave`; props wired to ConsolePanel |
+
+## Tests Added
+
+- `tool-registry.test.ts` — Phase 2H describe block: all 9 definition fields verified
+- `tool-executors.test.ts` — guards (aborted signal, bad params, missing result, empty summary), success path (outputSummary, sideEffect, truncation, multi-result lookup)
+- `tool-runner.test.ts` — mock updated; sideEffect passthrough (present, absent, accessible alongside outputSummary)
+- `tool-request-utils.test.ts` — `hasActiveToolRequestForParams` (match, no match, terminal status filter, running/approved match, multi-request, empty params)
+- `tool-request-reducer.test.ts` — `COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE` success, no-op guards, content validation, cap enforcement, duplicate prevention, audit event counts
+
+## What Phase 2H Does NOT Include
+
+- Agents or autonomous multi-step execution
+- LLM tool calls or LLM-generated tool requests
+- File system, shell, browser, network, Tauri, or OS access
+- Desktop control or mouse/keyboard automation
+- Voice/STT/TTS
+- Clipboard access
+- High-risk tools
+- STATE_VERSION bump (additive-only change -- no migration needed)
+
