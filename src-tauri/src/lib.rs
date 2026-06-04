@@ -1,3 +1,6 @@
+#[allow(dead_code)]
+mod stt;
+
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
