@@ -19,9 +19,9 @@ import "./CommandInput.css";
 
 export function formatMemoryNotesList(notes: Array<{ content: string }>): string {
   if (notes.length === 0) {
-    return "No memory notes saved. Use 'remember that …' or Settings → Memory Notes to add one.";
+    return "No memory notes saved. Use 'remember that …' or Settings → Memory Notes to add one.\nConversation history and tool result context are stored separately.";
   }
-  return `Memory notes (${notes.length}):\n${notes.map((n, i) => `${i + 1}. ${n.content}`).join("\n")}`;
+  return `Memory notes (${notes.length}):\n${notes.map((n, i) => `${i + 1}. ${n.content}`).join("\n")}\nConversation history and recent tool result context are stored separately.`;
 }
 
 const SUGGESTIONS = [
@@ -737,7 +737,7 @@ export const CommandInput: React.FC = () => {
             pendingMemoryClearRef.current = false;
           }, 30_000);
           const n = state.memoryNotes.length;
-          clearPromptMsg = `This will delete all ${n} memory note${n === 1 ? "" : "s"}. Type "confirm clear memory" to continue.`;
+          clearPromptMsg = `This deletes ${n} memory note${n === 1 ? "" : "s"} only. Conversation history and tool results are separate and will not be cleared. Type "confirm clear memory" to continue.`;
         }
         dispatch({ type: "SET_COMMAND_RESPONSE", payload: clearPromptMsg });
         dispatch({
@@ -766,7 +766,7 @@ export const CommandInput: React.FC = () => {
             details: `count=${countCleared}`,
             severity: "info",
           });
-          confirmedMsg = `Cleared ${countCleared} memory note${countCleared === 1 ? "" : "s"}.`;
+          confirmedMsg = `Cleared ${countCleared} memory note${countCleared === 1 ? "" : "s"}. Conversation history and tool results were not changed.`;
         }
         dispatch({ type: "SET_COMMAND_RESPONSE", payload: confirmedMsg });
         dispatch({

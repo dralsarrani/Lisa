@@ -528,3 +528,119 @@ describe("buildLisaSystemPrompt — Phase 2E policy boundary", () => {
     expect(buildLisaSystemPrompt().toLowerCase()).toContain("do not claim access to tool results that are not explicitly provided");
   });
 });
+
+// ─── Phase 2J — memory/context boundary wording ───────────────────────────────
+
+describe("buildLisaSystemPrompt — Phase 2J channel boundary wording", () => {
+  it("declares channels are independent", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("independent");
+  });
+
+  it("mentions session continuity", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("session continuity");
+  });
+
+  it("states clearing one channel does not affect others", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("does not affect the others");
+  });
+
+  it("forbids claiming access to context not explicitly present", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("not explicitly present in this conversation");
+  });
+
+  it("states clearing conversation history does not delete memory notes", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("clearing conversation history does not delete memory notes");
+  });
+
+  it("states clearing memory notes does not clear conversation history", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("clearing memory notes does not clear conversation history");
+  });
+
+  it("states tool results are not memory notes unless operator saves them", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("tool results are not memory notes unless the operator explicitly saves");
+  });
+
+  it("states disabling tool result context does not delete tool results", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("disabling tool result context does not delete tool results");
+  });
+
+  it("labels conversation history as channel 1", () => {
+    expect(buildLisaSystemPrompt()).toContain("1. Conversation history");
+  });
+
+  it("labels memory notes as channel 2", () => {
+    expect(buildLisaSystemPrompt()).toContain("2. Explicit memory notes");
+  });
+
+  it("labels tool results as channel 3", () => {
+    expect(buildLisaSystemPrompt()).toContain("3. App-produced tool results");
+  });
+});
+
+// ─── Phase 2J — channel distinctness in buildOllamaMessages ──────────────────
+
+describe("buildOllamaMessages — Phase 2J channel distinctness", () => {
+  it("memory notes appear only in system message, not in history messages", () => {
+    const notes = [makeMemNote("prefer dark mode")];
+    const messages = buildOllamaMessages([], "hello", notes);
+    expect(messages[0].content).toContain("prefer dark mode");
+    for (const m of messages.slice(1)) {
+      expect(m.content).not.toContain("prefer dark mode");
+    }
+  });
+
+  it("tool results appear only in system message, not as separate messages", () => {
+    const result = makeToolResult();
+    const messages = buildOllamaMessages([], "hello", [], [result]);
+    expect(messages[0].content).toContain("--- App-produced tool results");
+    for (const m of messages.slice(1)) {
+      expect(m.content).not.toContain("--- App-produced tool results");
+    }
+  });
+
+  it("conversation history turns appear as user/assistant messages, not in system prompt", () => {
+    const history = [makeTurn(1)];
+    const messages = buildOllamaMessages(history, "new question");
+    expect(messages[0].content).not.toContain("question 1");
+    expect(messages[0].content).not.toContain("answer 1");
+    expect(messages[1]).toMatchObject({ role: "user", content: "question 1" });
+    expect(messages[2]).toMatchObject({ role: "assistant", content: "answer 1" });
+  });
+
+  it("memory notes and tool results are in distinct labeled sections when both present", () => {
+    const notes = [makeMemNote("prefer dark mode")];
+    const result = makeToolResult({ outputSummary: "Total turns: 3. Models: llama3." });
+    const messages = buildOllamaMessages([], "hello", notes, [result]);
+    const sys = messages[0].content;
+    expect(sys).toContain("prefer dark mode");
+    expect(sys).toContain("Total turns: 3");
+    expect(sys).toContain("--- App-produced tool results");
+    expect(sys).toContain("explicitly saved by the user");
+    const notesPos = sys.indexOf("prefer dark mode");
+    const toolsPos = sys.indexOf("Total turns: 3");
+    expect(notesPos).not.toBe(toolsPos);
+  });
+
+  it("empty memory notes and empty tool results produce no extra blocks in system message", () => {
+    const messages = buildOllamaMessages([], "hello", [], []);
+    expect(messages[0].content).toBe(buildLisaSystemPrompt([]));
+    expect(messages[0].content).not.toContain("--- App-produced tool results (read-only, from Lisa app logic) ---");
+    expect(messages[0].content).not.toContain("explicitly saved by the user");
+  });
+
+  it("omitting tool results argument produces same output as empty array", () => {
+    const withEmpty = buildOllamaMessages([], "hello", []);
+    const withOmitted = buildOllamaMessages([], "hello");
+    expect(withEmpty[0].content).toBe(withOmitted[0].content);
+  });
+
+  it("total message count is unaffected by adding notes or tool results", () => {
+    const base = buildOllamaMessages([], "q");
+    const withNotes = buildOllamaMessages([], "q", [makeMemNote("note")]);
+    const withTools = buildOllamaMessages([], "q", [], [makeToolResult()]);
+    const withBoth = buildOllamaMessages([], "q", [makeMemNote("note")], [makeToolResult()]);
+    expect(withNotes).toHaveLength(base.length);
+    expect(withTools).toHaveLength(base.length);
+    expect(withBoth).toHaveLength(base.length);
+  });
+});

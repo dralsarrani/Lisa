@@ -495,8 +495,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
                 </div>
               </div>
               <p className="history-note">
-                Recent completed local AI turns are kept for continuity across restarts.
-                This is not long-term semantic memory.
+                Recent completed local AI turns are kept for continuity across restarts. This is session continuity — not semantic memory. It is separate from memory notes and tool result context. Clearing this does not delete memory notes.
               </p>
               <button
                 className={`history-clear-btn${confirmingClear ? " history-clear-confirm" : ""}`}
@@ -532,7 +531,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
                 </div>
               </div>
               <p className="history-note">
-                Memory notes are explicit, user-created notes. They may be included in local AI prompts until deleted. Notes are not inferred automatically.
+                Memory notes are explicit facts you deliberately saved. They may be included in the local AI system prompt until deleted. They are separate from conversation history and tool result context. Clearing memory notes does not clear conversation history.
               </p>
               {isAtCap && (
                 <div className="memory-cap-msg">
@@ -675,8 +674,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
           </div>
           <p className="settings-tool-context-note">
             {settings.toolResultContextEnabled
-              ? "Results from tools marked safe for context are added to Lisa's local AI prompt as read-only context. Tool execution still requires approval."
-              : "Tool results remain visible in Console but will not be sent to the local model."}
+              ? "Results from tools marked safe for context are added to Lisa's local AI prompt as read-only context. This is separate from memory notes — disabling this does not delete tool results. Tool execution still requires approval."
+              : "Tool results remain visible in Console but will not be sent to the local model. This does not affect memory notes or conversation history."}
           </p>
         </div>
 

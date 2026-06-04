@@ -442,3 +442,90 @@ describe("CLEAR_MEMORY_NOTES", () => {
     expect(cleared.interactions).toHaveLength(1);
   });
 });
+
+// ─── Phase 2J — channel boundary isolation ───────────────────────────────────
+
+import type { ToolResult, MemoryNote } from "../core/types";
+
+function makeToolResult(id: string): ToolResult {
+  return {
+    id,
+    requestId: `req-${id}`,
+    toolId: "conversation-stats",
+    outputSummary: "Total turns: 2.",
+    succeededAt: new Date().toISOString(),
+  };
+}
+
+function makeMemoryNote(content: string): MemoryNote {
+  return { id: crypto.randomUUID(), content, createdAt: new Date().toISOString() };
+}
+
+describe("Phase 2J — CLEAR_MEMORY_NOTES channel isolation", () => {
+  it("does not change conversationHistory", () => {
+    let state = lisaReducer(initialState, { type: "APPEND_CONVERSATION_TURN", payload: makeTurn(1) });
+    state = lisaReducer(state, { type: "ADD_MEMORY_NOTE", payload: "some note" });
+    const next = lisaReducer(state, { type: "CLEAR_MEMORY_NOTES" });
+    expect(next.memoryNotes).toHaveLength(0);
+    expect(next.conversationHistory).toHaveLength(1);
+    expect(next.conversationHistory[0].userInput).toBe("q1");
+  });
+
+  it("does not change toolResults", () => {
+    const state = {
+      ...initialState,
+      memoryNotes: [makeMemoryNote("note")],
+      toolResults: [makeToolResult("res-1")],
+    };
+    const next = lisaReducer(state, { type: "CLEAR_MEMORY_NOTES" });
+    expect(next.memoryNotes).toHaveLength(0);
+    expect(next.toolResults).toHaveLength(1);
+    expect(next.toolResults[0].id).toBe("res-1");
+  });
+});
+
+describe("Phase 2J — CLEAR_CONVERSATION_HISTORY channel isolation", () => {
+  it("does not change memoryNotes", () => {
+    let state = lisaReducer(initialState, { type: "ADD_MEMORY_NOTE", payload: "keep this note" });
+    state = lisaReducer(state, { type: "APPEND_CONVERSATION_TURN", payload: makeTurn(1) });
+    const next = lisaReducer(state, { type: "CLEAR_CONVERSATION_HISTORY" });
+    expect(next.conversationHistory).toHaveLength(0);
+    expect(next.memoryNotes).toHaveLength(1);
+    expect(next.memoryNotes[0].content).toBe("keep this note");
+  });
+
+  it("does not change toolResults", () => {
+    const state = {
+      ...initialState,
+      conversationHistory: [makeTurn(1)],
+      toolResults: [makeToolResult("res-2")],
+    };
+    const next = lisaReducer(state, { type: "CLEAR_CONVERSATION_HISTORY" });
+    expect(next.conversationHistory).toHaveLength(0);
+    expect(next.toolResults).toHaveLength(1);
+    expect(next.toolResults[0].id).toBe("res-2");
+  });
+});
+
+describe("Phase 2J — DELETE_MEMORY_NOTE channel isolation", () => {
+  it("does not change conversationHistory", () => {
+    let state = lisaReducer(initialState, { type: "APPEND_CONVERSATION_TURN", payload: makeTurn(1) });
+    state = lisaReducer(state, { type: "ADD_MEMORY_NOTE", payload: "delete me" });
+    const noteId = state.memoryNotes[0].id;
+    const next = lisaReducer(state, { type: "DELETE_MEMORY_NOTE", payload: noteId });
+    expect(next.memoryNotes).toHaveLength(0);
+    expect(next.conversationHistory).toHaveLength(1);
+  });
+
+  it("does not change toolResults", () => {
+    const note = makeMemoryNote("delete me");
+    const state = {
+      ...initialState,
+      memoryNotes: [note],
+      toolResults: [makeToolResult("res-3")],
+    };
+    const next = lisaReducer(state, { type: "DELETE_MEMORY_NOTE", payload: note.id });
+    expect(next.memoryNotes).toHaveLength(0);
+    expect(next.toolResults).toHaveLength(1);
+  });
+});

@@ -44,6 +44,26 @@ describe("formatMemoryNotesList", () => {
 
   it("empty state message is a guidance string, not a note dump", () => {
     const result = formatMemoryNotesList([]);
-    expect(result.length).toBeLessThan(200);
+    expect(result.length).toBeLessThan(250);
+  });
+
+  // ── Phase 2J — boundary footer ──────────────────────────────────────────────
+
+  it("non-empty list includes channel separation footer", () => {
+    const result = formatMemoryNotesList([{ content: "TypeScript preferred" }]);
+    expect(result).toContain("Conversation history and recent tool result context are stored separately");
+  });
+
+  it("empty state includes channel separation note", () => {
+    const result = formatMemoryNotesList([]);
+    expect(result).toContain("Conversation history and tool result context are stored separately");
+  });
+
+  it("footer appears after the note list, not before", () => {
+    const notes = [{ content: "alpha" }];
+    const result = formatMemoryNotesList(notes);
+    const notePos = result.indexOf("1. alpha");
+    const footerPos = result.indexOf("Conversation history");
+    expect(footerPos).toBeGreaterThan(notePos);
   });
 });

@@ -714,3 +714,138 @@ New classes: `.memory-note-index`, `.memory-note-body`, `.memory-note-meta`, `.m
 - Desktop control
 - Voice/STT/TTS
 
+---
+
+# Phase 2J — Memory System Boundary Hardening
+
+## Overview
+
+Phase 2J hardens the boundaries between Lisa's independent memory and context channels before any schema migration, dedicated Memory tab, new tools, or LLM output parsing is added.
+
+No new tools, executors, schema fields, STATE_VERSION bump, or UI redesign.
+
+## Motivation
+
+After Phase 2I, Lisa has four distinct channels that influence what the local LLM sees:
+
+1. `conversationHistory` — recent completed turns, replayed as user/assistant messages
+2. `memoryNotes` — explicit operator-saved facts, injected into the system prompt
+3. `toolResults` — approved app-produced tool outputs, optionally injected as a read-only system block
+4. `toolResultContextEnabled` + `contextPolicy` — policy layer controlling tool result injection
+
+These channels had different semantics but shared ambiguous wording. A user clearing memory notes might believe they removed all AI context. The LLM had no clear statement that the channels are independent.
+
+## Context Channel Definitions
+
+| Channel | What it stores | Persistence | Prompt location | User control | What clearing affects |
+|---------|---------------|-------------|-----------------|--------------|----------------------|
+| `conversationHistory` | Recent completed local AI turns | Persisted, restored on restart | Replayed as `user`/`assistant` messages | Clear via Settings | Only `conversationHistory` |
+| `memoryNotes` | Explicit short facts saved by operator | Persisted, restored on restart | Injected into system prompt as a labeled block | Add/delete/clear via Settings or commands | Only `memoryNotes` |
+| `toolResults` | Approved app-produced tool outputs | Persisted, restored on restart | Appended to system prompt as read-only block (when enabled + inject policy) | Toggle via `toolResultContextEnabled`; individual deletion not exposed in UI | Toggling off only hides from LLM; does not delete from state |
+| `toolResultContextEnabled` / `contextPolicy` | Policy controlling tool result injection | Persisted setting + static definition | Controls whether tool results reach system prompt | Settings toggle (global); per-tool policy is static | Toggle off withholds results; does not delete them |
+
+## Deletion and Clear Behavior
+
+- **CLEAR_MEMORY_NOTES** removes all memory notes. Does not touch `conversationHistory`, `toolResults`, or settings.
+- **CLEAR_CONVERSATION_HISTORY** removes all conversation turns. Does not touch `memoryNotes` or `toolResults`.
+- **DELETE_MEMORY_NOTE** removes one note by id. Does not touch `conversationHistory` or `toolResults`.
+- Disabling `toolResultContextEnabled` withholds tool results from the LLM prompt but does not delete them from `state.toolResults` or Console history.
+- Saving a tool result as a memory note (Phase 2H) creates a new `MemoryNote` with the tool output as content. The original `ToolResult` is not deleted or modified.
+
+## Prompt Injection Boundaries
+
+- `conversationHistory` enters the prompt as `user`/`assistant` message pairs — never as system prompt text.
+- `memoryNotes` enter the system prompt in a labeled block: `User-created memory notes (explicitly saved by the user — do not invent, infer, or add to these): …`
+- `toolResults` (when eligible) enter the system prompt appended after the base prompt in a `--- App-produced tool results ---` block.
+- These three positions are disjoint — a note cannot appear in the history replay, a history turn cannot appear in the notes block.
+
+## LLM Instruction Changes (Phase 2J)
+
+`buildLisaSystemPrompt` memory section rewritten to:
+- Name all three channels explicitly and number them
+- Declare channels are independent; clearing one does not affect the others
+- Introduce "session continuity" label for conversation history
+- State that disabling tool result context does not delete results
+- State that tool results are not memory notes unless the operator explicitly saves one
+- Forbid claiming access to any context not explicitly present in the conversation
+
+## Settings UI Copy Changes
+
+| Section | Previous copy (Phase ≤ 2I) | Phase 2J copy |
+|---------|---------------------------|---------------|
+| Conversation History disclaimer | "This is not long-term semantic memory." | "This is session continuity — not semantic memory. It is separate from memory notes and tool result context. Clearing this does not delete memory notes." |
+| Memory Notes disclaimer | "Notes are not inferred automatically." | "They are separate from conversation history and tool result context. Clearing memory notes does not clear conversation history." |
+| Tool Result Context ON | "…read-only context. Tool execution still requires approval." | "…This is separate from memory notes — disabling this does not delete tool results. Tool execution still requires approval." |
+| Tool Result Context OFF | "…will not be sent to the local model." | "…This does not affect memory notes or conversation history." |
+
+## Command Response Changes
+
+| Command | Previous response | Phase 2J response |
+|---------|-------------------|-------------------|
+| `list memory notes` (non-empty footer) | _(no footer)_ | `Conversation history and recent tool result context are stored separately.` |
+| `list memory notes` (empty footer) | _(no footer)_ | `Conversation history and tool result context are stored separately.` |
+| `clear memory notes` (request) | `This will delete all N note(s). Type "confirm clear memory" to continue.` | `This deletes N note(s) only. Conversation history and tool results are separate and will not be cleared. Type "confirm clear memory" to continue.` |
+| `confirm clear memory` | `Cleared N memory note(s).` | `Cleared N memory note(s). Conversation history and tool results were not changed.` |
+
+## Tests Added
+
+### `llm-context.test.ts` — Phase 2J boundary wording (11 tests)
+- Channels declared independent
+- "Session continuity" wording present
+- "Does not affect the others" wording present
+- Explicit per-direction clearing isolation statements
+- Tool results ≠ memory notes unless operator saves
+- Disabling tool result context does not delete
+- Channel numbers 1/2/3 present in prompt
+
+### `llm-context.test.ts` — Phase 2J channel distinctness in `buildOllamaMessages` (7 tests)
+- Memory notes appear only in system message
+- Tool results appear only in system message
+- Conversation history appears only as user/assistant messages
+- Notes and tool results are in distinct labeled positions when both present
+- Empty inputs produce no extra blocks
+- Omitting tool results equals empty array
+- Message count unchanged by adding notes or results
+
+### `lisa-reducer.test.ts` — Phase 2J channel isolation (6 tests)
+- CLEAR_MEMORY_NOTES does not change conversationHistory
+- CLEAR_MEMORY_NOTES does not change toolResults
+- CLEAR_CONVERSATION_HISTORY does not change memoryNotes
+- CLEAR_CONVERSATION_HISTORY does not change toolResults
+- DELETE_MEMORY_NOTE does not change conversationHistory
+- DELETE_MEMORY_NOTE does not change toolResults
+
+### `memory-command-output.test.ts` — Phase 2J footer (3 tests)
+- Non-empty list includes channel separation footer
+- Empty state includes channel separation note
+- Footer appears after note list, not before
+
+## What Phase 2J Does NOT Include
+
+- New tools or executors
+- `source` field on `MemoryNote` (no schema change, no STATE_VERSION bump)
+- Dedicated Memory tab
+- Agents or autonomous execution
+- LLM output parsing
+- File/shell/browser/network/Tauri/OS access
+- Desktop control or voice
+
+## Current Limitations After Phase 2J
+
+- No `source` field on `MemoryNote` — cannot distinguish manual vs tool-result-saved notes in UI or code
+- No source badge in Settings
+- No dedicated Memory tab
+- No semantic/vector memory
+- No memory export/import
+- No per-note prompt-injection toggle
+- No memory search/filter
+
+## Possible Phase 2K
+
+**Memory Note Source Field + Memory Tab:**
+- Add `source: "manual" | "tool_result"` to `MemoryNote`
+- STATE_VERSION `6 → 7` with migration (set `source: "manual"` on existing notes)
+- Source badge in Settings list
+- Optionally move Memory Notes to a dedicated tab
+- Tag: `phase-2k-memory-note-source-field`
+
