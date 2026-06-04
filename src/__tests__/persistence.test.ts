@@ -36,9 +36,9 @@ describe("loadState — invalid JSON", () => {
   });
 });
 
-describe("Phase 2K — STATE_VERSION is 7", () => {
-  it("STATE_VERSION constant equals 7", () => {
-    expect(STATE_VERSION).toBe(7);
+describe("Phase 3A — STATE_VERSION is 8", () => {
+  it("STATE_VERSION constant equals 8", () => {
+    expect(STATE_VERSION).toBe(8);
   });
 });
 
@@ -49,7 +49,7 @@ describe("Phase 2K — v6→v7 migration backfills source: manual", () => {
       memoryNotes: [{ id: "n1", content: "old note", createdAt: "2025-01-01T00:00:00.000Z" }],
     }));
     const state = await loadState();
-    expect(state.version).toBe(7);
+    expect(state.version).toBe(STATE_VERSION);
     expect(state.memoryNotes[0].source).toBe("manual");
     expect(state.memoryNotes[0].content).toBe("old note");
     expect(state.memoryNotes[0].id).toBe("n1");
@@ -82,6 +82,55 @@ describe("Phase 2K — v6→v7 migration backfills source: manual", () => {
     const state = await loadState();
     expect(state.conversationHistory).toHaveLength(1);
     expect(state.memoryNotes).toHaveLength(1);
+  });
+});
+
+describe("Phase 3A — v7→v8 migration adds voice settings", () => {
+  it("v7 state migrates to v8 with voice defaults applied", async () => {
+    localStorage.setItem("lisa_state_v1", JSON.stringify({
+      version: 7,
+      settings: { activeMode: "focus", enableLocalAi: false, ollamaModel: "" },
+      missions: [],
+      approvals: [],
+      auditEvents: [],
+      conversationHistory: [],
+      memoryNotes: [],
+      toolRequests: [],
+      toolResults: [],
+      toolApprovals: [],
+    }));
+    const state = await loadState();
+    expect(state.version).toBe(STATE_VERSION);
+    expect(state.settings.activeMode).toBe("focus");
+    expect(state.settings.voiceInputEnabled).toBe(false);
+    expect(state.settings.pushToTalkKey).toBe("KeyV");
+    expect(state.settings.sttEngineStatus).toBe("not_configured");
+  });
+
+  it("v7 state preserves existing settings while adding voice defaults", async () => {
+    localStorage.setItem("lisa_state_v1", JSON.stringify({
+      version: 7,
+      settings: { activeMode: "cyber", developerMode: true, ollamaModel: "llama3.2:1b" },
+    }));
+    const state = await loadState();
+    expect(state.version).toBe(STATE_VERSION);
+    expect(state.settings.activeMode).toBe("cyber");
+    expect(state.settings.developerMode).toBe(true);
+    expect(state.settings.ollamaModel).toBe("llama3.2:1b");
+    expect(state.settings.voiceInputEnabled).toBe(false);
+    expect(state.settings.sttEngineStatus).toBe("not_configured");
+  });
+
+  it("memoryNotes are preserved during v7→v8 migration", async () => {
+    localStorage.setItem("lisa_state_v1", JSON.stringify({
+      version: 7,
+      memoryNotes: [{ id: "mn1", content: "keep this", createdAt: "2025-01-01T00:00:00.000Z", source: "manual" }],
+    }));
+    const state = await loadState();
+    expect(state.version).toBe(STATE_VERSION);
+    expect(state.memoryNotes).toHaveLength(1);
+    expect(state.memoryNotes[0].content).toBe("keep this");
+    expect(state.memoryNotes[0].source).toBe("manual");
   });
 });
 
@@ -716,8 +765,8 @@ describe("tool persistence — caps", () => {
 // ─── Phase 2E — STATE_VERSION and toolResultContextEnabled ───────────────────
 
 describe("Phase 2E — STATE_VERSION and toolResultContextEnabled defaults", () => {
-  it("STATE_VERSION is 7", () => {
-    expect(STATE_VERSION).toBe(7);
+  it("STATE_VERSION is 8", () => {
+    expect(STATE_VERSION).toBe(8);
   });
 
   it("DEFAULT_SETTINGS.toolResultContextEnabled is true", () => {

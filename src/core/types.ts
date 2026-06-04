@@ -265,7 +265,14 @@ export type AuditEventType =
   | "llm_tool_context_excluded"
   | "tool_request_duplicate_blocked"
   | "tool_request_expired_live"
-  | "tool_execution_timed_out";
+  | "tool_execution_timed_out"
+  | "voice_recording_started"
+  | "voice_recording_cancelled"
+  | "voice_transcription_started"
+  | "voice_transcription_completed"
+  | "voice_transcription_failed"
+  | "voice_transcript_submitted"
+  | "voice_transcript_discarded";
 
 export interface AuditEvent {
   id: string;
@@ -315,6 +322,10 @@ export interface LisaSettings {
   ollamaModel: string;
   maxContextTurns: number;
   toolResultContextEnabled: boolean;
+  voiceInputEnabled: boolean;
+  pushToTalkKey: string;
+  sttEngineStatus: SttEngineStatus;
+  sttEngineLabel?: string;
 }
 
 export const DEFAULT_SETTINGS: LisaSettings = {
@@ -331,6 +342,10 @@ export const DEFAULT_SETTINGS: LisaSettings = {
   ollamaModel: "",
   maxContextTurns: 20,
   toolResultContextEnabled: true,
+  voiceInputEnabled: false,
+  pushToTalkKey: "KeyV",
+  sttEngineStatus: "not_configured",
+  sttEngineLabel: "Not configured",
 };
 
 // ─── Command Router ───────────────────────────────────────────────────────────
@@ -383,6 +398,9 @@ export interface LisaInteraction {
   toolSuggestion?: ToolSuggestion;
 }
 
+export type VoiceStatus = "idle" | "recording" | "transcribing" | "preview" | "error";
+export type SttEngineStatus = "not_configured" | "ready" | "error";
+
 export const INTERACTION_CAP = 25;
 export const CONVERSATION_HISTORY_CAP = 50;
 export const MEMORY_NOTES_CAP = 20;
@@ -410,4 +428,4 @@ export interface PersistedState {
   savedAt: string;
 }
 
-export const STATE_VERSION = 7;
+export const STATE_VERSION = 8;

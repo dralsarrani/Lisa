@@ -14,6 +14,7 @@ import type {
   ToolRequest,
   ToolResult,
   ToolApprovalContract,
+  VoiceStatus,
 } from "../core/types";
 import {
   DEFAULT_SETTINGS,
@@ -46,6 +47,10 @@ export interface LisaState {
   toolRequests: ToolRequest[];
   toolResults: ToolResult[];
   toolApprovals: ToolApprovalContract[];
+  // Voice transient state — not persisted
+  voiceStatus: VoiceStatus;
+  voiceTranscriptDraft: string | null;
+  voiceError: string | null;
 }
 
 export const initialState: LisaState = {
@@ -64,6 +69,9 @@ export const initialState: LisaState = {
   toolRequests: [],
   toolResults: [],
   toolApprovals: [],
+  voiceStatus: "idle",
+  voiceTranscriptDraft: null,
+  voiceError: null,
 };
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
@@ -131,6 +139,10 @@ export type LisaAction =
         memoryNoteAuditEvent: AuditEvent;
       };
     }
+  | { type: "SET_VOICE_STATUS"; payload: VoiceStatus }
+  | { type: "SET_VOICE_TRANSCRIPT_DRAFT"; payload: string | null }
+  | { type: "SET_VOICE_ERROR"; payload: string | null }
+  | { type: "CLEAR_VOICE_STATE" }
   | { type: "DISMISS_TOOL_SUGGESTION"; payload: { interactionId: string } }
   | { type: "CONVERT_TOOL_SUGGESTION"; payload: { interactionId: string; requestId: string } }
   | {
@@ -226,6 +238,9 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
         toolRequests: cancelledToolRequests,
         toolApprovals: cancelledToolApprovals,
         commandResponse: "EMERGENCY STOP ACTIVATED. All active operations halted. System is safe.",
+        voiceStatus: "idle" as VoiceStatus,
+        voiceTranscriptDraft: null,
+        voiceError: null,
       };
     }
 
@@ -517,6 +532,24 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
         auditEvents: [auditEvent, ...state.auditEvents].slice(0, 500),
       };
     }
+
+    case "SET_VOICE_STATUS":
+      return { ...state, voiceStatus: action.payload };
+
+    case "SET_VOICE_TRANSCRIPT_DRAFT":
+      return { ...state, voiceTranscriptDraft: action.payload };
+
+    case "SET_VOICE_ERROR":
+      return { ...state, voiceError: action.payload };
+
+    case "CLEAR_VOICE_STATE":
+      return {
+        ...state,
+        voiceStatus: "idle",
+        voiceTranscriptDraft: null,
+        voiceError: null,
+        orbState: state.orbState === "listening" ? "idle" : state.orbState,
+      };
 
     case "DISMISS_TOOL_SUGGESTION": {
       const { interactionId } = action.payload;

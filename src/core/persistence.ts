@@ -155,9 +155,9 @@ function defaultState(): PersistedState {
 }
 
 function migrateState(old: Partial<PersistedState>): PersistedState {
-  // v5 → v7 / v6 → v7: additive migrations — preserve all tool collections.
-  // v6→v7 adds MemoryNote.source; safeMemoryNotes backfills "manual" for notes without source.
-  if (old.version === 5 || old.version === 6) {
+  // v5 → v8 / v6 → v8 / v7 → v8: additive migrations — preserve all tool collections.
+  // v6→v7 added MemoryNote.source; v7→v8 adds voice settings (DEFAULT_SETTINGS spread covers defaults).
+  if (old.version === 5 || old.version === 6 || old.version === 7) {
     const migRequests = safeToolRequests(old.toolRequests);
     const migApprovals = safeToolApprovals(old.toolApprovals);
     const migResults = safeToolResults(old.toolResults);

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { lisaReducer, initialState } from "../app/lisa-reducer";
 import { INTERACTION_CAP, CONVERSATION_HISTORY_CAP, MEMORY_NOTES_CAP, MEMORY_NOTE_CHAR_LIMIT } from "../core/types";
-import type { LisaInteraction, LisaConversationTurn } from "../core/types";
+import type { LisaInteraction, LisaConversationTurn, VoiceStatus } from "../core/types";
 
 function makeInteraction(
   id: string,
@@ -631,5 +631,129 @@ describe("Phase 2K — source preserved through delete and clear", () => {
     expect(state.memoryNotes).toHaveLength(2);
     const next = lisaReducer(state, { type: "CLEAR_MEMORY_NOTES" });
     expect(next.memoryNotes).toHaveLength(0);
+  });
+});
+
+// ─── Phase 3A — Voice input state ────────────────────────────────────────────
+
+describe("Phase 3A — voice state defaults", () => {
+  it("initialState has voiceStatus idle", () => {
+    expect(initialState.voiceStatus).toBe("idle");
+  });
+
+  it("initialState has voiceTranscriptDraft null", () => {
+    expect(initialState.voiceTranscriptDraft).toBeNull();
+  });
+
+  it("initialState has voiceError null", () => {
+    expect(initialState.voiceError).toBeNull();
+  });
+});
+
+describe("Phase 3A — SET_VOICE_STATUS", () => {
+  it("sets voiceStatus to recording", () => {
+    const next = lisaReducer(initialState, { type: "SET_VOICE_STATUS", payload: "recording" as VoiceStatus });
+    expect(next.voiceStatus).toBe("recording");
+  });
+
+  it("sets voiceStatus to transcribing", () => {
+    const next = lisaReducer(initialState, { type: "SET_VOICE_STATUS", payload: "transcribing" as VoiceStatus });
+    expect(next.voiceStatus).toBe("transcribing");
+  });
+
+  it("sets voiceStatus to preview", () => {
+    const next = lisaReducer(initialState, { type: "SET_VOICE_STATUS", payload: "preview" as VoiceStatus });
+    expect(next.voiceStatus).toBe("preview");
+  });
+
+  it("sets voiceStatus to error", () => {
+    const next = lisaReducer(initialState, { type: "SET_VOICE_STATUS", payload: "error" as VoiceStatus });
+    expect(next.voiceStatus).toBe("error");
+  });
+
+  it("does not mutate other state", () => {
+    const next = lisaReducer(initialState, { type: "SET_VOICE_STATUS", payload: "recording" as VoiceStatus });
+    expect(next.voiceTranscriptDraft).toBeNull();
+    expect(next.voiceError).toBeNull();
+  });
+});
+
+describe("Phase 3A — SET_VOICE_TRANSCRIPT_DRAFT", () => {
+  it("sets draft text", () => {
+    const next = lisaReducer(initialState, { type: "SET_VOICE_TRANSCRIPT_DRAFT", payload: "hello lisa" });
+    expect(next.voiceTranscriptDraft).toBe("hello lisa");
+  });
+
+  it("clears draft to null", () => {
+    const withDraft = lisaReducer(initialState, { type: "SET_VOICE_TRANSCRIPT_DRAFT", payload: "some text" });
+    const cleared = lisaReducer(withDraft, { type: "SET_VOICE_TRANSCRIPT_DRAFT", payload: null });
+    expect(cleared.voiceTranscriptDraft).toBeNull();
+  });
+});
+
+describe("Phase 3A — SET_VOICE_ERROR", () => {
+  it("sets error message", () => {
+    const next = lisaReducer(initialState, { type: "SET_VOICE_ERROR", payload: "transcription failed" });
+    expect(next.voiceError).toBe("transcription failed");
+  });
+
+  it("clears error to null", () => {
+    const withError = lisaReducer(initialState, { type: "SET_VOICE_ERROR", payload: "some error" });
+    const cleared = lisaReducer(withError, { type: "SET_VOICE_ERROR", payload: null });
+    expect(cleared.voiceError).toBeNull();
+  });
+});
+
+describe("Phase 3A — CLEAR_VOICE_STATE", () => {
+  it("resets voiceStatus to idle", () => {
+    const recording = lisaReducer(initialState, { type: "SET_VOICE_STATUS", payload: "recording" as VoiceStatus });
+    const next = lisaReducer(recording, { type: "CLEAR_VOICE_STATE" });
+    expect(next.voiceStatus).toBe("idle");
+  });
+
+  it("clears voiceTranscriptDraft", () => {
+    const withDraft = lisaReducer(initialState, { type: "SET_VOICE_TRANSCRIPT_DRAFT", payload: "hello" });
+    const next = lisaReducer(withDraft, { type: "CLEAR_VOICE_STATE" });
+    expect(next.voiceTranscriptDraft).toBeNull();
+  });
+
+  it("clears voiceError", () => {
+    const withError = lisaReducer(initialState, { type: "SET_VOICE_ERROR", payload: "err" });
+    const next = lisaReducer(withError, { type: "CLEAR_VOICE_STATE" });
+    expect(next.voiceError).toBeNull();
+  });
+
+  it("resets orbState from listening to idle", () => {
+    let state = lisaReducer(initialState, { type: "SET_VOICE_STATUS", payload: "recording" as VoiceStatus });
+    state = lisaReducer(state, { type: "SET_ORB_STATE", payload: "listening" });
+    const next = lisaReducer(state, { type: "CLEAR_VOICE_STATE" });
+    expect(next.orbState).toBe("idle");
+  });
+
+  it("does not change orbState when not listening", () => {
+    let state = lisaReducer(initialState, { type: "SET_ORB_STATE", payload: "thinking" });
+    state = lisaReducer(state, { type: "SET_VOICE_STATUS", payload: "transcribing" as VoiceStatus });
+    const next = lisaReducer(state, { type: "CLEAR_VOICE_STATE" });
+    expect(next.orbState).toBe("thinking");
+  });
+});
+
+describe("Phase 3A — EMERGENCY_STOP clears voice state", () => {
+  it("resets voiceStatus on emergency stop", () => {
+    let state = lisaReducer(initialState, { type: "SET_VOICE_STATUS", payload: "recording" as VoiceStatus });
+    state = lisaReducer(state, { type: "EMERGENCY_STOP" });
+    expect(state.voiceStatus).toBe("idle");
+  });
+
+  it("clears voiceTranscriptDraft on emergency stop", () => {
+    let state = lisaReducer(initialState, { type: "SET_VOICE_TRANSCRIPT_DRAFT", payload: "some transcript" });
+    state = lisaReducer(state, { type: "EMERGENCY_STOP" });
+    expect(state.voiceTranscriptDraft).toBeNull();
+  });
+
+  it("clears voiceError on emergency stop", () => {
+    let state = lisaReducer(initialState, { type: "SET_VOICE_ERROR", payload: "mic error" });
+    state = lisaReducer(state, { type: "EMERGENCY_STOP" });
+    expect(state.voiceError).toBeNull();
   });
 });

@@ -194,7 +194,25 @@ pub struct OllamaModelTestResult {
     pub error: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct SttResult {
+    pub status: String,
+    pub transcript: Option<String>,
+    pub engine: String,
+}
+
 // ─── Commands ─────────────────────────────────────────────────────────────────
+
+/// Returns a placeholder STT result. No audio is captured or processed.
+/// Real transcription will be implemented when a local STT engine is integrated.
+#[tauri::command]
+async fn transcribe_voice_placeholder() -> SttResult {
+    SttResult {
+        status: "not_configured".to_string(),
+        transcript: None,
+        engine: "placeholder".to_string(),
+    }
+}
 
 #[tauri::command]
 async fn ping_backend() -> PingResponse {
@@ -810,6 +828,7 @@ pub fn run() {
             stream_ollama_chat,
             cancel_ollama_stream,
             test_ollama_model,
+            transcribe_voice_placeholder,
         ])
         .run(tauri::generate_context!())
         .expect("Error while running Lisa application");
@@ -1107,6 +1126,30 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert_eq!(v["success"], false);
         assert!(v["error"].as_str().unwrap().contains("ollama serve"));
+    }
+
+    // ─── SttResult / transcribe_voice_placeholder ────────────────────────────
+
+    #[test]
+    fn stt_result_not_configured_serializes() {
+        let result = SttResult {
+            status: "not_configured".to_string(),
+            transcript: None,
+            engine: "placeholder".to_string(),
+        };
+        let json = serde_json::to_string(&result).expect("must serialize");
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(v["status"], "not_configured");
+        assert!(v["transcript"].is_null());
+        assert_eq!(v["engine"], "placeholder");
+    }
+
+    #[test]
+    fn transcribe_voice_placeholder_returns_not_configured() {
+        let result = futures::executor::block_on(transcribe_voice_placeholder());
+        assert_eq!(result.status, "not_configured");
+        assert!(result.transcript.is_none());
+        assert_eq!(result.engine, "placeholder");
     }
 
     #[test]
