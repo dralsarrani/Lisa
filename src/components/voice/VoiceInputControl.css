@@ -1,0 +1,153 @@
+/* ── Voice Input Control ────────────────────────────────────────────────────── */
+.voice-input-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* ── Idle helper hint (KeyV-only mode) ──────────────────────────────────────── */
+.voice-helper-hint {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--text-dim);
+  opacity: 0.60;
+  letter-spacing: 0.03em;
+  line-height: 1.45;
+}
+
+/* ── Status / helper line ───────────────────────────────────────────────────── */
+.voice-status-note {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+
+.voice-status-recording {
+  color: #22d3ee;
+  animation: voice-blink 1.2s step-start infinite;
+}
+
+@keyframes voice-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.45; }
+}
+
+.voice-status-error {
+  color: rgba(239, 68, 68, 0.85);
+}
+
+.voice-status-dim {
+  color: var(--text-dim);
+  opacity: 0.70;
+}
+
+/* ── Preview / result card ──────────────────────────────────────────────────── */
+.voice-preview-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 13px;
+  background: rgba(10, 18, 34, 0.88);
+  border: 1px solid rgba(34, 211, 238, 0.22);
+  border-radius: var(--radius-md);
+  animation: fadeInUp 0.15s ease forwards;
+}
+
+.voice-error-card {
+  border-color: rgba(239, 68, 68, 0.28) !important;
+}
+
+.voice-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.voice-preview-label {
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.voice-preview-not-configured-badge {
+  font-family: var(--font-mono);
+  font-size: 0.52rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(239, 68, 68, 0.14);
+  color: rgba(239, 68, 68, 0.85);
+  border: 1px solid rgba(239, 68, 68, 0.28);
+}
+
+.voice-preview-placeholder-msg {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: rgba(239, 68, 68, 0.80);
+  line-height: 1.55;
+  padding: 7px 10px;
+  background: rgba(239, 68, 68, 0.05);
+  border-left: 2px solid rgba(239, 68, 68, 0.35);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.voice-preview-transcript {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  padding: 6px 8px;
+  background: rgba(26, 159, 255, 0.04);
+  border: 1px solid rgba(26, 159, 255, 0.12);
+  border-radius: var(--radius-sm);
+  word-break: break-word;
+}
+
+.voice-preview-error {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: rgba(239, 68, 68, 0.90);
+  line-height: 1.5;
+}
+
+/* ── Preview action buttons ─────────────────────────────────────────────────── */
+.voice-preview-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.voice-discard-btn {
+  padding: 6px 14px;
+  font-size: 0.60rem;
+  letter-spacing: 0.10em;
+  background: transparent;
+  border-color: rgba(100, 116, 139, 0.38);
+  color: var(--text-muted);
+}
+
+.voice-discard-btn:hover {
+  border-color: rgba(100, 116, 139, 0.65);
+  color: var(--text-secondary);
+  background: rgba(100, 116, 139, 0.08);
+}
+
+/* ── Keyboard shortcut badge ────────────────────────────────────────────────── */
+kbd.voice-kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 0.60rem;
+  font-style: normal;
+  background: rgba(26, 159, 255, 0.10);
+  border: 1px solid rgba(26, 159, 255, 0.32);
+  border-radius: 3px;
+  color: rgba(26, 159, 255, 0.82);
+  line-height: 1.4;
+  vertical-align: baseline;
+}

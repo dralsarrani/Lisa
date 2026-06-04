@@ -606,6 +606,38 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
         })()}
       </div>
 
+      {/* ── Voice Input ── */}
+      <div className="settings-section">
+        <div className="settings-section-label">Voice Input</div>
+        <div className="settings-toggle-row">
+          <span className="settings-toggle-label">Enable Voice Input</span>
+          <button
+            className={`settings-toggle ${settings.voiceInputEnabled ? "settings-toggle-on" : ""}`}
+            onClick={() =>
+              dispatch({ type: "SET_SETTINGS", payload: { voiceInputEnabled: !settings.voiceInputEnabled } })
+            }
+            aria-pressed={settings.voiceInputEnabled}
+          >
+            {settings.voiceInputEnabled ? "ON" : "OFF"}
+          </button>
+        </div>
+        <div className="settings-field" style={{ marginTop: "8px" }}>
+          <span className="settings-field-label">STT Engine</span>
+          <span
+            className={`ai-status-badge ${settings.sttEngineStatus === "ready" ? "ai-status-online" : settings.sttEngineStatus === "error" ? "ai-status-error" : "ai-status-offline"}`}
+          >
+            {settings.sttEngineLabel ?? "Not configured"}
+          </span>
+        </div>
+        <div className="settings-field">
+          <span className="settings-field-label">Keyboard shortcut</span>
+          <span className="settings-field-value settings-field-mono">{settings.pushToTalkKey} — works only when the command box is not focused</span>
+        </div>
+        <p className="history-note" style={{ marginTop: "6px" }}>
+          Phase 3A is a keyboard-only voice UI test. Local STT is not configured, so no speech will be transcribed and no command will be sent. Lisa does not listen in the background, never activates without your explicit action, and does not transmit audio to any network service.
+        </p>
+      </div>
+
       {/* ── Phase Flags ── */}
       <div className="settings-section">
         <div className="settings-section-label">Phase Flags</div>
@@ -635,10 +667,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
           >
             {settings.persistAuditLog ? "ON" : "OFF"}
           </button>
-        </div>
-        <div className="settings-toggle-row settings-toggle-row-disabled">
-          <span className="settings-toggle-label">Voice (Phase 1B)</span>
-          <span className="settings-coming-soon">Not yet</span>
         </div>
         <div className="settings-toggle-row settings-toggle-row-disabled">
           <span className="settings-toggle-label">Screen Awareness (Phase 2)</span>
@@ -721,7 +749,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
         <div className="settings-build-info">
           <div className="settings-field">
             <span className="settings-field-label">Phase</span>
-            <span className="settings-field-value">2I — Memory Note Management UI</span>
+            <span className="settings-field-value">3A — Push-to-Talk Voice Input Foundation</span>
           </div>
           <div className="settings-field">
             <span className="settings-field-label">Version</span>

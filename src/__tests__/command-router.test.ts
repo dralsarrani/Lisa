@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { routeCommand, getDesktopActionGuardMessage } from "../core/command-router";
+import { routeCommand, getDesktopActionGuardMessage, getVoiceCapabilityMessage } from "../core/command-router";
 
 describe("routeCommand — emergency_stop", () => {
   it("routes 'emergency stop'", () => {
@@ -562,5 +562,267 @@ describe("getDesktopActionGuardMessage — conceptual questions pass through", (
     const msg = getDesktopActionGuardMessage("run this file");
     expect(msg).toContain("not implemented yet");
     expect(msg).toContain("explicit approval");
+  });
+});
+
+// ─── Phase 3A voice capability guard ─────────────────────────────────────────
+
+describe("getVoiceCapabilityMessage — voice input questions", () => {
+  it("answers 'do you have voice input'", () => {
+    const msg = getVoiceCapabilityMessage("do you have voice input");
+    expect(msg).not.toBeNull();
+    expect(msg).toContain("Phase 3A");
+  });
+
+  it("answers 'can you use voice input'", () => {
+    expect(getVoiceCapabilityMessage("can you use voice input")).not.toBeNull();
+  });
+
+  it("answers 'how do I enable voice input'", () => {
+    expect(getVoiceCapabilityMessage("how do I enable voice input")).not.toBeNull();
+  });
+
+  it("answers 'I am trying to enable the voice input'", () => {
+    expect(getVoiceCapabilityMessage("I am trying to enable the voice input")).not.toBeNull();
+  });
+
+  it("response mentions KeyV or button", () => {
+    const msg = getVoiceCapabilityMessage("do you have voice input") ?? "";
+    expect(msg).toMatch(/KeyV|button/i);
+  });
+
+  it("response states STT is not configured yet", () => {
+    const msg = getVoiceCapabilityMessage("do you have voice input") ?? "";
+    expect(msg.toLowerCase()).toContain("not configured");
+  });
+
+  it("response states no background listening", () => {
+    const msg = getVoiceCapabilityMessage("do you have voice input") ?? "";
+    expect(msg.toLowerCase()).toContain("background");
+  });
+
+  it("response mentions KeyV as the trigger", () => {
+    const msg = getVoiceCapabilityMessage("do you have voice input") ?? "";
+    expect(msg.toLowerCase()).toContain("keyv");
+  });
+});
+
+describe("getVoiceCapabilityMessage — background listening questions", () => {
+  it("answers 'can you listen in the background'", () => {
+    const msg = getVoiceCapabilityMessage("can you listen in the background");
+    expect(msg).not.toBeNull();
+    expect(msg).toContain("push-to-talk");
+  });
+
+  it("answers 'are you always listening'", () => {
+    expect(getVoiceCapabilityMessage("are you always-on listening")).not.toBeNull();
+  });
+
+  it("answers 'do you have background listening'", () => {
+    expect(getVoiceCapabilityMessage("do you have background listening")).not.toBeNull();
+  });
+
+  it("response denies background listening", () => {
+    const msg = getVoiceCapabilityMessage("can you listen in the background") ?? "";
+    expect(msg.toLowerCase()).toContain("no");
+  });
+
+  it("response says push-to-talk only", () => {
+    const msg = getVoiceCapabilityMessage("can you listen in the background") ?? "";
+    expect(msg.toLowerCase()).toContain("push-to-talk");
+  });
+});
+
+describe("getVoiceCapabilityMessage — wake word questions", () => {
+  it("answers 'do you have a wake word'", () => {
+    const msg = getVoiceCapabilityMessage("do you have a wake word");
+    expect(msg).not.toBeNull();
+    expect(msg?.toLowerCase()).toContain("no wake word");
+  });
+
+  it("answers 'is there a wake word'", () => {
+    expect(getVoiceCapabilityMessage("is there a wake word")).not.toBeNull();
+  });
+});
+
+describe("getVoiceCapabilityMessage — TTS / speak back questions", () => {
+  it("answers 'can you speak back'", () => {
+    const msg = getVoiceCapabilityMessage("can you speak back");
+    expect(msg).not.toBeNull();
+    expect(msg?.toLowerCase()).toContain("tts");
+  });
+
+  it("answers 'do you have TTS'", () => {
+    expect(getVoiceCapabilityMessage("do you have TTS")).not.toBeNull();
+  });
+
+  it("answers 'do you have text to speech'", () => {
+    expect(getVoiceCapabilityMessage("do you have text-to-speech")).not.toBeNull();
+  });
+
+  it("answers 'can you talk back'", () => {
+    expect(getVoiceCapabilityMessage("can you talk back")).not.toBeNull();
+  });
+
+  it("response says TTS not implemented", () => {
+    const msg = getVoiceCapabilityMessage("can you speak back") ?? "";
+    expect(msg.toLowerCase()).toContain("not implemented");
+  });
+});
+
+describe("getVoiceCapabilityMessage — unrelated questions pass through", () => {
+  it("passes 'what is the weather'", () => {
+    expect(getVoiceCapabilityMessage("what is the weather")).toBeNull();
+  });
+
+  it("passes 'activate focus mode'", () => {
+    expect(getVoiceCapabilityMessage("activate focus mode")).toBeNull();
+  });
+
+  it("passes 'tell me about quantum computing'", () => {
+    expect(getVoiceCapabilityMessage("tell me about quantum computing")).toBeNull();
+  });
+
+  it("passes 'emergency stop'", () => {
+    expect(getVoiceCapabilityMessage("emergency stop")).toBeNull();
+  });
+});
+
+describe("getVoiceCapabilityMessage — voice not working troubleshooting", () => {
+  it("answers 'voice not working'", () => {
+    const msg = getVoiceCapabilityMessage("voice not working");
+    expect(msg).not.toBeNull();
+    expect(msg).toContain("Phase 3A");
+  });
+
+  it("answers 'voice doesn't work'", () => {
+    expect(getVoiceCapabilityMessage("voice doesn't work")).not.toBeNull();
+  });
+
+  it("answers 'voice not responding'", () => {
+    expect(getVoiceCapabilityMessage("voice not responding")).not.toBeNull();
+  });
+
+  it("response explains KeyV focus requirement", () => {
+    const msg = getVoiceCapabilityMessage("voice not working") ?? "";
+    expect(msg.toLowerCase()).toContain("keyv");
+  });
+
+  it("response mentions typing blocks KeyV", () => {
+    const msg = getVoiceCapabilityMessage("voice not working") ?? "";
+    expect(msg.toLowerCase()).toContain("typing");
+  });
+
+  it("response mentions KeyV flow", () => {
+    const msg = getVoiceCapabilityMessage("voice not working") ?? "";
+    expect(msg.toLowerCase()).toContain("keyv");
+  });
+});
+
+describe("getVoiceCapabilityMessage — nothing happened after voice", () => {
+  it("answers 'nothing happened after voice'", () => {
+    expect(getVoiceCapabilityMessage("nothing happened after voice")).not.toBeNull();
+  });
+
+  it("answers 'I asked through voice and nothing happened'", () => {
+    expect(getVoiceCapabilityMessage("I asked through voice and nothing happened")).not.toBeNull();
+  });
+
+  it("answers 'why didn't Lisa answer my voice question'", () => {
+    expect(getVoiceCapabilityMessage("why didn't Lisa answer my voice question")).not.toBeNull();
+  });
+
+  it("answers 'why didn't voice work'", () => {
+    expect(getVoiceCapabilityMessage("why didn't voice work")).not.toBeNull();
+  });
+
+  it("response is expected Phase 3A behavior", () => {
+    const msg = getVoiceCapabilityMessage("nothing happened after voice") ?? "";
+    expect(msg.toLowerCase()).toContain("expected");
+  });
+
+  it("response says not configured", () => {
+    const msg = getVoiceCapabilityMessage("nothing happened after voice") ?? "";
+    expect(msg.toLowerCase()).toContain("configured");
+  });
+
+  it("response says does not transcribe or submit", () => {
+    const msg = getVoiceCapabilityMessage("nothing happened after voice") ?? "";
+    expect(msg.toLowerCase()).toMatch(/transcribe|command/);
+  });
+});
+
+describe("getVoiceCapabilityMessage — KeyV not working troubleshooting", () => {
+  it("answers 'keyv not working'", () => {
+    expect(getVoiceCapabilityMessage("keyv not working")).not.toBeNull();
+  });
+
+  it("answers 'KeyV does nothing'", () => {
+    expect(getVoiceCapabilityMessage("KeyV does nothing")).not.toBeNull();
+  });
+
+  it("answers 'push-to-talk not working'", () => {
+    expect(getVoiceCapabilityMessage("push-to-talk not working")).not.toBeNull();
+  });
+
+  it("answers 'v key not working'", () => {
+    expect(getVoiceCapabilityMessage("v key not working")).not.toBeNull();
+  });
+
+  it("answers 'KeyV worked once then stopped'", () => {
+    expect(getVoiceCapabilityMessage("KeyV worked once then stopped")).not.toBeNull();
+  });
+
+  it("response explains command box focus blocks KeyV", () => {
+    const msg = getVoiceCapabilityMessage("keyv not working") ?? "";
+    expect(msg.toLowerCase()).toContain("command box");
+  });
+
+  it("response tells user to click outside first", () => {
+    const msg = getVoiceCapabilityMessage("keyv not working") ?? "";
+    expect(msg.toLowerCase()).toContain("click outside");
+  });
+
+  it("response does not reference a visible Start Voice UI Test button", () => {
+    const msg = getVoiceCapabilityMessage("keyv not working") ?? "";
+    expect(msg).not.toContain("Start Voice UI Test");
+    expect(msg.toLowerCase()).toContain("click outside");
+  });
+});
+
+describe("getVoiceCapabilityMessage — mic button missing troubleshooting", () => {
+  it("answers 'mic button missing'", () => {
+    expect(getVoiceCapabilityMessage("mic button missing")).not.toBeNull();
+  });
+
+  it("answers 'there is no mic button'", () => {
+    expect(getVoiceCapabilityMessage("there is no mic button")).not.toBeNull();
+  });
+
+  it("answers 'where is the mic button'", () => {
+    expect(getVoiceCapabilityMessage("where is the mic button")).not.toBeNull();
+  });
+
+  it("answers 'can't find microphone button'", () => {
+    expect(getVoiceCapabilityMessage("can't find microphone button")).not.toBeNull();
+  });
+
+  it("answers 'mic button not visible'", () => {
+    expect(getVoiceCapabilityMessage("mic button not visible")).not.toBeNull();
+  });
+
+  it("response confirms Phase 3A is KeyV-only", () => {
+    const msg = getVoiceCapabilityMessage("mic button missing") ?? "";
+    expect(msg.toLowerCase()).toContain("phase 3a");
+    expect(msg.toLowerCase()).toContain("keyv");
+  });
+
+  it("response says Phase 3A is KeyV-only", () => {
+    const msg = getVoiceCapabilityMessage("where is the mic button") ?? "";
+    expect(msg.toLowerCase()).toContain("keyv-only");
+  });
+
+  it("answers 'no mic button' phrase", () => {
+    expect(getVoiceCapabilityMessage("no mic button is showing")).not.toBeNull();
   });
 });

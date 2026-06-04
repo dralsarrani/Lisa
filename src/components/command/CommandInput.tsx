@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useLisa } from "../../app/useLisa";
-import { routeCommand, getDesktopActionGuardMessage } from "../../core/command-router";
+import { routeCommand, getDesktopActionGuardMessage, getVoiceCapabilityMessage } from "../../core/command-router";
 import { createTestMission, applyApprovalDecision } from "../../core/mission-store";
 import { createAuditEvent } from "../../core/audit-store";
 import { getModeDisplayName } from "../../core/mode-store";
@@ -14,6 +14,7 @@ import { detectToolSuggestion, createToolRequestPair } from "../../core/tool-sug
 import { hasActiveToolRequest } from "../../core/tool-request-utils";
 import type { ToolSuggestion } from "../../core/types";
 import "./CommandInput.css";
+import { VoiceInputControl } from "../voice/VoiceInputControl";
 
 // ─── Pure formatter — exported for testing ────────────────────────────────────
 
@@ -350,21 +351,15 @@ export const CommandInput: React.FC = () => {
     });
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const raw = value.trim();
+  async function submitUserInput(raw: string, source: "typed" | "voice"): Promise<void> {
     if (!raw || isProcessing) return;
-
-    historyRef.current = [raw, ...historyRef.current].slice(0, MAX_HISTORY);
-    historyIndexRef.current = -1;
-
-    setValue("");
     setIsProcessing(true);
 
     addAudit({
       eventType: "command_received",
       source: "command_input",
       summary: `Command received: "${raw}"`,
+      details: `source=${source}`,
       severity: "info",
     });
 
@@ -932,6 +927,28 @@ export const CommandInput: React.FC = () => {
           break;
         }
 
+        // Guard: answer voice capability questions deterministically before LLM.
+        // Small local models ignore system-prompt boundaries; this ensures accurate answers.
+        const voiceMsg = getVoiceCapabilityMessage(raw);
+        if (voiceMsg) {
+          dispatch({ type: "SET_COMMAND_RESPONSE", payload: voiceMsg });
+          dispatch({
+            type: "ADD_INTERACTION",
+            payload: {
+              id: makeId(), kind: "command", prompt: raw, status: "complete",
+              response: voiceMsg, createdAt: now(), completedAt: now(),
+            },
+          });
+          addAudit({
+            eventType: "command_routed",
+            source: "command_input",
+            summary: "Voice capability question answered deterministically.",
+            details: `input_chars=${raw.length}`,
+            severity: "info",
+          });
+          break;
+        }
+
         const { enableLocalAi, ollamaModel, maxContextTurns } = state.settings;
 
         if (enableLocalAi && ollamaModel) {
@@ -983,6 +1000,17 @@ export const CommandInput: React.FC = () => {
 
     setIsProcessing(false);
     inputRef.current?.focus();
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const raw = value.trim();
+    if (!raw || isProcessing) return;
+
+    historyRef.current = [raw, ...historyRef.current].slice(0, MAX_HISTORY);
+    historyIndexRef.current = -1;
+    setValue("");
+    await submitUserInput(raw, "typed");
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -1074,6 +1102,10 @@ export const CommandInput: React.FC = () => {
           </button>
         ))}
       </div>
+
+      <VoiceInputControl
+        isProcessing={isProcessing}
+      />
     </div>
   );
 };

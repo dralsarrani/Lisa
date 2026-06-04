@@ -45,7 +45,7 @@ describe("buildLisaSystemPrompt — capability boundaries", () => {
     expect(buildLisaSystemPrompt().toLowerCase()).toContain("do not pretend");
   });
 
-  it("declares voice input is not yet implemented", () => {
+  it("mentions voice input", () => {
     expect(buildLisaSystemPrompt().toLowerCase()).toContain("voice");
   });
 
@@ -679,5 +679,49 @@ describe("buildOllamaMessages — Phase 2J channel distinctness", () => {
     expect(withNotes).toHaveLength(base.length);
     expect(withTools).toHaveLength(base.length);
     expect(withBoth).toHaveLength(base.length);
+  });
+});
+
+// ─── Phase 3A voice capability boundary ──────────────────────────────────────
+
+describe("buildLisaSystemPrompt — Phase 3A voice capability boundary", () => {
+  it("states voice input is push-to-talk only", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("push-to-talk");
+  });
+
+  it("states Lisa does not listen in the background", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("does not listen in the background");
+  });
+
+  it("states there is no cloud STT", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("no cloud stt");
+  });
+
+  it("states local STT is not yet configured", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("not yet configured");
+  });
+
+  it("states voice output (TTS) is not yet implemented", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("voice output (tts)");
+  });
+
+  it("states the voice input UI exists in Phase 3A", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("voice input ui exists");
+  });
+
+  it("instructs the model not to claim real voice transcription is working", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("do not claim real voice transcription");
+  });
+
+  it("does not retain stale wording claiming voice support is entirely absent", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).not.toContain("voice support is not yet implemented");
+  });
+
+  it("does not imply real transcription is available", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).not.toContain("real transcription is available");
+  });
+
+  it("does not imply always-on listening is available", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).not.toContain("always-on listening is available");
   });
 });
