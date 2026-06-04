@@ -326,6 +326,8 @@ export interface LisaSettings {
   pushToTalkKey: string;
   sttEngineStatus: SttEngineStatus;
   sttEngineLabel?: string;
+  sttModelPath: string;
+  sttModelLastTestedAt?: string;
 }
 
 export const DEFAULT_SETTINGS: LisaSettings = {
@@ -346,6 +348,7 @@ export const DEFAULT_SETTINGS: LisaSettings = {
   pushToTalkKey: "KeyV",
   sttEngineStatus: "not_configured",
   sttEngineLabel: "Not configured",
+  sttModelPath: "",
 };
 
 // ─── Command Router ───────────────────────────────────────────────────────────
@@ -428,4 +431,4 @@ export interface PersistedState {
   savedAt: string;
 }
 
-export const STATE_VERSION = 8;
+export const STATE_VERSION = 9;

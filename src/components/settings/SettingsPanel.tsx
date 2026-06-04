@@ -43,6 +43,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
   const [newNoteInput, setNewNoteInput] = useState("");
   const [confirmingClearNotes, setConfirmingClearNotes] = useState(false);
   const confirmNotesClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [sttModelPathInput, setSttModelPathInput] = useState(settings.sttModelPath ?? "");
+  const [sttTestResult, setSttTestResult] = useState<{ success: boolean; latency_ms: number; engine_name: string; error?: string } | null>(null);
+  const [sttTesting, setSttTesting] = useState(false);
+  const [sttValidating, setSttValidating] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -193,6 +197,51 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
       });
     }
     setModelTestLoading(false);
+  }
+
+  async function handleValidateSttPath() {
+    const path = sttModelPathInput.trim();
+    dispatch({ type: "SET_SETTINGS", payload: { sttModelPath: path } });
+    if (!path) {
+      dispatch({ type: "SET_SETTINGS", payload: { sttEngineStatus: "not_configured", sttEngineLabel: "Not configured" } });
+      setSttTestResult(null);
+      return;
+    }
+    const isInTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    if (!isInTauri) { setSttTestResult({ success: false, latency_ms: 0, engine_name: "", error: "Requires desktop app." }); return; }
+    setSttValidating(true);
+    setSttTestResult(null);
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const result = await invoke<{ valid: boolean; label: string; size_bytes?: number; error?: string }>("validate_stt_model_path", { modelPath: path });
+      dispatch({ type: "SET_SETTINGS", payload: { sttEngineStatus: result.valid ? "not_configured" : "error", sttEngineLabel: result.label } });
+      setSttTestResult({ success: result.valid, latency_ms: 0, engine_name: result.label, error: result.error });
+    } catch (err) {
+      setSttTestResult({ success: false, latency_ms: 0, engine_name: "", error: err instanceof Error ? err.message : String(err) });
+    }
+    setSttValidating(false);
+  }
+
+  async function handleTestWhisperModel() {
+    const path = sttModelPathInput.trim();
+    if (!path) return;
+    const isInTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    if (!isInTauri) { setSttTestResult({ success: false, latency_ms: 0, engine_name: "", error: "Requires desktop app." }); return; }
+    setSttTesting(true);
+    setSttTestResult(null);
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const result = await invoke<{ success: boolean; latency_ms: number; engine_name: string; error?: string }>("test_whisper_model", { modelPath: path });
+      setSttTestResult(result);
+      dispatch({ type: "SET_SETTINGS", payload: {
+        sttEngineStatus: result.success ? "ready" : "error",
+        sttEngineLabel: result.success ? `${result.engine_name} (${result.latency_ms}ms)` : result.error ?? "Load failed",
+        sttModelLastTestedAt: new Date().toISOString(),
+      }});
+    } catch (err) {
+      setSttTestResult({ success: false, latency_ms: 0, engine_name: "", error: err instanceof Error ? err.message : String(err) });
+    }
+    setSttTesting(false);
   }
 
   function handleClearHistory() {
@@ -633,9 +682,66 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
           <span className="settings-field-label">Keyboard shortcut</span>
           <span className="settings-field-value settings-field-mono">{settings.pushToTalkKey} — works only when the command box is not focused</span>
         </div>
-        <p className="history-note" style={{ marginTop: "6px" }}>
-          Phase 3A is a keyboard-only voice UI test. Local STT is not configured, so no speech will be transcribed and no command will be sent. Lisa does not listen in the background, never activates without your explicit action, and does not transmit audio to any network service.
+
+        {/* STT Model Path — Phase 3C */}
+        <div className="settings-field" style={{ marginTop: "10px", flexDirection: "column", alignItems: "flex-start", gap: "6px" }}>
+          <span className="settings-field-label">Whisper Model Path</span>
+          <div style={{ display: "flex", gap: "6px", width: "100%", flexWrap: "wrap" }}>
+            <input
+              className="memory-note-input"
+              type="text"
+              value={sttModelPathInput}
+              onChange={(e) => { setSttModelPathInput(e.target.value); setSttTestResult(null); }}
+              placeholder="e.g. C:\models\ggml-base.bin"
+              aria-label="Whisper model file path"
+              style={{ flex: 1, minWidth: "200px" }}
+            />
+            <button
+              className="btn ai-refresh-btn"
+              onClick={handleValidateSttPath}
+              disabled={sttValidating || sttTesting}
+            >
+              {sttValidating ? "Checking…" : "Validate Path"}
+            </button>
+            <button
+              className="btn ai-test-btn"
+              onClick={handleTestWhisperModel}
+              disabled={sttTesting || sttValidating || !sttModelPathInput.trim()}
+              title="Attempts to load the model. Requires Lisa built with --features whisper."
+            >
+              {sttTesting ? "Loading…" : "Test Model"}
+            </button>
+            {settings.sttModelPath && (
+              <button
+                className="btn"
+                style={{ opacity: 0.7 }}
+                onClick={() => {
+                  setSttModelPathInput("");
+                  setSttTestResult(null);
+                  dispatch({ type: "SET_SETTINGS", payload: { sttModelPath: "", sttEngineStatus: "not_configured", sttEngineLabel: "Not configured" } });
+                }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          {sttTestResult && (
+            <div className={`ai-test-result ${sttTestResult.success ? "ai-test-result-pass" : "ai-test-result-fail"}`}>
+              {sttTestResult.success
+                ? `✓ ${sttTestResult.engine_name}${sttTestResult.latency_ms > 0 ? ` — loaded in ${sttTestResult.latency_ms}ms` : ""}`
+                : `✗ ${sttTestResult.error ?? "Failed"}`}
+            </div>
+          )}
+        </div>
+
+        <p className="history-note" style={{ marginTop: "8px" }}>
+          Phase 3C — Whisper Engine Foundation. Provide a local Whisper GGML model path (e.g. ggml-base.bin). Lisa will not download models automatically. Live microphone capture is not connected yet — that is Phase 3D. Lisa never listens in the background and never sends audio to any network service.
         </p>
+        {settings.sttModelLastTestedAt && (
+          <p className="history-note" style={{ marginTop: "2px" }}>
+            Last tested: {new Date(settings.sttModelLastTestedAt).toLocaleString()}
+          </p>
+        )}
       </div>
 
       {/* ── Phase Flags ── */}
@@ -749,7 +855,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
         <div className="settings-build-info">
           <div className="settings-field">
             <span className="settings-field-label">Phase</span>
-            <span className="settings-field-value">3A — Push-to-Talk Voice Input Foundation</span>
+            <span className="settings-field-value">3C — Whisper Engine Foundation</span>
           </div>
           <div className="settings-field">
             <span className="settings-field-label">Version</span>

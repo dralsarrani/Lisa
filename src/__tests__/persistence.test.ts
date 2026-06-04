@@ -36,9 +36,40 @@ describe("loadState — invalid JSON", () => {
   });
 });
 
-describe("Phase 3A — STATE_VERSION is 8", () => {
-  it("STATE_VERSION constant equals 8", () => {
-    expect(STATE_VERSION).toBe(8);
+describe("Phase 3C — STATE_VERSION is 9", () => {
+  it("STATE_VERSION constant equals 9", () => {
+    expect(STATE_VERSION).toBe(9);
+  });
+});
+
+describe("Phase 3C — v8→v9 migration adds sttModelPath", () => {
+  it("v8 state without sttModelPath gets empty string default", async () => {
+    localStorage.setItem("lisa_state_v1", JSON.stringify({
+      version: 8,
+      settings: { voiceInputEnabled: true, pushToTalkKey: "KeyV" },
+    }));
+    const state = await loadState();
+    expect(state.version).toBe(STATE_VERSION);
+    expect(state.settings.sttModelPath).toBe("");
+  });
+
+  it("v8 state preserves existing settings during migration", async () => {
+    localStorage.setItem("lisa_state_v1", JSON.stringify({
+      version: 8,
+      settings: { voiceInputEnabled: true, ollamaModel: "llama3.2:1b", sttEngineStatus: "not_configured" },
+      missions: [],
+    }));
+    const state = await loadState();
+    expect(state.settings.voiceInputEnabled).toBe(true);
+    expect(state.settings.ollamaModel).toBe("llama3.2:1b");
+    expect(state.settings.sttEngineStatus).toBe("not_configured");
+    expect(state.settings.sttModelPath).toBe("");
+  });
+
+  it("default state includes sttModelPath as empty string", async () => {
+    const state = await loadState();
+    expect(state.settings.sttModelPath).toBe("");
+    expect(state.settings.sttEngineStatus).toBe("not_configured");
   });
 });
 
@@ -765,8 +796,8 @@ describe("tool persistence — caps", () => {
 // ─── Phase 2E — STATE_VERSION and toolResultContextEnabled ───────────────────
 
 describe("Phase 2E — STATE_VERSION and toolResultContextEnabled defaults", () => {
-  it("STATE_VERSION is 8", () => {
-    expect(STATE_VERSION).toBe(8);
+  it("STATE_VERSION is 9", () => {
+    expect(STATE_VERSION).toBe(9);
   });
 
   it("DEFAULT_SETTINGS.toolResultContextEnabled is true", () => {

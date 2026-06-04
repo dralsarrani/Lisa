@@ -155,9 +155,10 @@ function defaultState(): PersistedState {
 }
 
 function migrateState(old: Partial<PersistedState>): PersistedState {
-  // v5 → v8 / v6 → v8 / v7 → v8: additive migrations — preserve all tool collections.
-  // v6→v7 added MemoryNote.source; v7→v8 adds voice settings (DEFAULT_SETTINGS spread covers defaults).
-  if (old.version === 5 || old.version === 6 || old.version === 7) {
+  // v5→v9 / v6→v9 / v7→v9 / v8→v9: additive migrations — preserve all tool collections.
+  // v6→v7 added MemoryNote.source; v7→v8 adds voice settings; v8→v9 adds sttModelPath.
+  // DEFAULT_SETTINGS spread covers all new fields automatically.
+  if (old.version === 5 || old.version === 6 || old.version === 7 || old.version === 8) {
     const migRequests = safeToolRequests(old.toolRequests);
     const migApprovals = safeToolApprovals(old.toolApprovals);
     const migResults = safeToolResults(old.toolResults);

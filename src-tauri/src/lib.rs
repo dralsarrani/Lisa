@@ -1,5 +1,6 @@
 #[allow(dead_code)]
 mod stt;
+use stt::{validate_model_path, SttModelValidationResult, SttModelTestResult, SttTranscriptResult};
 
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -813,6 +814,63 @@ async fn test_ollama_model(model: String) -> OllamaModelTestResult {
     }
 }
 
+// ─── STT Commands ────────────────────────────────────────────────────────────
+
+/// Validate an STT model file path using filesystem checks only.
+/// Does not load the model. Always available — no whisper feature required.
+#[tauri::command]
+fn validate_stt_model_path(model_path: String) -> SttModelValidationResult {
+    validate_model_path(std::path::Path::new(&model_path))
+}
+
+/// Attempt to load the Whisper model at `model_path` and return load latency.
+/// Does not transcribe any audio. Requires `--features whisper` at build time.
+#[tauri::command]
+fn test_whisper_model(model_path: String) -> SttModelTestResult {
+    #[cfg(feature = "whisper")]
+    {
+        stt::whisper::try_load_model(std::path::Path::new(&model_path))
+    }
+    #[cfg(not(feature = "whisper"))]
+    {
+        let _ = model_path;
+        SttModelTestResult {
+            success: false,
+            latency_ms: 0,
+            engine_name: "whisper-rs".to_string(),
+            error: Some(
+                "Whisper engine not compiled. Build Lisa with --features whisper to enable STT."
+                    .to_string(),
+            ),
+        }
+    }
+}
+
+/// Transcribe a local WAV file (developer/manual validation only — not the live mic pipeline).
+/// Requires `--features whisper` and a valid 16 kHz mono 16-bit WAV file.
+/// Audio path is not logged in the audit trail. Transcript text is returned to the caller only.
+#[tauri::command]
+fn transcribe_local_audio_file(
+    model_path: String,
+    audio_path: String,
+) -> Result<SttTranscriptResult, String> {
+    #[cfg(feature = "whisper")]
+    {
+        let engine = stt::whisper::WhisperEngine::from_model_path(
+            std::path::Path::new(&model_path),
+        )
+        .map_err(|e| e.to_string())?;
+        engine
+            .transcribe_wav_path(std::path::Path::new(&audio_path))
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(not(feature = "whisper"))]
+    {
+        let _ = (model_path, audio_path);
+        Err("Whisper engine not compiled. Build Lisa with --features whisper to enable STT.".to_string())
+    }
+}
+
 // ─── App Entry ────────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -832,6 +890,9 @@ pub fn run() {
             cancel_ollama_stream,
             test_ollama_model,
             transcribe_voice_placeholder,
+            validate_stt_model_path,
+            test_whisper_model,
+            transcribe_local_audio_file,
         ])
         .run(tauri::generate_context!())
         .expect("Error while running Lisa application");
