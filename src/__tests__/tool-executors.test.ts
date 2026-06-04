@@ -301,3 +301,16 @@ describe("executeSaveToolResultMemoryNote — success", () => {
     expect(sideEffect?.content).toBe("result B");
   });
 });
+
+// ─── Phase 2K — sideEffect type identity ─────────────────────────────────────
+
+describe("executeSaveToolResultMemoryNote — Phase 2K sideEffect type", () => {
+  it("sideEffect type is add_memory_note", async () => {
+    const state: LisaState = {
+      ...initialState,
+      toolResults: [{ id: "res-k", requestId: "req-k", toolId: "conversation-stats", outputSummary: "Total: 3 turns.", succeededAt: new Date().toISOString() }],
+    };
+    const { sideEffect } = await executeSaveToolResultMemoryNote({ sourceResultId: "res-k" }, state, NOOP_SIGNAL);
+    expect(sideEffect?.type).toBe("add_memory_note");
+  });
+});

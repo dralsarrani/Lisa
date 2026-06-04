@@ -175,7 +175,7 @@ describe("buildOllamaMessages", () => {
 import type { MemoryNote } from "../core/llm-context";
 
 function makeMemNote(content: string): MemoryNote {
-  return { id: crypto.randomUUID(), content, createdAt: new Date().toISOString() };
+  return { id: crypto.randomUUID(), content, createdAt: new Date().toISOString(), source: "manual" };
 }
 
 describe("buildLisaSystemPrompt — memory notes", () => {
@@ -574,6 +574,43 @@ describe("buildLisaSystemPrompt — Phase 2J channel boundary wording", () => {
 
   it("labels tool results as channel 3", () => {
     expect(buildLisaSystemPrompt()).toContain("3. App-produced tool results");
+  });
+});
+
+// ─── Phase 2K — source field not exposed in prompt ────────────────────────────
+
+describe("buildLisaSystemPrompt — Phase 2K source not in prompt", () => {
+  it("manual note injects content only — no source label", () => {
+    const note: MemoryNote = { id: "1", content: "prefer TypeScript", createdAt: new Date().toISOString(), source: "manual" };
+    const result = buildLisaSystemPrompt([note]);
+    expect(result).toContain("prefer TypeScript");
+    expect(result).not.toContain('"manual"');
+    expect(result).not.toContain("source: manual");
+  });
+
+  it("tool_result note injects content only — no source label", () => {
+    const note: MemoryNote = { id: "2", content: "Runtime: backend=ok", createdAt: new Date().toISOString(), source: "tool_result" };
+    const result = buildLisaSystemPrompt([note]);
+    expect(result).toContain("Runtime: backend=ok");
+    expect(result).not.toContain('"tool_result"');
+    expect(result).not.toContain("source: tool_result");
+  });
+
+  it("manual and tool_result notes with identical content produce identical prompt output", () => {
+    const manual: MemoryNote = { id: "1", content: "same content", createdAt: new Date().toISOString(), source: "manual" };
+    const tool: MemoryNote = { id: "2", content: "same content", createdAt: new Date().toISOString(), source: "tool_result" };
+    expect(buildLisaSystemPrompt([manual])).toBe(buildLisaSystemPrompt([tool]));
+  });
+
+  it("mixed-source notes are injected in order without source metadata", () => {
+    const notes: MemoryNote[] = [
+      { id: "1", content: "note alpha", createdAt: new Date().toISOString(), source: "manual" },
+      { id: "2", content: "note beta", createdAt: new Date().toISOString(), source: "tool_result" },
+    ];
+    const result = buildLisaSystemPrompt(notes);
+    expect(result).toContain("- note alpha");
+    expect(result).toContain("- note beta");
+    expect(result.indexOf("note alpha")).toBeLessThan(result.indexOf("note beta"));
   });
 });
 

@@ -458,7 +458,7 @@ function makeToolResult(id: string): ToolResult {
 }
 
 function makeMemoryNote(content: string): MemoryNote {
-  return { id: crypto.randomUUID(), content, createdAt: new Date().toISOString() };
+  return { id: crypto.randomUUID(), content, createdAt: new Date().toISOString(), source: "manual" };
 }
 
 describe("Phase 2J — CLEAR_MEMORY_NOTES channel isolation", () => {
@@ -527,5 +527,109 @@ describe("Phase 2J — DELETE_MEMORY_NOTE channel isolation", () => {
     const next = lisaReducer(state, { type: "DELETE_MEMORY_NOTE", payload: note.id });
     expect(next.memoryNotes).toHaveLength(0);
     expect(next.toolResults).toHaveLength(1);
+  });
+});
+
+// ─── Phase 2K — MemoryNote source field ───────────────────────────────────────
+
+import type { MemoryNoteSource } from "../core/types";
+
+describe("Phase 2K — ADD_MEMORY_NOTE source field", () => {
+  it("plain string payload defaults to source: manual", () => {
+    const next = lisaReducer(initialState, { type: "ADD_MEMORY_NOTE", payload: "note text" });
+    expect(next.memoryNotes[0].source).toBe("manual");
+  });
+
+  it("object payload with source: manual stores manual", () => {
+    const next = lisaReducer(initialState, { type: "ADD_MEMORY_NOTE", payload: { content: "note", source: "manual" } });
+    expect(next.memoryNotes[0].source).toBe("manual");
+  });
+
+  it("object payload with source: tool_result stores tool_result", () => {
+    const next = lisaReducer(initialState, { type: "ADD_MEMORY_NOTE", payload: { content: "note", source: "tool_result" as MemoryNoteSource } });
+    expect(next.memoryNotes[0].source).toBe("tool_result");
+  });
+
+  it("object payload without source defaults to manual", () => {
+    const next = lisaReducer(initialState, { type: "ADD_MEMORY_NOTE", payload: { content: "note" } });
+    expect(next.memoryNotes[0].source).toBe("manual");
+  });
+
+  it("note content is still stored correctly alongside source", () => {
+    const next = lisaReducer(initialState, { type: "ADD_MEMORY_NOTE", payload: { content: "hello world", source: "tool_result" as MemoryNoteSource } });
+    expect(next.memoryNotes[0].content).toBe("hello world");
+    expect(next.memoryNotes[0].source).toBe("tool_result");
+  });
+
+  it("cap still applies across mixed sources", () => {
+    let state = initialState;
+    for (let i = 0; i < 20; i++) {
+      state = lisaReducer(state, { type: "ADD_MEMORY_NOTE", payload: { content: `note ${i}`, source: i % 2 === 0 ? "manual" : ("tool_result" as MemoryNoteSource) } });
+    }
+    expect(state.memoryNotes).toHaveLength(20);
+    const next = lisaReducer(state, { type: "ADD_MEMORY_NOTE", payload: "overflow note" });
+    expect(next.memoryNotes).toHaveLength(20);
+  });
+});
+
+describe("Phase 2K — COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE stores tool_result source", () => {
+  function makeRunningState() {
+    const request: import("../core/types").ToolRequest = {
+      id: "req-k1", toolId: "save-tool-result-memory-note", toolDisplayName: "Save", params: {},
+      status: "running", source: "result_action", consequences: "adds note",
+      createdAt: new Date().toISOString(), startedAt: new Date().toISOString(),
+    };
+    const approval: import("../core/types").ToolApprovalContract = {
+      id: "apv-k1", requestId: "req-k1", toolId: "save-tool-result-memory-note",
+      toolDisplayName: "Save", consequences: "adds note",
+      decision: "approved", resolvedBy: "operator",
+      createdAt: new Date().toISOString(), resolvedAt: new Date().toISOString(),
+    };
+    return { ...initialState, toolRequests: [request], toolApprovals: [approval] };
+  }
+
+  it("creates note with source: tool_result", () => {
+    const result: ToolResult = { id: "res-k1", requestId: "req-k1", toolId: "save-tool-result-memory-note", outputSummary: "ok", succeededAt: new Date().toISOString() };
+    const auditEvent = { id: "a1", timestamp: new Date().toISOString(), eventType: "tool_execution_succeeded" as const, source: "runner", summary: "done", severity: "info" as const };
+    const memAudit = { id: "a2", timestamp: new Date().toISOString(), eventType: "memory_note_added" as const, source: "runner", summary: "note added", severity: "info" as const };
+    const next = lisaReducer(makeRunningState(), {
+      type: "COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE",
+      payload: { requestId: "req-k1", result, completedAt: new Date().toISOString(), memoryNoteContent: "saved note", auditEvent, memoryNoteAuditEvent: memAudit },
+    });
+    expect(next.memoryNotes).toHaveLength(1);
+    expect(next.memoryNotes[0].source).toBe("tool_result");
+    expect(next.memoryNotes[0].content).toBe("saved note");
+  });
+
+  it("guard: non-running request does not add note", () => {
+    const stateWithSucceeded = {
+      ...makeRunningState(),
+      toolRequests: [{ ...makeRunningState().toolRequests[0], status: "succeeded" as const }],
+    };
+    const result: ToolResult = { id: "res-k2", requestId: "req-k1", toolId: "save-tool-result-memory-note", outputSummary: "ok", succeededAt: new Date().toISOString() };
+    const auditEvent = { id: "a3", timestamp: new Date().toISOString(), eventType: "tool_execution_succeeded" as const, source: "runner", summary: "done", severity: "info" as const };
+    const memAudit = { id: "a4", timestamp: new Date().toISOString(), eventType: "memory_note_added" as const, source: "runner", summary: "note added", severity: "info" as const };
+    const next = lisaReducer(stateWithSucceeded, {
+      type: "COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE",
+      payload: { requestId: "req-k1", result, completedAt: new Date().toISOString(), memoryNoteContent: "should not add", auditEvent, memoryNoteAuditEvent: memAudit },
+    });
+    expect(next.memoryNotes).toHaveLength(0);
+  });
+});
+
+describe("Phase 2K — source preserved through delete and clear", () => {
+  it("DELETE_MEMORY_NOTE removes tool_result note by id", () => {
+    const state = lisaReducer(initialState, { type: "ADD_MEMORY_NOTE", payload: { content: "tool note", source: "tool_result" as MemoryNoteSource } });
+    const noteId = state.memoryNotes[0].id;
+    const next = lisaReducer(state, { type: "DELETE_MEMORY_NOTE", payload: noteId });
+    expect(next.memoryNotes).toHaveLength(0);
+  });
+
+  it("CLEAR_MEMORY_NOTES clears notes of all sources", () => {
+    let state = lisaReducer(initialState, { type: "ADD_MEMORY_NOTE", payload: "manual note" });
+    state = lisaReducer(state, { type: "ADD_MEMORY_NOTE", payload: { content: "tool note", source: "tool_result" as MemoryNoteSource } });
+    expect(state.memoryNotes).toHaveLength(2);
+    const next = lisaReducer(state, { type: "CLEAR_MEMORY_NOTES" });
+    expect(next.memoryNotes).toHaveLength(0);
   });
 });

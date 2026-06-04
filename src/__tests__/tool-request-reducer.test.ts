@@ -803,6 +803,7 @@ describe("COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE", () => {
       id: `note-${i}`,
       content: `note ${i}`,
       createdAt: NOW,
+      source: "manual" as const,
     }));
     const s0: LisaState = { ...initialState, toolRequests: [req], memoryNotes: existingNotes };
 

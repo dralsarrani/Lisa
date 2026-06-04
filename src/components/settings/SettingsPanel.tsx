@@ -565,6 +565,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
                   {state.memoryNotes.map((note, idx) => (
                     <li key={note.id} className="memory-note-item">
                       <span className="memory-note-index">{idx + 1}.</span>
+                      <span className={`memory-note-source memory-note-source-${note.source ?? "manual"}`}>
+                        {note.source === "tool_result" ? "TOOL" : "MANUAL"}
+                      </span>
                       <span className="memory-note-body">
                         <span className="memory-note-content">{note.content}</span>
                         <span className="memory-note-meta">

@@ -10,6 +10,7 @@ import type {
   LisaInteraction,
   LisaConversationTurn,
   MemoryNote,
+  MemoryNoteSource,
   ToolRequest,
   ToolResult,
   ToolApprovalContract,
@@ -86,7 +87,7 @@ export type LisaAction =
   | { type: "ABORT_INTERACTION"; payload: { id: string; completedAt: string; latencyMs?: number } }
   | { type: "APPEND_CONVERSATION_TURN"; payload: LisaConversationTurn }
   | { type: "CLEAR_CONVERSATION_HISTORY" }
-  | { type: "ADD_MEMORY_NOTE"; payload: string }
+  | { type: "ADD_MEMORY_NOTE"; payload: string | { content: string; source?: MemoryNoteSource } }
   | { type: "DELETE_MEMORY_NOTE"; payload: string }
   | { type: "CLEAR_MEMORY_NOTES" }
   | { type: "CLEAR_AUDIT_LOG"; payload: AuditEvent }
@@ -307,12 +308,16 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
       return { ...state, conversationHistory: [] };
 
     case "ADD_MEMORY_NOTE": {
-      const content = action.payload.trim();
+      const raw = typeof action.payload === "string" ? action.payload : action.payload.content;
+      const source: MemoryNoteSource =
+        typeof action.payload === "string" ? "manual" : (action.payload.source ?? "manual");
+      const content = raw.trim();
       if (!content || content.length > MEMORY_NOTE_CHAR_LIMIT) return state;
       const note: MemoryNote = {
         id: crypto.randomUUID(),
         content,
         createdAt: new Date().toISOString(),
+        source,
       };
       const updated = [...state.memoryNotes, note];
       return {
@@ -454,7 +459,7 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
       const trimmed = memoryNoteContent.trim();
       const noteValid = trimmed.length > 0 && trimmed.length <= MEMORY_NOTE_CHAR_LIMIT;
       const newNote: MemoryNote | undefined = noteValid
-        ? { id: crypto.randomUUID(), content: trimmed, createdAt: completedAt }
+        ? { id: crypto.randomUUID(), content: trimmed, createdAt: completedAt, source: "tool_result" }
         : undefined;
       const updatedNotes = newNote
         ? [...state.memoryNotes, newNote].slice(-MEMORY_NOTES_CAP)

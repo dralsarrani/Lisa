@@ -393,8 +393,8 @@ export const TOOL_APPROVALS_CAP = 50;
 
 // ─── Persisted State ──────────────────────────────────────────────────────────
 
-import type { LisaConversationTurn, MemoryNote, ToolContextPolicy } from "./llm-context";
-export type { LisaConversationTurn, MemoryNote, ToolContextPolicy };
+import type { LisaConversationTurn, MemoryNote, ToolContextPolicy, MemoryNoteSource } from "./llm-context";
+export type { LisaConversationTurn, MemoryNote, ToolContextPolicy, MemoryNoteSource };
 
 export interface PersistedState {
   version: number;
@@ -410,4 +410,4 @@ export interface PersistedState {
   savedAt: string;
 }
 
-export const STATE_VERSION = 6;
+export const STATE_VERSION = 7;

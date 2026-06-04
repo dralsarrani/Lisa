@@ -155,9 +155,9 @@ function defaultState(): PersistedState {
 }
 
 function migrateState(old: Partial<PersistedState>): PersistedState {
-  // v5 → v6: additive migration — only new field is settings.toolResultContextEnabled.
-  // Preserve all tool collections so approved/pending requests and results survive upgrade.
-  if (old.version === 5) {
+  // v5 → v7 / v6 → v7: additive migrations — preserve all tool collections.
+  // v6→v7 adds MemoryNote.source; safeMemoryNotes backfills "manual" for notes without source.
+  if (old.version === 5 || old.version === 6) {
     const migRequests = safeToolRequests(old.toolRequests);
     const migApprovals = safeToolApprovals(old.toolApprovals);
     const migResults = safeToolResults(old.toolResults);
@@ -232,17 +232,24 @@ function safeConversationHistory(raw: unknown): LisaConversationTurn[] {
 
 function safeMemoryNotes(raw: unknown): MemoryNote[] {
   if (!Array.isArray(raw)) return [];
-  return (raw as MemoryNote[])
+  type RawNote = Record<string, unknown>;
+  return (raw as RawNote[])
     .filter(
       (n) =>
         n !== null &&
         typeof n === "object" &&
-        typeof n.id === "string" &&
-        typeof n.content === "string" &&
-        typeof n.createdAt === "string" &&
-        n.content.trim().length > 0 &&
-        n.content.trim().length <= MEMORY_NOTE_CHAR_LIMIT
+        typeof n["id"] === "string" &&
+        typeof n["content"] === "string" &&
+        typeof n["createdAt"] === "string" &&
+        (n["content"] as string).trim().length > 0 &&
+        (n["content"] as string).trim().length <= MEMORY_NOTE_CHAR_LIMIT
     )
+    .map((n): MemoryNote => ({
+      id: n["id"] as string,
+      content: (n["content"] as string).trim(),
+      createdAt: n["createdAt"] as string,
+      source: n["source"] === "tool_result" ? "tool_result" : "manual",
+    }))
     .slice(-MEMORY_NOTES_CAP);
 }
 

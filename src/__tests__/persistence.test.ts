@@ -36,6 +36,68 @@ describe("loadState — invalid JSON", () => {
   });
 });
 
+describe("Phase 2K — STATE_VERSION is 7", () => {
+  it("STATE_VERSION constant equals 7", () => {
+    expect(STATE_VERSION).toBe(7);
+  });
+});
+
+describe("Phase 2K — v6→v7 migration backfills source: manual", () => {
+  it("note without source field gets source: manual", async () => {
+    localStorage.setItem("lisa_state_v1", JSON.stringify({
+      version: 6,
+      memoryNotes: [{ id: "n1", content: "old note", createdAt: "2025-01-01T00:00:00.000Z" }],
+    }));
+    const state = await loadState();
+    expect(state.version).toBe(7);
+    expect(state.memoryNotes[0].source).toBe("manual");
+    expect(state.memoryNotes[0].content).toBe("old note");
+    expect(state.memoryNotes[0].id).toBe("n1");
+  });
+
+  it("note with source: tool_result in v6 state is preserved", async () => {
+    localStorage.setItem("lisa_state_v1", JSON.stringify({
+      version: 6,
+      memoryNotes: [{ id: "n2", content: "tool note", createdAt: "2025-01-01T00:00:00.000Z", source: "tool_result" }],
+    }));
+    const state = await loadState();
+    expect(state.memoryNotes[0].source).toBe("tool_result");
+  });
+
+  it("unknown source value is normalized to manual", async () => {
+    localStorage.setItem("lisa_state_v1", JSON.stringify({
+      version: 7,
+      memoryNotes: [{ id: "n3", content: "weird note", createdAt: "2025-01-01T00:00:00.000Z", source: "imported_from_elsewhere" }],
+    }));
+    const state = await loadState();
+    expect(state.memoryNotes[0].source).toBe("manual");
+  });
+
+  it("conversationHistory is preserved during v6→v7 migration", async () => {
+    localStorage.setItem("lisa_state_v1", JSON.stringify({
+      version: 6,
+      conversationHistory: [{ userInput: "q", assistantResponse: "a", timestamp: "2025-01-01T00:00:00.000Z", model: "llama3" }],
+      memoryNotes: [{ id: "n4", content: "a note", createdAt: "2025-01-01T00:00:00.000Z" }],
+    }));
+    const state = await loadState();
+    expect(state.conversationHistory).toHaveLength(1);
+    expect(state.memoryNotes).toHaveLength(1);
+  });
+});
+
+describe("Phase 2K — v7 source round-trip", () => {
+  it("manual and tool_result sources survive save+load", async () => {
+    const notes: MemoryNote[] = [
+      { id: "r1", content: "manual note", createdAt: "2025-01-01T00:00:00.000Z", source: "manual" },
+      { id: "r2", content: "tool note", createdAt: "2025-01-01T00:00:00.000Z", source: "tool_result" },
+    ];
+    await saveState({ settings: DEFAULT_SETTINGS, missions: [], approvals: [], auditEvents: [], conversationHistory: [], memoryNotes: notes, ...EMPTY_TOOLS });
+    const state = await loadState();
+    expect(state.memoryNotes[0].source).toBe("manual");
+    expect(state.memoryNotes[1].source).toBe("tool_result");
+  });
+});
+
 describe("loadState — migration", () => {
   it("migrates old state (version 0) and preserves partial settings", async () => {
     localStorage.setItem(
@@ -335,6 +397,7 @@ function makeNote(i: number, content?: string): MemoryNote {
     id: `note-${i}`,
     content: content ?? `memory note ${i}`,
     createdAt: new Date().toISOString(),
+    source: "manual",
   };
 }
 
@@ -653,8 +716,8 @@ describe("tool persistence — caps", () => {
 // ─── Phase 2E — STATE_VERSION and toolResultContextEnabled ───────────────────
 
 describe("Phase 2E — STATE_VERSION and toolResultContextEnabled defaults", () => {
-  it("STATE_VERSION is 6", () => {
-    expect(STATE_VERSION).toBe(6);
+  it("STATE_VERSION is 7", () => {
+    expect(STATE_VERSION).toBe(7);
   });
 
   it("DEFAULT_SETTINGS.toolResultContextEnabled is true", () => {

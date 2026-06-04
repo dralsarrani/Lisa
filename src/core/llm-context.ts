@@ -15,10 +15,13 @@ export interface LisaConversationTurn {
   model: string;
 }
 
+export type MemoryNoteSource = "manual" | "tool_result";
+
 export interface MemoryNote {
   id: string;
   content: string;
   createdAt: string;
+  source: MemoryNoteSource;
 }
 
 export type ToolContextPolicy = "inject" | "no_inject" | "inject_redacted";

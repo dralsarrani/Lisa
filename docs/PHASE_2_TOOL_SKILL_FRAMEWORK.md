@@ -849,3 +849,67 @@ These channels had different semantics but shared ambiguous wording. A user clea
 - Optionally move Memory Notes to a dedicated tab
 - Tag: `phase-2k-memory-note-source-field`
 
+
+---
+
+## Phase 2K — Memory Note Source Field
+
+**Tag:** `phase-2k-memory-note-source-field`
+
+### What changed
+
+- `MemoryNote` gains `source: MemoryNoteSource` (`"manual" | "tool_result"`)
+- `MemoryNoteSource` type exported from `src/core/llm-context.ts`, re-exported from `src/core/types.ts`
+- `STATE_VERSION` bumped 6 → 7
+- `safeMemoryNotes` in `persistence.ts` normalizes `source` on load: unknown/missing values default to `"manual"`, `"tool_result"` is preserved
+- `migrateState` handles v6 → v7: same as v5 → v7 path — all tool collections preserved, `safeMemoryNotes` backfills `"manual"` for notes without source
+- `ADD_MEMORY_NOTE` reducer action payload accepts `string | { content: string; source?: MemoryNoteSource }` — plain string defaults to `"manual"`
+- `COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE` creates notes with `source: "tool_result"`
+- Settings → Memory Notes list shows a source badge per note: `MANUAL` (subdued) or `TOOL` (cyan-accented)
+
+### Source origins
+
+| Source | Created by |
+|--------|-----------|
+| `"manual"` | `remember that …` command |
+| `"manual"` | Settings → Memory Notes input |
+| `"tool_result"` | Approved `save-tool-result-memory-note` tool execution |
+| `"manual"` | All notes migrated from v6 state (conservative backfill) |
+
+### Prompt behavior
+
+Source is **not** injected into the LLM prompt. `buildLisaSystemPrompt` injects `note.content` only. A `manual` note and a `tool_result` note with identical content produce identical prompt output. Source is UI/state metadata only.
+
+### Audit behavior
+
+`memory_note_added` audit detail may include `source=manual` or `source=tool_result`. Note content is never logged.
+
+### Migration behavior (v6 → v7)
+
+All existing notes without a `source` field are backfilled as `"manual"`. This is conservative: notes saved before Phase 2K via the Save Tool Result as Memory Note button had no `source` field in storage — they become `"manual"` after migration. True `"tool_result"` source is recorded only for notes created after Phase 2K.
+
+### Exclusions
+
+- No `linkedToolResultId`
+- No `tags`, `confidence`, or per-note prompt enable/disable
+- No memory search, filter, export, or import
+- No semantic/vector memory
+- No source-linked memory graph
+- No dedicated Memory tab (deferred to Phase 2L)
+- Source not exposed to LLM
+
+### Test coverage
+
+- `llm-context.test.ts`: 4 new tests — source not in prompt, identical injection regardless of source
+- `lisa-reducer.test.ts`: 10 new tests — ADD_MEMORY_NOTE plain/object/default, COMPLETE_TOOL_EXECUTION_AND_ADD_MEMORY_NOTE source, guard, delete/clear across sources
+- `persistence.test.ts`: 7 new tests — STATE_VERSION=7, v6→v7 migration, unknown source normalization, round-trip
+- `tool-executors.test.ts`: 1 new test — sideEffect type
+
+**Total: 585/585 passing**
+
+### Limitations
+
+- Notes migrated from v6 always show `MANUAL` badge regardless of true origin
+- No dedicated Memory tab
+- Source is not filterable
+- No per-note prompt enable/disable
