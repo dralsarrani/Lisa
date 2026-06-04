@@ -155,13 +155,94 @@ In `persistence.test.ts`:
 
 ---
 
+## Windows Developer Prerequisites (--features whisper)
+
+Building with `--features whisper` requires a C++ toolchain on Windows. One-time setup:
+
+### Required tools
+
+| Tool | Version tested | Download |
+|---|---|---|
+| Visual Studio 2022 with "Desktop development with C++" workload | 17.x | visualstudio.microsoft.com |
+| LLVM | 18.x | releases.llvm.org |
+| CMake | 3.x | cmake.org |
+
+### Environment variables
+
+Set before `cargo build --features whisper` (or add to your shell profile):
+
+```powershell
+$env:LIBCLANG_PATH = "C:\Program Files\LLVM\bin"
+$env:Path = "C:\Program Files\CMake\bin;" + $env:Path
+```
+
+### Build and test commands
+
+```powershell
+# Check only (no binary produced — fastest CI-equivalent check)
+cargo check --features whisper
+
+# Full test suite including whisper-gated tests
+cargo test --features whisper
+
+# Release binary
+cargo build --release --features whisper
+```
+
+CI runs `cargo check` and `cargo test` without the feature flag — no LLVM or CMake required.
+
+---
+
+## Windows Build Fix: whisper-rs 0.16 Upgrade (2026-06-05)
+
+### Root cause
+
+`whisper-rs-sys v0.13.1` (used by whisper-rs 0.14) ships Linux-only pre-generated bindings.
+On Windows, bindgen runs but fails to parse C++ headers, generating `whisper_full_params` as a
+1-byte struct instead of 264 bytes. The layout test then panics:
+
+```
+error[E0080]: attempt to compute `1_usize - 264_usize`, which would overflow
+```
+
+Setting `WHISPER_DONT_GENERATE_BINDINGS=1` does **not** fix this — it forces whisper-rs-sys to
+use those same Linux-specific pre-generated bindings, which embed glibc types (`_G_fpos_t`,
+`_IO_FILE`) with sizes that do not match MSVC's C runtime. Different layout failure, same result.
+
+### Fix applied
+
+Upgraded `whisper-rs` from `0.14` → `0.16` in `Cargo.toml`. This pulls in:
+
+- `whisper-rs-sys v0.15.0` — generates Windows-native bindings via bindgen at build time
+- `bindgen v0.72.1` — supports MSVC targets without Linux type contamination
+
+Two API call sites in `stt.rs` were updated for the 0.16 API:
+
+| whisper-rs 0.14 | whisper-rs 0.16 |
+|---|---|
+| `state.full_n_segments()?` → `Result<i32, _>` | `state.full_n_segments()` → `i32` directly |
+| `state.full_get_segment_text(i)?` → `Result<String, _>` | `state.get_segment(i)` → `Option<WhisperSegment>`, then `.to_str()?` |
+
+`WhisperEngine` also gained `#[derive(Debug)]` required by `unwrap_err()` in tests (previously
+not surfaced because `cargo test` without `--features whisper` skips the whisper module).
+
+### Validated on
+
+- Windows 11 Home, x86_64-pc-windows-msvc
+- LLVM 18, CMake 3.x, Visual Studio 2022 17.x
+- `cargo check --features whisper` — pass
+- `cargo test --features whisper` — 53/53 pass
+- `cargo check` / `cargo test` (no feature) — 46/46 pass
+- `npm run typecheck`, `npm run build`, `npx vitest run` — 701/701 pass
+
+---
+
 ## Known Limitations
 
 - Live microphone capture not connected — KeyV still shows placeholder status
 - `--features whisper` not in default build; developer must opt in
 - No in-app model downloader — user provides path manually (Phase 3D adds downloader)
 - `transcribe_local_audio_file` accepts only pre-converted 16 kHz mono WAV files
-- whisper-rs 0.14 used; 0.16 available — upgrade deferred pending API review
 
 ---
 

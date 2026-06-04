@@ -165,6 +165,7 @@ pub mod whisper {
     use super::*;
     use std::time::Instant;
 
+    #[derive(Debug)]
     pub struct WhisperEngine {
         ctx: whisper_rs::WhisperContext,
         model_name: String,
@@ -244,17 +245,18 @@ pub mod whisper {
                 .full(params, &samples_f32)
                 .map_err(|e| SttError::TranscriptionFailed(e.to_string()))?;
 
-            let n = state
-                .full_n_segments()
-                .map_err(|e| SttError::TranscriptionFailed(e.to_string()))?;
+            // whisper-rs 0.16: full_n_segments() returns i32 directly.
+            let n = state.full_n_segments();
 
             let mut text = String::new();
             for i in 0..n {
-                text.push_str(
-                    &state
-                        .full_get_segment_text(i)
-                        .map_err(|e| SttError::TranscriptionFailed(e.to_string()))?,
-                );
+                // whisper-rs 0.16: get_segment(i) returns Option<WhisperSegment>.
+                if let Some(segment) = state.get_segment(i) {
+                    let seg_text = segment
+                        .to_str()
+                        .map_err(|e| SttError::TranscriptionFailed(e.to_string()))?;
+                    text.push_str(seg_text);
+                }
             }
 
             Ok(text.trim().to_string())
@@ -324,8 +326,6 @@ pub mod whisper {
     #[cfg(test)]
     mod whisper_tests {
         use super::*;
-        use std::path::PathBuf;
-
         #[test]
         fn from_model_path_rejects_empty_path() {
             let result = WhisperEngine::from_model_path(Path::new(""));
