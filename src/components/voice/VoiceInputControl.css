@@ -10,8 +10,7 @@
 .voice-helper-hint {
   font-family: var(--font-mono);
   font-size: 0.62rem;
-  color: var(--text-dim);
-  opacity: 0.60;
+  color: rgba(58, 90, 118, 0.85);
   letter-spacing: 0.03em;
   line-height: 1.45;
 }
@@ -39,102 +38,262 @@
 }
 
 .voice-status-dim {
-  color: var(--text-dim);
-  opacity: 0.70;
+  color: rgba(80, 120, 155, 0.75);
 }
 
-/* ── Preview / result card ──────────────────────────────────────────────────── */
-.voice-preview-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 13px;
-  background: rgba(10, 18, 34, 0.88);
-  border: 1px solid rgba(34, 211, 238, 0.22);
-  border-radius: var(--radius-md);
-  animation: fadeInUp 0.15s ease forwards;
-}
-
-.voice-error-card {
-  border-color: rgba(239, 68, 68, 0.28) !important;
-}
-
-.voice-preview-header {
+/* ── Recording bar ──────────────────────────────────────────────────────────── */
+.voice-recording-bar {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 10px 14px;
+  background: rgba(220, 38, 38, 0.07);
+  border: 1px solid rgba(220, 38, 38, 0.38);
+  border-radius: var(--radius-md);
+  animation: fadeInUp 0.12s ease forwards;
 }
 
-.voice-preview-label {
-  font-family: var(--font-mono);
-  font-size: 0.56rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-dim);
+.voice-recording-dot {
+  width: 8px;
+  height: 8px;
+  background: #ef4444;
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: voice-rec-pulse 1s ease-in-out infinite;
 }
 
-.voice-preview-not-configured-badge {
-  font-family: var(--font-mono);
-  font-size: 0.52rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  padding: 1px 6px;
-  border-radius: 3px;
-  background: rgba(239, 68, 68, 0.14);
-  color: rgba(239, 68, 68, 0.85);
-  border: 1px solid rgba(239, 68, 68, 0.28);
+@keyframes voice-rec-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.40; transform: scale(0.70); }
 }
 
-.voice-preview-placeholder-msg {
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  color: rgba(239, 68, 68, 0.80);
-  line-height: 1.55;
-  padding: 7px 10px;
-  background: rgba(239, 68, 68, 0.05);
-  border-left: 2px solid rgba(239, 68, 68, 0.35);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-}
-
-.voice-preview-transcript {
-  font-family: var(--font-mono);
-  font-size: 0.76rem;
-  color: var(--text-secondary);
-  line-height: 1.55;
-  padding: 6px 8px;
-  background: rgba(26, 159, 255, 0.04);
-  border: 1px solid rgba(26, 159, 255, 0.12);
-  border-radius: var(--radius-sm);
-  word-break: break-word;
-}
-
-.voice-preview-error {
+.voice-recording-label {
   font-family: var(--font-mono);
   font-size: 0.72rem;
-  color: rgba(239, 68, 68, 0.90);
-  line-height: 1.5;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #ef4444;
+  flex-shrink: 0;
 }
 
-/* ── Preview action buttons ─────────────────────────────────────────────────── */
-.voice-preview-actions {
+.voice-recording-hint {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: rgba(239, 68, 68, 0.55);
+  letter-spacing: 0.02em;
+  margin-left: auto;
+  text-align: right;
+}
+
+/* ── Transcribing bar ───────────────────────────────────────────────────────── */
+.voice-transcribing-bar {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(34, 211, 238, 0.04);
+  border: 1px solid rgba(34, 211, 238, 0.20);
+  border-radius: var(--radius-md);
+  animation: fadeInUp 0.12s ease forwards;
+}
+
+.voice-transcribing-dots {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.voice-transcribing-dot {
+  width: 5px;
+  height: 5px;
+  background: #22d3ee;
+  border-radius: 50%;
+  animation: voice-transcribing-bounce 1.4s ease-in-out infinite;
+}
+
+.voice-transcribing-dot:nth-child(2) { animation-delay: 0.20s; }
+.voice-transcribing-dot:nth-child(3) { animation-delay: 0.40s; }
+
+@keyframes voice-transcribing-bounce {
+  0%, 80%, 100% { opacity: 0.25; transform: scale(0.75); }
+  40%            { opacity: 1;    transform: scale(1.15); }
+}
+
+.voice-transcribing-label {
+  font-family: var(--font-mono);
+  font-size: 0.70rem;
+  color: rgba(34, 211, 238, 0.72);
+  letter-spacing: 0.04em;
+}
+
+/* ── Transcript box (shared by rail and HUD) ────────────────────────────────── */
+.voice-transcript-box {
+  font-size: 0.90rem;
+  color: var(--text-primary);
+  line-height: 1.6;
+  padding: 10px 12px;
+  background: rgba(34, 211, 238, 0.05);
+  border: 1px solid rgba(34, 211, 238, 0.22);
+  border-radius: var(--radius-sm);
+  word-break: break-word;
+  white-space: pre-wrap;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+/* ── Fixed HUD overlay — escapes the 352px left rail ───────────────────────── */
+.voice-hud-overlay {
+  position: fixed;
+  left: 50%;
+  bottom: 72px;
+  transform: translateX(-50%);
+  width: min(760px, calc(100vw - 64px));
+  z-index: 9999;
+  pointer-events: auto;
+}
+
+.voice-hud-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 26px;
+  background: rgba(5, 12, 28, 0.97);
+  border: 2px solid rgba(34, 211, 238, 0.70);
+  border-radius: 12px;
+  box-shadow:
+    0 0 0 1px rgba(34, 211, 238, 0.14),
+    0 8px 48px rgba(0, 0, 0, 0.72),
+    0 0 60px rgba(34, 211, 238, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  animation: voice-hud-enter 0.18s ease forwards;
+}
+
+.voice-hud-card-no-transcript {
+  border-color: rgba(148, 163, 184, 0.50);
+  box-shadow:
+    0 8px 48px rgba(0, 0, 0, 0.72),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.voice-hud-card-error {
+  border-color: rgba(239, 68, 68, 0.65);
+  box-shadow:
+    0 0 0 1px rgba(239, 68, 68, 0.12),
+    0 8px 48px rgba(0, 0, 0, 0.72),
+    0 0 40px rgba(239, 68, 68, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+@keyframes voice-hud-enter {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.voice-hud-header {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.voice-hud-title {
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: #22d3ee;
+}
+
+.voice-hud-title-dim {
+  color: rgba(148, 163, 184, 0.90);
+}
+
+.voice-hud-title-error {
+  color: rgba(239, 68, 68, 0.95);
+}
+
+.voice-hud-subtitle {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: rgba(100, 140, 170, 0.80);
+  letter-spacing: 0.03em;
+}
+
+.voice-hud-note {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: rgba(80, 120, 150, 0.80);
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.voice-hud-body {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: rgba(148, 163, 184, 0.88);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.voice-hud-error-body {
+  color: rgba(239, 68, 68, 0.88);
+}
+
+/* ── HUD action buttons ──────────────────────────────────────────────────────── */
+.voice-hud-actions {
+  display: flex;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
-.voice-discard-btn {
-  padding: 6px 14px;
-  font-size: 0.60rem;
+.voice-hud-send-btn {
+  padding: 10px 28px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.10em;
+  background: rgba(34, 211, 238, 0.16);
+  border-color: rgba(34, 211, 238, 0.60);
+  color: #22d3ee;
+}
+
+.voice-hud-send-btn:hover:not(:disabled) {
+  background: rgba(34, 211, 238, 0.26);
+  border-color: #22d3ee;
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.22);
+}
+
+.voice-hud-discard-btn {
+  padding: 9px 18px;
+  font-size: 0.64rem;
   letter-spacing: 0.10em;
   background: transparent;
   border-color: rgba(100, 116, 139, 0.38);
-  color: var(--text-muted);
+  color: rgba(100, 120, 140, 0.72);
 }
 
-.voice-discard-btn:hover {
+.voice-hud-discard-btn:hover:not(:disabled) {
   border-color: rgba(100, 116, 139, 0.65);
-  color: var(--text-secondary);
+  color: rgba(148, 163, 184, 0.90);
   background: rgba(100, 116, 139, 0.08);
+}
+
+.voice-hud-retry-btn {
+  padding: 9px 22px;
+  font-size: 0.64rem;
+  letter-spacing: 0.10em;
+  background: transparent;
+  border-color: rgba(34, 211, 238, 0.32);
+  color: rgba(34, 211, 238, 0.72);
+}
+
+.voice-hud-retry-btn:hover:not(:disabled) {
+  border-color: rgba(34, 211, 238, 0.58);
+  color: #22d3ee;
+  background: rgba(34, 211, 238, 0.07);
 }
 
 /* ── Keyboard shortcut badge ────────────────────────────────────────────────── */

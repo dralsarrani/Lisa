@@ -267,12 +267,12 @@ const VOICE_CAPABILITY_QA: Array<[RegExp, string]> = [
   // Background listening / always-on
   [
     /\blisten(?:ing)?\s+in\s+the\s+background\b|\balways.on\s+listen|\bbackground\s+listen(?:ing)?\b|\bconstantly\s+listen/i,
-    "No. Phase 3A is push-to-talk only. Lisa has no wake word and no always-on background listening.",
+    "No. Phase 3D is push-to-talk only. Lisa has no wake word and no always-on background listening. Recording only happens while you hold KeyV.",
   ],
   // Wake word
   [
     /\bwake\s+word\b/i,
-    "No. Lisa has no wake word in Phase 3A. Voice input is push-to-talk only — hold KeyV when the command box is not focused.",
+    "No. Lisa has no wake word. Voice input is push-to-talk only — hold KeyV when the command box is not focused, speak, then release to transcribe.",
   ],
   // TTS / speak back / voice output
   [
@@ -282,27 +282,27 @@ const VOICE_CAPABILITY_QA: Array<[RegExp, string]> = [
   // No mic button / can't find / "there is no mic button"
   [
     /\bthere\s+is\s+no\s+mic(?:rophone)?\s+button\b|\bno\s+mic(?:rophone)?\s+button\b|\bmic(?:rophone)?\s+button\s+(?:missing|not\s+(?:visible|showing|there|found|appear))\b|\b(?:can'?t?\s+|cannot\s+)?(?:find|see)\s+(?:the\s+)?mic(?:rophone)?\s+button\b|\bwhere\s+is\s+(?:the\s+)?mic(?:rophone)?\s+button\b/i,
-    "Correct. Phase 3A is currently KeyV-only. Hold KeyV when the command box is not focused to test the voice UI. The feature does not transcribe speech yet because local STT is not configured.",
+    "Phase 3D uses keyboard-only push-to-talk — there is no on-screen mic button. Hold KeyV (when not typing) to record, release to transcribe. A Whisper model must be configured in Settings → Voice Input first.",
   ],
   // KeyV not working / worked once then stopped
   [
     /\bkey\s*v\s+(?:not\s+working|doesn'?t?\s+work|isn'?t?\s+working|not\s+responding|nothing|does\s+nothing|worked.*stopped|stopped\s+working)\b|\bkeyv\b.*\b(?:not\s+working|doesn'?t?\s+work|nothing|worked.*stopped|stopped)\b|\bv\s+key\s+not\s+working\b|\bpush.to.talk\s+(?:not\s+working|broken|doesn'?t?\s+work)\b/i,
-    "KeyV is ignored while you are typing in the command box so it does not hijack normal text input. Click outside the input first, then hold KeyV.",
+    "KeyV is ignored while you are typing in the command box so it does not hijack normal text input. Click outside the input first, then hold KeyV. Also confirm a Whisper model path is set in Settings → Voice Input — without a model, recording will show an error instead of starting.",
   ],
-  // Nothing happened / why didn't Lisa answer voice question
+  // Nothing happened / no transcript / why didn't voice work
   [
     /\b(?:nothing\s+happened|nothing\s+came\s+up|no\s+(?:result|response|text|transcript))\s+(?:after|when|from)\s+(?:voice|speaking|talking)\b|\b(?:asked|spoke|said|talked)\s+(?:through|via|using)\s+voice.*(?:nothing|no\s+(?:result|response|text|transcript))\b|\bvoice.*(?:nothing\s+happened|no\s+response|not\s+transcribed)\b|\bwhy\s+didn'?t?\s+(?:lisa\s+)?answer.*voice\b|\bwhy\s+didn'?t?\s+voice\s+work\b/i,
-    "That is expected in Phase 3A until a local STT engine is configured. The current voice control only tests the UI and shows an STT-not-configured result. It does not transcribe speech or submit a command yet.",
+    "Check two things: (1) A Whisper model path must be set in Settings → Voice Input. Without it, recording will not start. (2) Speak clearly and hold KeyV for at least a second — very short recordings may return an empty transcript.",
   ],
   // Voice not working (general troubleshooting)
   [
     /\bvoice\s+(?:not\s+working|doesn'?t?\s+work|isn'?t?\s+working|failed|broken|not\s+responding)\b|\bvoice\s+(?:did\s+)?(?:nothing|not\s+(?:do|respond|start|activate))\b/i,
-    'Phase 3A voice expected behavior: hold KeyV when the command box is not focused → release KeyV → preview shows "Voice UI test result". Local STT is not configured, so no speech is transcribed — this is a UI test only. If KeyV does nothing, click somewhere outside the text input first (KeyV is blocked while typing).',
+    "Phase 3D push-to-talk flow: (1) Set a Whisper model path in Settings → Voice Input. (2) Click outside the command box. (3) Hold KeyV — microphone opens. (4) Speak. (5) Release KeyV — local Whisper transcribes. (6) Review transcript in preview card, then click Send Transcript or Discard. No audio is sent to any network service.",
   ],
   // General voice input capability / how to enable
   [
     /\bvoice\s+(?:input|command|commands|control|recognition|feature|capability|support)\b|\benable\s+voice\b|\buse\s+voice\s+input\b|\bhave\s+voice\s+input\b/i,
-    "Lisa has a Phase 3A KeyV voice UI test. Local STT is not configured yet, so Lisa cannot transcribe real speech yet. Hold KeyV when the command box is not focused to test the UI. Lisa does not listen in the background and no audio is sent to any network service.",
+    "Phase 3D: Lisa supports local push-to-talk voice input. Hold KeyV (outside the text box) to record from your microphone, release to transcribe with local Whisper, then review and send the transcript manually. Requires a Whisper model file configured in Settings → Voice Input. No background listening, no wake word, no cloud STT, no auto-submit.",
   ],
 ];
 

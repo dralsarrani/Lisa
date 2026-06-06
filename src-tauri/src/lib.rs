@@ -1,6 +1,10 @@
 #[allow(dead_code)]
 mod stt;
 use stt::{validate_model_path, SttModelValidationResult, SttModelTestResult, SttTranscriptResult};
+#[cfg(all(feature = "audio-capture", feature = "whisper"))]
+use stt::SttEngine;
+
+mod audio;
 
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -203,6 +207,56 @@ pub struct SttResult {
     pub status: String,
     pub transcript: Option<String>,
     pub engine: String,
+}
+
+// ─── Voice capture state ──────────────────────────────────────────────────────
+
+pub struct VoiceCaptureManager {
+    #[cfg(feature = "audio-capture")]
+    pub active: std::sync::Arc<std::sync::Mutex<Option<audio::capture::ActiveCapture>>>,
+}
+
+impl VoiceCaptureManager {
+    pub fn new() -> Self {
+        Self {
+            #[cfg(feature = "audio-capture")]
+            active: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct VoiceCaptureStartResult {
+    pub success: bool,
+    pub device_label: String,
+    pub sample_rate: u32,
+    pub channels: u16,
+}
+
+#[derive(Debug, Serialize)]
+pub struct VoiceTranscriptionResult {
+    pub success: bool,
+    pub transcript: Option<String>,
+    pub duration_ms: u64,
+    pub error: Option<String>,
+}
+
+// Minimum processed samples before invoking Whisper (0.1 s at 16 kHz).
+// Shorter recordings return no-speech immediately without Whisper inference.
+#[cfg(feature = "audio-capture")]
+const MIN_TRANSCRIPTION_SAMPLES: usize = 1_600;
+
+// Whisper frequently returns these tokens for silence / background noise.
+// Treat them as no-speech so the preview card is not shown for noise labels.
+#[cfg(all(feature = "audio-capture", feature = "whisper"))]
+fn is_whisper_no_speech(text: &str) -> bool {
+    const NO_SPEECH: &[&str] = &[
+        "[BLANK_AUDIO]", "(silence)", "(Silence)", "(blank)", "(Blank)",
+        "[MUSIC]",        "[NOISE]",   "(music)",   "(noise)",
+        "[ Silence ]",    "[silence]",
+    ];
+    let t = text.trim();
+    t.is_empty() || NO_SPEECH.iter().any(|&tok| tok == t)
 }
 
 // ─── Commands ─────────────────────────────────────────────────────────────────
@@ -871,6 +925,137 @@ fn transcribe_local_audio_file(
     }
 }
 
+// ─── Voice capture commands ───────────────────────────────────────────────────
+
+/// Begin accumulating microphone samples. Called when the user presses KeyV.
+/// Returns device info so the frontend can show which microphone is active.
+/// Requires `--features audio-capture` at build time.
+#[tauri::command]
+async fn start_voice_capture(
+    manager: tauri::State<'_, VoiceCaptureManager>,
+) -> Result<VoiceCaptureStartResult, String> {
+    #[cfg(feature = "audio-capture")]
+    {
+        let result = audio::capture::start(&manager.active)?;
+        Ok(VoiceCaptureStartResult {
+            success: true,
+            device_label: result.device_label,
+            sample_rate: result.sample_rate,
+            channels: result.channels,
+        })
+    }
+    #[cfg(not(feature = "audio-capture"))]
+    {
+        let _ = &manager;
+        Err("Audio capture not compiled. Build Lisa with --features audio-capture to enable microphone input.".to_string())
+    }
+}
+
+/// Stop recording, process the captured samples, and run local Whisper transcription.
+/// Called when the user releases KeyV. Audio buffer is cleared after transcription.
+/// Requires `--features voice-live` (audio-capture + whisper) for the full pipeline.
+#[tauri::command]
+async fn stop_voice_capture_and_transcribe(
+    model_path: String,
+    manager: tauri::State<'_, VoiceCaptureManager>,
+) -> Result<VoiceTranscriptionResult, String> {
+    #[cfg(feature = "audio-capture")]
+    {
+        let start = std::time::Instant::now();
+        let (raw_samples, sample_rate, channels) =
+            audio::capture::stop_and_get_samples(&manager.active)?;
+        let whisper_f32 =
+            audio::process_capture_to_whisper(raw_samples, sample_rate, channels)?;
+
+        if whisper_f32.len() < MIN_TRANSCRIPTION_SAMPLES {
+            return Ok(VoiceTranscriptionResult {
+                success: true,
+                transcript: None,
+                duration_ms: start.elapsed().as_millis() as u64,
+                error: None,
+            });
+        }
+
+        let i16_samples = audio::f32_to_i16(&whisper_f32);
+
+        #[cfg(feature = "whisper")]
+        {
+            let transcript_result =
+                tokio::task::spawn_blocking(move || -> Result<String, String> {
+                    let engine = stt::whisper::WhisperEngine::from_model_path(
+                        std::path::Path::new(&model_path),
+                    )
+                    .map_err(|e| e.to_string())?;
+                    engine.transcribe(&i16_samples).map_err(|e| e.to_string())
+                })
+                .await
+                .map_err(|e| format!("Transcription thread failed: {e}"))?;
+
+            match transcript_result {
+                Ok(text) => Ok(VoiceTranscriptionResult {
+                    success: true,
+                    transcript: if is_whisper_no_speech(&text) { None } else { Some(text) },
+                    duration_ms: start.elapsed().as_millis() as u64,
+                    error: None,
+                }),
+                Err(e) => Ok(VoiceTranscriptionResult {
+                    success: false,
+                    transcript: None,
+                    duration_ms: start.elapsed().as_millis() as u64,
+                    error: Some(e),
+                }),
+            }
+        }
+        #[cfg(not(feature = "whisper"))]
+        {
+            let _ = (model_path, i16_samples, start);
+            Err("Whisper engine not compiled. Build Lisa with --features voice-live to enable live transcription.".to_string())
+        }
+    }
+    #[cfg(not(feature = "audio-capture"))]
+    {
+        let _ = (model_path, &manager);
+        Err("Audio capture not compiled. Build Lisa with --features audio-capture to enable microphone input.".to_string())
+    }
+}
+
+/// Cancel an in-progress capture session and discard all accumulated samples.
+/// Safe to call when no session is active (idempotent).
+#[tauri::command]
+async fn cancel_voice_capture(
+    manager: tauri::State<'_, VoiceCaptureManager>,
+) -> Result<(), String> {
+    #[cfg(feature = "audio-capture")]
+    {
+        audio::capture::cancel(&manager.active);
+        Ok(())
+    }
+    #[cfg(not(feature = "audio-capture"))]
+    {
+        let _ = &manager;
+        Ok(())
+    }
+}
+
+/// Query whether a default audio input device is available without opening a stream.
+/// Always succeeds; returns availability status and a user-readable message.
+#[tauri::command]
+fn audio_input_status() -> audio::AudioInputStatus {
+    #[cfg(feature = "audio-capture")]
+    {
+        audio::capture::query_status()
+    }
+    #[cfg(not(feature = "audio-capture"))]
+    {
+        audio::AudioInputStatus {
+            available: false,
+            device_label: None,
+            message: "Audio capture not compiled. Build Lisa with --features audio-capture."
+                .to_string(),
+        }
+    }
+}
+
 // ─── App Entry ────────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -879,6 +1064,7 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_shell::init())
         .manage(CancelState::new())
+        .manage(VoiceCaptureManager::new())
         .invoke_handler(tauri::generate_handler![
             ping_backend,
             get_runtime_health,
@@ -893,6 +1079,10 @@ pub fn run() {
             validate_stt_model_path,
             test_whisper_model,
             transcribe_local_audio_file,
+            start_voice_capture,
+            stop_voice_capture_and_transcribe,
+            cancel_voice_capture,
+            audio_input_status,
         ])
         .run(tauri::generate_context!())
         .expect("Error while running Lisa application");
@@ -1230,5 +1420,56 @@ mod tests {
         assert_eq!(v["model"], "llama3.2:1b");
         assert_eq!(v["latency_ms"], 1234);
         assert_eq!(v["response_chars"], 42);
+    }
+
+    // ─── Voice pipeline guards ────────────────────────────────────────────────
+
+    #[test]
+    fn min_transcription_samples_is_point_one_seconds() {
+        #[cfg(feature = "audio-capture")]
+        assert_eq!(MIN_TRANSCRIPTION_SAMPLES, 1_600);
+        #[cfg(not(feature = "audio-capture"))]
+        let _ = (); // constant not compiled without audio-capture
+    }
+
+    #[cfg(all(feature = "audio-capture", feature = "whisper"))]
+    mod voice_no_speech_tests {
+        use super::super::is_whisper_no_speech;
+
+        #[test]
+        fn blank_audio_token_is_no_speech() {
+            assert!(is_whisper_no_speech("[BLANK_AUDIO]"));
+        }
+        #[test]
+        fn empty_string_is_no_speech() {
+            assert!(is_whisper_no_speech(""));
+        }
+        #[test]
+        fn whitespace_only_is_no_speech() {
+            assert!(is_whisper_no_speech("   \t"));
+        }
+        #[test]
+        fn silence_variants_are_no_speech() {
+            assert!(is_whisper_no_speech("(silence)"));
+            assert!(is_whisper_no_speech("(Silence)"));
+            assert!(is_whisper_no_speech("[ Silence ]"));
+        }
+        #[test]
+        fn real_speech_is_not_no_speech() {
+            assert!(!is_whisper_no_speech("hello Lisa"));
+            assert!(!is_whisper_no_speech("what time is it"));
+        }
+        #[test]
+        fn partial_token_is_not_no_speech() {
+            assert!(!is_whisper_no_speech("[BLANK_AUDIO] hello"));
+            assert!(!is_whisper_no_speech("hello (silence)"));
+        }
+        #[test]
+        fn noise_and_music_tokens_are_no_speech() {
+            assert!(is_whisper_no_speech("[MUSIC]"));
+            assert!(is_whisper_no_speech("[NOISE]"));
+            assert!(is_whisper_no_speech("(noise)"));
+            assert!(is_whisper_no_speech("(music)"));
+        }
     }
 }

@@ -735,7 +735,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
         </div>
 
         <p className="history-note" style={{ marginTop: "8px" }}>
-          Phase 3C — Whisper Engine Foundation. Provide a local Whisper GGML model path (e.g. ggml-base.bin). Lisa will not download models automatically. Live microphone capture is not connected yet — that is Phase 3D. Lisa never listens in the background and never sends audio to any network service.
+          Phase 3D — Local Voice Pipeline. Set a local Whisper GGML model path above (e.g. ggml-base.bin), then hold <kbd style={{ fontSize: "0.85em", padding: "1px 4px", borderRadius: "3px", border: "1px solid #555", background: "#222" }}>V</kbd> outside the command box to record from your microphone. Release to transcribe locally with Whisper, then review the transcript and click Send Transcript to submit, or Discard to cancel. Lisa never listens in the background and never sends audio to any network service. Windows may show a microphone permission prompt on first use — this is normal.
         </p>
         {settings.sttModelLastTestedAt && (
           <p className="history-note" style={{ marginTop: "2px" }}>
@@ -855,7 +855,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
         <div className="settings-build-info">
           <div className="settings-field">
             <span className="settings-field-label">Phase</span>
-            <span className="settings-field-value">3C — Whisper Engine Foundation</span>
+            <span className="settings-field-value">3D — KeyV Microphone Capture Pipeline</span>
           </div>
           <div className="settings-field">
             <span className="settings-field-label">Version</span>

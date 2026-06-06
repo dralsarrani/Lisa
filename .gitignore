@@ -35,3 +35,7 @@ Thumbs.db
 *.rlib
 *.lib
 *.exe
+
+# Local Whisper models - do not commit
+models/
+*.bin

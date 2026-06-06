@@ -565,13 +565,13 @@ describe("getDesktopActionGuardMessage — conceptual questions pass through", (
   });
 });
 
-// ─── Phase 3A voice capability guard ─────────────────────────────────────────
+// ─── Phase 3D voice capability guard ─────────────────────────────────────────
 
 describe("getVoiceCapabilityMessage — voice input questions", () => {
   it("answers 'do you have voice input'", () => {
     const msg = getVoiceCapabilityMessage("do you have voice input");
     expect(msg).not.toBeNull();
-    expect(msg).toContain("Phase 3A");
+    expect(msg).toContain("Phase 3D");
   });
 
   it("answers 'can you use voice input'", () => {
@@ -591,9 +591,9 @@ describe("getVoiceCapabilityMessage — voice input questions", () => {
     expect(msg).toMatch(/KeyV|button/i);
   });
 
-  it("response states STT is not configured yet", () => {
+  it("response states Whisper model is required", () => {
     const msg = getVoiceCapabilityMessage("do you have voice input") ?? "";
-    expect(msg.toLowerCase()).toContain("not configured");
+    expect(msg.toLowerCase()).toContain("whisper model");
   });
 
   it("response states no background listening", () => {
@@ -692,7 +692,7 @@ describe("getVoiceCapabilityMessage — voice not working troubleshooting", () =
   it("answers 'voice not working'", () => {
     const msg = getVoiceCapabilityMessage("voice not working");
     expect(msg).not.toBeNull();
-    expect(msg).toContain("Phase 3A");
+    expect(msg).toContain("Phase 3D");
   });
 
   it("answers 'voice doesn't work'", () => {
@@ -708,9 +708,9 @@ describe("getVoiceCapabilityMessage — voice not working troubleshooting", () =
     expect(msg.toLowerCase()).toContain("keyv");
   });
 
-  it("response mentions typing blocks KeyV", () => {
+  it("response mentions Whisper model path requirement", () => {
     const msg = getVoiceCapabilityMessage("voice not working") ?? "";
-    expect(msg.toLowerCase()).toContain("typing");
+    expect(msg.toLowerCase()).toContain("whisper model");
   });
 
   it("response mentions KeyV flow", () => {
@@ -736,19 +736,19 @@ describe("getVoiceCapabilityMessage — nothing happened after voice", () => {
     expect(getVoiceCapabilityMessage("why didn't voice work")).not.toBeNull();
   });
 
-  it("response is expected Phase 3A behavior", () => {
+  it("response mentions model path requirement", () => {
     const msg = getVoiceCapabilityMessage("nothing happened after voice") ?? "";
-    expect(msg.toLowerCase()).toContain("expected");
+    expect(msg.toLowerCase()).toContain("model path");
   });
 
-  it("response says not configured", () => {
+  it("response advises setting model in Settings", () => {
     const msg = getVoiceCapabilityMessage("nothing happened after voice") ?? "";
-    expect(msg.toLowerCase()).toContain("configured");
+    expect(msg.toLowerCase()).toContain("settings");
   });
 
-  it("response says does not transcribe or submit", () => {
+  it("response advises holding the key longer", () => {
     const msg = getVoiceCapabilityMessage("nothing happened after voice") ?? "";
-    expect(msg.toLowerCase()).toMatch(/transcribe|command/);
+    expect(msg.toLowerCase()).toContain("hold");
   });
 });
 
@@ -811,15 +811,15 @@ describe("getVoiceCapabilityMessage — mic button missing troubleshooting", () 
     expect(getVoiceCapabilityMessage("mic button not visible")).not.toBeNull();
   });
 
-  it("response confirms Phase 3A is KeyV-only", () => {
+  it("response confirms Phase 3D is keyboard-only push-to-talk", () => {
     const msg = getVoiceCapabilityMessage("mic button missing") ?? "";
-    expect(msg.toLowerCase()).toContain("phase 3a");
+    expect(msg.toLowerCase()).toContain("phase 3d");
     expect(msg.toLowerCase()).toContain("keyv");
   });
 
-  it("response says Phase 3A is KeyV-only", () => {
+  it("response describes keyboard-only push-to-talk", () => {
     const msg = getVoiceCapabilityMessage("where is the mic button") ?? "";
-    expect(msg.toLowerCase()).toContain("keyv-only");
+    expect(msg.toLowerCase()).toContain("keyboard-only");
   });
 
   it("answers 'no mic button' phrase", () => {

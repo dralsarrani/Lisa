@@ -19,6 +19,13 @@ default = []
 # Build: cargo build --features whisper
 # CI runs without this feature — cargo check/test pass without LLVM or model files.
 whisper = ["dep:whisper-rs", "dep:hound"]
+# Enable live microphone capture via cpal/WASAPI. Hardware-free in CI — all pure
+# signal-processing helpers compile and test without this flag.
+# Build: cargo build --features audio-capture
+audio-capture = ["dep:cpal"]
+# Full local voice pipeline: Whisper engine + microphone capture.
+# Build: cargo build --features voice-live
+voice-live = ["whisper", "audio-capture"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -33,8 +40,10 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream"] }
 futures = "0.3"
+tokio = { version = "1", features = ["rt"] }
 whisper-rs = { version = "0.16", optional = true }
 hound = { version = "3.5", optional = true }
+cpal = { version = "0.15", optional = true }
 
 [profile.release]
 panic = "abort"

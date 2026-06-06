@@ -1089,6 +1089,11 @@ export const CommandInput: React.FC = () => {
         </div>
       )}
 
+      <VoiceInputControl
+        isProcessing={isProcessing}
+        onSendTranscript={(t) => submitUserInput(t, "voice")}
+      />
+
       <div className="command-suggestions">
         {SUGGESTIONS.map((s) => (
           <button
@@ -1102,10 +1107,6 @@ export const CommandInput: React.FC = () => {
           </button>
         ))}
       </div>
-
-      <VoiceInputControl
-        isProcessing={isProcessing}
-      />
     </div>
   );
 };

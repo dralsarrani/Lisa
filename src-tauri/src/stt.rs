@@ -163,6 +163,7 @@ pub struct SttTranscriptResult {
 #[cfg(feature = "whisper")]
 pub mod whisper {
     use super::*;
+    use std::sync::{Arc, Mutex};
     use std::time::Instant;
 
     #[derive(Debug)]
@@ -177,6 +178,12 @@ pub mod whisper {
         /// Validates path before attempting load. Returns a ready engine on success
         /// or a user-readable `SttError` on failure. Never panics.
         pub fn from_model_path(path: &Path) -> Result<Self, SttError> {
+            // Redirect whisper.cpp / GGML output away from stderr before any C++ code runs.
+            // Neither log_backend nor tracing_backend is enabled, so logs are discarded —
+            // no decoded token content ever reaches the terminal. Safe to call repeatedly;
+            // only has an effect the first time.
+            whisper_rs::install_logging_hooks();
+
             // Filesystem validation first — fast, no C++ involved.
             let validation = validate_model_path(path);
             if !validation.valid {
@@ -235,27 +242,50 @@ pub mod whisper {
 
             let mut params =
                 whisper_rs::FullParams::new(whisper_rs::SamplingStrategy::Greedy { best_of: 1 });
-            params.set_language(Some("auto"));
+            // Force English — avoids wrong language detection with .en models (e.g. "be", "fo")
+            // which caused whisper.cpp to skip chunks entirely.
+            params.set_language(Some("en"));
+            // Disable timestamp tokens in the decoder. Without this, short recordings trigger
+            // "single timestamp ending - skip entire chunk" inside whisper.cpp, producing zero
+            // segments even when speech tokens were decoded.
+            params.set_no_timestamps(true);
+            // Collapse all output into a single segment — optimal for short push-to-talk recordings.
+            params.set_single_segment(true);
             params.set_print_special(false);
             params.set_print_progress(false);
             params.set_print_realtime(false);
             params.set_print_timestamps(false);
 
+            // Capture segments via real-time callback. Polling full_n_segments() after full()
+            // returns 0 on some bundled whisper.cpp versions when no_timestamps + single_segment
+            // are both set. The callback fires synchronously inside full() as each segment is
+            // committed by the decoder, bypassing the post-hoc count issue entirely.
+            let captured = Arc::new(Mutex::new(String::new()));
+            let captured_cb = Arc::clone(&captured);
+            params.set_segment_callback_safe(move |data: whisper_rs::SegmentCallbackData| {
+                if let Ok(mut guard) = captured_cb.lock() {
+                    guard.push_str(&data.text);
+                }
+            });
+
             state
                 .full(params, &samples_f32)
                 .map_err(|e| SttError::TranscriptionFailed(e.to_string()))?;
 
-            // whisper-rs 0.16: full_n_segments() returns i32 directly.
-            let n = state.full_n_segments();
+            // Primary path: text collected by the segment callback during inference.
+            let cb_text = captured.lock().map(|g| g.clone()).unwrap_or_default();
+            if !cb_text.trim().is_empty() {
+                return Ok(cb_text.trim().to_string());
+            }
 
+            // Fallback: poll segments directly in case the callback was not invoked.
+            let n = state.full_n_segments();
             let mut text = String::new();
             for i in 0..n {
-                // whisper-rs 0.16: get_segment(i) returns Option<WhisperSegment>.
                 if let Some(segment) = state.get_segment(i) {
-                    let seg_text = segment
-                        .to_str()
-                        .map_err(|e| SttError::TranscriptionFailed(e.to_string()))?;
-                    text.push_str(seg_text);
+                    if let Ok(seg_text) = segment.to_str() {
+                        text.push_str(seg_text);
+                    }
                 }
             }
 
@@ -326,6 +356,26 @@ pub mod whisper {
     #[cfg(test)]
     mod whisper_tests {
         use super::*;
+
+        /// Compile-time proof that the push-to-talk params API exists in whisper-rs 0.16.
+        /// If set_no_timestamps or set_single_segment are removed from whisper-rs,
+        /// this test will fail to compile, surfacing the regression immediately.
+        #[test]
+        fn ptt_full_params_api_compiles() {
+            let mut params = whisper_rs::FullParams::new(
+                whisper_rs::SamplingStrategy::Greedy { best_of: 1 },
+            );
+            params.set_language(Some("en"));
+            params.set_no_timestamps(true);
+            params.set_single_segment(true);
+            params.set_print_special(false);
+            params.set_print_progress(false);
+            params.set_print_realtime(false);
+            params.set_print_timestamps(false);
+            // Confirm set_segment_callback_safe and SegmentCallbackData also compile.
+            params.set_segment_callback_safe(|_: whisper_rs::SegmentCallbackData| {});
+        }
+
         #[test]
         fn from_model_path_rejects_empty_path() {
             let result = WhisperEngine::from_model_path(Path::new(""));

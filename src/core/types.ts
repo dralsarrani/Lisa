@@ -267,6 +267,7 @@ export type AuditEventType =
   | "tool_request_expired_live"
   | "tool_execution_timed_out"
   | "voice_recording_started"
+  | "voice_recording_failed"
   | "voice_recording_cancelled"
   | "voice_transcription_started"
   | "voice_transcription_completed"
@@ -401,7 +402,7 @@ export interface LisaInteraction {
   toolSuggestion?: ToolSuggestion;
 }
 
-export type VoiceStatus = "idle" | "recording" | "transcribing" | "preview" | "error";
+export type VoiceStatus = "idle" | "recording" | "transcribing" | "preview" | "error" | "no_transcript";
 export type SttEngineStatus = "not_configured" | "ready" | "error";
 
 export const INTERACTION_CAP = 25;
