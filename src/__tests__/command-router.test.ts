@@ -593,7 +593,7 @@ describe("getVoiceCapabilityMessage — voice input questions", () => {
 
   it("response states Whisper model is required", () => {
     const msg = getVoiceCapabilityMessage("do you have voice input") ?? "";
-    expect(msg.toLowerCase()).toContain("whisper model");
+    expect(msg.toLowerCase()).toContain("whisper");
   });
 
   it("response states no background listening", () => {

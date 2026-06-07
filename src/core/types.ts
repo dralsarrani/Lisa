@@ -282,7 +282,11 @@ export type AuditEventType =
   | "tts_speech_completed"
   | "tts_speech_stopped"
   | "tts_speech_failed"
-  | "tts_auto_speak_blocked";
+  | "tts_auto_speak_blocked"
+  | "voice_conversation_auto_send"
+  | "voice_conversation_auto_send_blocked"
+  | "voice_clarification_requested"
+  | "voice_reply_auto_speak_requested";
 
 export interface AuditEvent {
   id: string;
@@ -346,6 +350,12 @@ export interface LisaSettings {
   voiceOutputRate?: number;
   voiceOutputVolume?: number;
   voiceOutputSuppressInPrivacyModes: boolean;
+  // Voice conversation — Phase 3G
+  voiceConversationEnabled: boolean;
+  voiceConversationMode: "manual_review" | "confirm" | "auto_send";
+  voiceNoTranscriptAction: "clarify" | "silent";
+  voiceAutoSpeakReplies: boolean;
+  voiceConversationSuppressInPrivacyModes: boolean;
 }
 
 export const DEFAULT_SETTINGS: LisaSettings = {
@@ -372,6 +382,12 @@ export const DEFAULT_SETTINGS: LisaSettings = {
   voiceOutputAutoSpeak: false,
   voiceOutputProvider: "windows",
   voiceOutputSuppressInPrivacyModes: true,
+  // Voice conversation defaults — off; when enabled, replies auto-speak and clarify on no-transcript
+  voiceConversationEnabled: false,
+  voiceConversationMode: "manual_review",
+  voiceNoTranscriptAction: "clarify",
+  voiceAutoSpeakReplies: true,
+  voiceConversationSuppressInPrivacyModes: true,
 };
 
 // ─── Command Router ───────────────────────────────────────────────────────────
@@ -401,6 +417,8 @@ export type CommandIntent =
   | "tts_auto_speak_on"
   | "tts_auto_speak_off"
   | "tts_speak_again"
+  | "voice_conversation_enable"
+  | "voice_conversation_disable"
   | "unknown";
 
 export interface CommandRouteResult {
@@ -429,6 +447,7 @@ export interface LisaInteraction {
   latencyMs?: number;
   error?: string;
   toolSuggestion?: ToolSuggestion;
+  source?: "typed" | "voice" | "command" | "tool" | "system";
 }
 
 export type VoiceStatus = "idle" | "recording" | "transcribing" | "preview" | "error" | "no_transcript";

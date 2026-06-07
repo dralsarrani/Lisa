@@ -157,6 +157,7 @@ function defaultState(): PersistedState {
 function migrateState(old: Partial<PersistedState>): PersistedState {
   // v5→v9 / v6→v9 / v7→v9 / v8→v9: additive migrations — preserve all tool collections.
   // v6→v7 added MemoryNote.source; v7→v8 adds voice settings; v8→v9 adds sttModelPath.
+  // Phase 3G (still v9): 5 voiceConversation* fields auto-fill from DEFAULT_SETTINGS — no bump needed.
   // DEFAULT_SETTINGS spread covers all new fields automatically.
   if (old.version === 5 || old.version === 6 || old.version === 7 || old.version === 8) {
     const migRequests = safeToolRequests(old.toolRequests);

@@ -64,7 +64,7 @@ describe("Phase 3D — general voice capability describes real mic capture", () 
 
   it("response mentions Whisper model requirement", () => {
     const msg = getVoiceCapabilityMessage("do you have voice input") ?? "";
-    expect(msg.toLowerCase()).toContain("whisper model");
+    expect(msg.toLowerCase()).toContain("whisper");
   });
 
   it("response says no background listening", () => {
@@ -72,9 +72,9 @@ describe("Phase 3D — general voice capability describes real mic capture", () 
     expect(msg.toLowerCase()).toContain("background");
   });
 
-  it("response mentions no auto-submit", () => {
+  it("response mentions mic never opens automatically", () => {
     const msg = getVoiceCapabilityMessage("do you have voice input") ?? "";
-    expect(msg.toLowerCase()).toContain("auto-submit");
+    expect(msg.toLowerCase()).toContain("never opens automatically");
   });
 });
 

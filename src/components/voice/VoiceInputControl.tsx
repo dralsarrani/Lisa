@@ -2,6 +2,13 @@ import React, { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { VoiceStatus, TtsUiStatus } from "../../core/types";
 import { useLisa } from "../../app/useLisa";
+import {
+  shouldAutoSubmitTranscript,
+  shouldSpokenClarify,
+  buildVoiceAutoSendAuditDetails,
+  CLARIFICATION_TEXT,
+} from "../../core/voice-conversation";
+import { buildSpeakTextInvokeArgs } from "../../core/tts";
 import "./VoiceInputControl.css";
 
 // ── Pure state-machine helper — exported for regression tests ─────────────────
@@ -325,9 +332,6 @@ export const VoiceInputControl: React.FC<VoiceInputControlProps> = ({
         : { action: "no_speech" };
 
       if (resolved.action === "preview") {
-        dispatch({ type: "SET_VOICE_TRANSCRIPT_DRAFT", payload: resolved.transcript });
-        dispatch({ type: "SET_VOICE_STATUS", payload: "preview" });
-        dispatch({ type: "SET_ORB_STATE", payload: "idle" });
         addAudit({
           eventType: "voice_transcription_completed",
           source: "voice_control",
@@ -335,6 +339,45 @@ export const VoiceInputControl: React.FC<VoiceInputControlProps> = ({
           details: `transcript_chars=${resolved.transcript.length} duration_ms=${duration_ms} source=keyboard`,
           severity: "info",
         });
+
+        const autoSend = shouldAutoSubmitTranscript({
+          settings: state.settings,
+          orbState: state.orbState,
+          voiceStatus: "preview",
+          activeMode: state.settings.activeMode,
+        });
+
+        if (autoSend.allowed) {
+          addAudit({
+            eventType: "voice_conversation_auto_send",
+            source: "voice_control",
+            summary: "Voice transcript auto-submitted.",
+            details: buildVoiceAutoSendAuditDetails({
+              transcriptCharCount: resolved.transcript.length,
+              mode: state.settings.voiceConversationMode,
+            }),
+            severity: "info",
+          });
+          dispatch({ type: "CLEAR_VOICE_STATE" });
+          dispatch({ type: "SET_ORB_STATE", payload: "idle" });
+          await onSendTranscript(resolved.transcript);
+        } else {
+          if (
+            state.settings.voiceConversationEnabled &&
+            state.settings.voiceConversationMode === "auto_send" &&
+            autoSend.reason
+          ) {
+            addAudit({
+              eventType: "voice_conversation_auto_send_blocked",
+              source: "voice_control",
+              summary: `Voice auto-submit blocked: ${autoSend.reason}`,
+              severity: "info",
+            });
+          }
+          dispatch({ type: "SET_VOICE_TRANSCRIPT_DRAFT", payload: resolved.transcript });
+          dispatch({ type: "SET_VOICE_STATUS", payload: "preview" });
+          dispatch({ type: "SET_ORB_STATE", payload: "idle" });
+        }
       } else if (resolved.action === "no_speech") {
         dispatch({ type: "SET_VOICE_STATUS", payload: "no_transcript" });
         dispatch({ type: "SET_ORB_STATE", payload: "idle" });
@@ -345,6 +388,27 @@ export const VoiceInputControl: React.FC<VoiceInputControlProps> = ({
           details: `duration_ms=${duration_ms} source=keyboard`,
           severity: "info",
         });
+
+        if (shouldSpokenClarify({
+          settings: state.settings,
+          orbState: state.orbState,
+          activeMode: state.settings.activeMode,
+        })) {
+          addAudit({
+            eventType: "voice_clarification_requested",
+            source: "voice_control",
+            summary: "No transcript — speaking clarification prompt.",
+            severity: "info",
+          });
+          const isTauriClarify = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+          if (isTauriClarify) {
+            const { invoke } = await import("@tauri-apps/api/core");
+            await invoke("speak_text", buildSpeakTextInvokeArgs({
+              text: CLARIFICATION_TEXT,
+              source: "voice_clarification",
+            })).catch(() => {});
+          }
+        }
       } else {
         throw new Error(resolved.message);
       }

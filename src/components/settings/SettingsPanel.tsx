@@ -933,6 +933,98 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
         </p>
       </div>
 
+      {/* ── Voice Conversation ── */}
+      <div className="settings-section">
+        <div className="settings-section-label">Voice Conversation</div>
+
+        <div className="settings-toggle-row">
+          <span className="settings-toggle-label">Enable Voice Conversation</span>
+          <button
+            className={`settings-toggle ${settings.voiceConversationEnabled ? "settings-toggle-on" : ""}`}
+            onClick={() => dispatch({ type: "SET_SETTINGS", payload: { voiceConversationEnabled: !settings.voiceConversationEnabled } })}
+            aria-pressed={settings.voiceConversationEnabled}
+          >
+            {settings.voiceConversationEnabled ? "ON" : "OFF"}
+          </button>
+        </div>
+
+        <div className={`settings-field settings-vc-mode-row${!settings.voiceConversationEnabled ? " settings-toggle-row-disabled" : ""}`}>
+          <span className="settings-field-label">Mode</span>
+          <div className="settings-vc-mode-btns">
+            {(["manual_review", "confirm", "auto_send"] as const).map((m) => {
+              const label = m === "manual_review" ? "Manual Review" : m === "confirm" ? "Confirm" : "Auto-Send";
+              return (
+                <button
+                  key={m}
+                  className={`settings-mode-btn${settings.voiceConversationMode === m ? " settings-mode-active" : ""}`}
+                  onClick={() => dispatch({ type: "SET_SETTINGS", payload: { voiceConversationMode: m } })}
+                  disabled={!settings.voiceConversationEnabled}
+                  title={
+                    m === "manual_review"
+                      ? "Preview card shown — click Send Transcript to submit."
+                      : m === "confirm"
+                      ? "Preview card shown — click Send, then Lisa auto-speaks the reply."
+                      : "Transcript auto-submits on release. Lisa auto-speaks the reply."
+                  }
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className={`settings-toggle-row${!settings.voiceConversationEnabled ? " settings-toggle-row-disabled" : ""}`}>
+          <span className="settings-toggle-label">Auto-Speak Voice Replies</span>
+          <button
+            className={`settings-toggle ${settings.voiceAutoSpeakReplies ? "settings-toggle-on" : ""}`}
+            onClick={() => dispatch({ type: "SET_SETTINGS", payload: { voiceAutoSpeakReplies: !settings.voiceAutoSpeakReplies } })}
+            aria-pressed={settings.voiceAutoSpeakReplies}
+            disabled={!settings.voiceConversationEnabled || !settings.voiceOutputEnabled}
+          >
+            {settings.voiceAutoSpeakReplies ? "ON" : "OFF"}
+          </button>
+        </div>
+        {settings.voiceConversationEnabled && !settings.voiceOutputEnabled && (
+          <p className="history-note" style={{ marginTop: "4px", color: "var(--color-warn, #f59e0b)" }}>
+            Voice Output must be enabled for auto-speak replies to work.
+          </p>
+        )}
+
+        <div className={`settings-toggle-row${!settings.voiceConversationEnabled ? " settings-toggle-row-disabled" : ""}`}>
+          <span className="settings-toggle-label">No-Transcript Action</span>
+          <div style={{ display: "flex", gap: "5px" }}>
+            {(["clarify", "silent"] as const).map((a) => (
+              <button
+                key={a}
+                className={`settings-mode-btn${settings.voiceNoTranscriptAction === a ? " settings-mode-active" : ""}`}
+                onClick={() => dispatch({ type: "SET_SETTINGS", payload: { voiceNoTranscriptAction: a } })}
+                disabled={!settings.voiceConversationEnabled}
+                title={a === "clarify" ? 'Lisa speaks "Can you say that again?" when no speech is detected.' : "Silently show the no-transcript state."}
+              >
+                {a === "clarify" ? "Clarify" : "Silent"}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className={`settings-toggle-row${!settings.voiceConversationEnabled ? " settings-toggle-row-disabled" : ""}`}>
+          <span className="settings-toggle-label">Suppress in Sleep / Privacy / Lockdown</span>
+          <button
+            className={`settings-toggle ${settings.voiceConversationSuppressInPrivacyModes ? "settings-toggle-on" : ""}`}
+            onClick={() => dispatch({ type: "SET_SETTINGS", payload: { voiceConversationSuppressInPrivacyModes: !settings.voiceConversationSuppressInPrivacyModes } })}
+            aria-pressed={settings.voiceConversationSuppressInPrivacyModes}
+            disabled={!settings.voiceConversationEnabled}
+          >
+            {settings.voiceConversationSuppressInPrivacyModes ? "ON" : "OFF"}
+          </button>
+        </div>
+
+        <p className="history-note" style={{ marginTop: "8px" }}>
+          Phase 3G — Voice Conversation. Hold V to speak, release to transcribe. In Auto-Send mode the transcript submits automatically and Lisa speaks the reply. The microphone never opens automatically — hold V again for each new turn. No wake word, no background listening. Commands: "enable voice conversation" / "disable voice conversation".
+        </p>
+      </div>
+
       {/* ── Phase Flags ── */}
       <div className="settings-section">
         <div className="settings-section-label">Phase Flags</div>
@@ -1044,7 +1136,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
         <div className="settings-build-info">
           <div className="settings-field">
             <span className="settings-field-label">Phase</span>
-            <span className="settings-field-value">3D — KeyV Microphone Capture Pipeline</span>
+            <span className="settings-field-value">3G — Voice-First Conversation Flow</span>
           </div>
           <div className="settings-field">
             <span className="settings-field-label">Version</span>

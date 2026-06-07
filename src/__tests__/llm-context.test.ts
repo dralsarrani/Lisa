@@ -690,7 +690,7 @@ describe("buildLisaSystemPrompt — Phase 3D voice capability boundary", () => {
   });
 
   it("states Lisa does not listen in the background", () => {
-    expect(buildLisaSystemPrompt().toLowerCase()).toContain("does not listen in the background");
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("background listening");
   });
 
   it("states no audio is sent to any network service", () => {
@@ -698,13 +698,13 @@ describe("buildLisaSystemPrompt — Phase 3D voice capability boundary", () => {
   });
 
   it("states a Whisper model must be configured in Settings", () => {
-    expect(buildLisaSystemPrompt().toLowerCase()).toContain("whisper model file must be configured");
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("whisper ggml model file");
   });
 
   it("describes Phase 3E local TTS availability", () => {
     const prompt = buildLisaSystemPrompt();
     expect(prompt).toContain("Phase 3E");
-    expect(prompt.toLowerCase()).toContain("settings → voice output");
+    expect(prompt.toLowerCase()).toContain("settings → voice conversation");
   });
 
   it("states voice output is suppressed in privacy modes", () => {
@@ -719,8 +719,8 @@ describe("buildLisaSystemPrompt — Phase 3D voice capability boundary", () => {
     expect(buildLisaSystemPrompt().toLowerCase()).toContain("no on-screen mic button");
   });
 
-  it("states there is no auto-submit", () => {
-    expect(buildLisaSystemPrompt().toLowerCase()).toContain("no auto-submit");
+  it("states the mic never reopens automatically", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("microphone never reopens automatically");
   });
 
   it("states KeyV is the push-to-talk key", () => {

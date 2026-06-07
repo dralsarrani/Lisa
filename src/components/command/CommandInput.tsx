@@ -16,6 +16,7 @@ import type { ToolSuggestion } from "../../core/types";
 import "./CommandInput.css";
 import { VoiceInputControl } from "../voice/VoiceInputControl";
 import { buildSpeakTextInvokeArgs, SpeakTextResult } from "../../core/tts";
+import { shouldAutoSpeakVoiceReply } from "../../core/voice-conversation";
 
 // ─── Pure formatter — exported for testing ────────────────────────────────────
 
@@ -98,7 +99,8 @@ export const CommandInput: React.FC = () => {
     raw: string,
     model: string,
     maxContextTurns: number,
-    interactionId: string
+    interactionId: string,
+    interactionSource: "typed" | "voice"
   ): Promise<void> {
     const isInTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
     if (!isInTauri) {
@@ -248,6 +250,52 @@ export const CommandInput: React.FC = () => {
               }
             }
             setTimeout(() => dispatch({ type: "SET_ORB_STATE", payload: "idle" }), 3000);
+
+            // Voice reply auto-speak — fires only for voice-sourced interactions.
+            if (accumulatedResponse && interactionSource === "voice") {
+              const completedInteraction = {
+                id: interactionId,
+                kind: "local_ai" as const,
+                prompt: raw,
+                response: accumulatedResponse,
+                status: "complete" as const,
+                createdAt: now(),
+                source: interactionSource,
+              };
+              const voiceReplyResult = shouldAutoSpeakVoiceReply(completedInteraction, {
+                settings: state.settings,
+                orbState: state.orbState,
+                spokenInteractionIds: state.spokenInteractionIds,
+              });
+              if (voiceReplyResult.allowed) {
+                const isTauriVoice = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+                if (isTauriVoice) {
+                  dispatch({ type: "SET_TTS_SPEAKING", payload: { interactionId } });
+                  dispatch({ type: "MARK_INTERACTION_SPOKEN", payload: interactionId });
+                  addAudit({
+                    eventType: "voice_reply_auto_speak_requested",
+                    source: "command_input",
+                    summary: "Voice reply auto-speak requested.",
+                    details: `interaction_id=${interactionId} chars=${accumulatedResponse.length}`,
+                    severity: "info",
+                  });
+                  void (async () => {
+                    const { invoke: invokeSpeak } = await import("@tauri-apps/api/core");
+                    const speakRes = await invokeSpeak<SpeakTextResult>("speak_text", buildSpeakTextInvokeArgs({
+                      text: accumulatedResponse,
+                      source: "auto_speak",
+                    })).catch(() => null);
+                    if (speakRes?.accepted && speakRes.speaking) {
+                      const expireMs = Math.max(3000, Math.min(60_000, accumulatedResponse.length * 80));
+                      setTimeout(() => dispatch({ type: "CLEAR_TTS_STATE" }), expireMs);
+                    } else {
+                      dispatch({ type: "CLEAR_TTS_STATE" });
+                    }
+                  })();
+                }
+              }
+            }
+
             resolve();
           }
         ),
@@ -1027,6 +1075,24 @@ export const CommandInput: React.FC = () => {
         break;
       }
 
+      case "voice_conversation_enable": {
+        dispatch({ type: "SET_SETTINGS", payload: { voiceConversationEnabled: true } });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: route.response ?? "Voice conversation enabled.", createdAt: now(), completedAt: now() },
+        });
+        break;
+      }
+
+      case "voice_conversation_disable": {
+        dispatch({ type: "SET_SETTINGS", payload: { voiceConversationEnabled: false } });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: route.response ?? "Voice conversation disabled.", createdAt: now(), completedAt: now() },
+        });
+        break;
+      }
+
       default: {
         // Guard: block desktop-action commands before they reach the LLM.
         const guardMsg = getDesktopActionGuardMessage(raw);
@@ -1079,10 +1145,10 @@ export const CommandInput: React.FC = () => {
             type: "ADD_INTERACTION",
             payload: {
               id: interactionId, kind: "local_ai", prompt: raw, status: "thinking",
-              response: "", model: ollamaModel, createdAt: now(),
+              response: "", model: ollamaModel, createdAt: now(), source,
             },
           });
-          await handleStreamingLlmQuery(raw, ollamaModel, maxContextTurns, interactionId);
+          await handleStreamingLlmQuery(raw, ollamaModel, maxContextTurns, interactionId, source);
         } else if (enableLocalAi && !ollamaModel) {
           const msg = "Local AI is enabled but no model is selected. Go to Settings → Local AI to choose a model.";
           dispatch({ type: "SET_COMMAND_RESPONSE", payload: msg });

@@ -296,6 +296,24 @@ export function routeCommand(raw: string): CommandRouteResult {
     return result("tts_speak_again", raw, normalized, {}, "high", "Repeating last response…");
   }
 
+  // Enable voice conversation.
+  if (
+    normalized === "enable voice conversation" ||
+    normalized === "turn on voice conversation" ||
+    normalized === "voice conversation on"
+  ) {
+    return result("voice_conversation_enable", raw, normalized, {}, "high", "Voice conversation enabled. Hold V to speak — transcript will auto-send when released.");
+  }
+
+  // Disable voice conversation.
+  if (
+    normalized === "disable voice conversation" ||
+    normalized === "turn off voice conversation" ||
+    normalized === "voice conversation off"
+  ) {
+    return result("voice_conversation_disable", raw, normalized, {}, "high", "Voice conversation disabled. Returning to manual review mode.");
+  }
+
   // Fallback: unknown command.
   return result(
     "unknown",
@@ -353,7 +371,7 @@ const VOICE_CAPABILITY_QA: Array<[RegExp, string]> = [
   // General voice input capability / how to enable
   [
     /\bvoice\s+(?:input|command|commands|control|recognition|feature|capability|support)\b|\benable\s+voice\b|\buse\s+voice\s+input\b|\bhave\s+voice\s+input\b/i,
-    "Phase 3D: Lisa supports local push-to-talk voice input. Hold KeyV (outside the text box) to record from your microphone, release to transcribe with local Whisper, then review and send the transcript manually. Requires a Whisper model file configured in Settings → Voice Input. No background listening, no wake word, no cloud STT, no auto-submit.",
+    "Phase 3D/3G: Lisa supports local push-to-talk voice input. Hold KeyV (outside the text box) to record, release to transcribe with local Whisper. In Manual Review mode (default), review the transcript and click Send Transcript. In Voice Conversation mode (Settings → Voice Conversation or type 'enable voice conversation'), the transcript auto-sends and Lisa speaks the reply. No background listening, no wake word, no cloud STT. The microphone never opens automatically — you must hold KeyV for every turn.",
   ],
 ];
 

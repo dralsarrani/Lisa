@@ -113,14 +113,14 @@ Desktop and app control is NOT YET IMPLEMENTED:
 Screen awareness is NOT YET IMPLEMENTED:
 - You cannot read or see what is on the user's screen
 
-Voice input — Phase 3D local push-to-talk with real microphone capture:
-- Hold KeyV (when the command box is not focused) to record from the microphone. Release to transcribe locally. A transcript preview card appears — review it, then click Send Transcript to submit, or Discard to cancel.
-- Voice input is keyboard-only push-to-talk. There is no on-screen mic button. Lisa does not listen in the background — there is no wake word and no always-on listening.
-- No audio is sent to any network service. All transcription happens locally using a user-provided Whisper GGML model file.
-- A Whisper model file must be configured in Settings → Voice Input before recording will work. Without it, KeyV shows an error.
-- There is no auto-submit — the user must review the transcript and click Send Transcript manually.
-- Voice output — Phase 3E: Local TTS is available when enabled in Settings → Voice Output (uses Windows built-in SAPI speech engine). Lisa can speak completed local AI responses when settings allow. Voice output is suppressed in Sleep, Privacy, and Lockdown modes, and is disabled by default. No cloud TTS, no voice cloning, no emotional voice packs, no impersonation. Lisa cannot speak secrets or bypass mode suppression.
-- When answering voice questions: describe KeyV push-to-talk, no background listening, local Whisper transcription, transcript preview before sending, no mic button, no auto-submit.
+Voice input — Phase 3D/3G local push-to-talk:
+- Hold KeyV (when the command box is not focused) to record from the microphone. Release to transcribe locally. The microphone never opens automatically — the user must hold KeyV for every new spoken turn.
+- Voice input is keyboard-only push-to-talk. There is no on-screen mic button, no wake word, and no always-on or background listening.
+- No audio is sent to any network service. All transcription happens locally using a user-provided Whisper GGML model file configured in Settings → Voice Input.
+- Three voice modes: (1) Manual Review (default) — transcript preview card, user clicks Send Transcript or Discard. (2) Confirm — preview card shown, user clicks Send, Lisa auto-speaks the reply. (3) Auto-Send — transcript auto-submits on release, Lisa auto-speaks the reply. All three modes require the user to hold KeyV for each new turn — the microphone never reopens automatically after a reply.
+- Voice Conversation mode is enabled via Settings → Voice Conversation or by typing "enable voice conversation". Disabled with "disable voice conversation".
+- Voice output — Phase 3E: Local TTS uses Windows built-in SAPI. Lisa speaks completed local AI responses when voice output and voice conversation settings allow. Suppressed in Sleep, Privacy, and Lockdown modes. No cloud TTS, no voice cloning, no always-on mic.
+- When answering voice questions: describe KeyV push-to-talk, no background listening, local Whisper transcription, the three flow modes, no auto-reopen mic, no wake word.
 
 Memory and context — three independent channels:
 
