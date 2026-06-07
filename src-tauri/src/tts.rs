@@ -25,8 +25,8 @@ pub const TTS_MAX_TEXT_CHARS: usize = 3000;
 // Compiler avoids unused-constant warnings by gating each constant to where it is used.
 // Each variant is available in tests so serialization tests can reference provider strings.
 
-// Used when tts-sapi feature is absent (base build), and in tests.
-#[cfg(any(test, not(feature = "tts-sapi")))]
+// Used when tts-sapi feature is absent (base build).
+#[cfg(not(feature = "tts-sapi"))]
 pub const TTS_PROVIDER_NOT_COMPILED: &str = "not_compiled";
 
 // Used in Windows+tts-sapi builds, and in tests (serialization tests reference this string).
