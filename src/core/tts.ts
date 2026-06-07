@@ -38,7 +38,7 @@ export function isInteractionSpeakEligible(
   if (!interaction.response || !interaction.response.trim()) return false;
   if (!opts.settings.voiceOutputEnabled) return false;
   if (opts.orbState === "emergency_stopped") return false;
-  if (opts.voiceStatus === "recording") return false;
+  if (opts.voiceStatus === "recording" || opts.voiceStatus === "transcribing") return false;
   return true;
 }
 

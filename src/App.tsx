@@ -172,6 +172,21 @@ function App() {
     setActiveTab("approvals");
   }, [state.toolRequests, dispatch]);
 
+  const handleStopSpeaking = useCallback(async () => {
+    const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    if (isTauri) {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("stop_speaking").catch(() => {});
+    }
+    dispatch({ type: "CLEAR_TTS_STATE" });
+    addAudit({
+      eventType: "tts_speech_stopped",
+      source: "console_stop_button",
+      summary: "TTS stopped by user.",
+      severity: "info",
+    });
+  }, [dispatch, addAudit]);
+
   const handleSpeak = useCallback(async (interaction: LisaInteraction) => {
     if (!interaction.response?.trim()) return;
     const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -348,6 +363,7 @@ function App() {
                   ttsSpeakingInteractionId={state.ttsSpeakingInteractionId}
                   voiceStatus={state.voiceStatus}
                   onSpeak={state.settings.voiceOutputEnabled ? handleSpeak : undefined}
+                  onStopSpeaking={state.settings.voiceOutputEnabled ? handleStopSpeaking : undefined}
                 />
               )}
               {activeTab === "missions" && (

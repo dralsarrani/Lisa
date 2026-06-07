@@ -18,6 +18,7 @@ interface ConsolePanelProps {
   ttsSpeakingInteractionId?: string | null;
   voiceStatus?: VoiceStatus;
   onSpeak?: (interaction: LisaInteraction) => void;
+  onStopSpeaking?: () => void;
 }
 
 export const ConsolePanel: React.FC<ConsolePanelProps> = ({
@@ -31,6 +32,7 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
   ttsSpeakingInteractionId,
   voiceStatus,
   onSpeak,
+  onStopSpeaking,
 }) => {
   const feedRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -87,6 +89,7 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
               isSpeaking={ttsSpeakingInteractionId === ix.id}
               speakEligible={speakEligible}
               onSpeak={speakEligible ? onSpeak : undefined}
+              onStopSpeaking={onStopSpeaking}
             />
           );
         })}
@@ -107,6 +110,7 @@ function InteractionCard({
   isSpeaking,
   speakEligible,
   onSpeak,
+  onStopSpeaking,
 }: {
   interaction: LisaInteraction;
   onCancelStream?: (id: string) => void;
@@ -116,6 +120,7 @@ function InteractionCard({
   isSpeaking?: boolean;
   speakEligible?: boolean;
   onSpeak?: (interaction: LisaInteraction) => void;
+  onStopSpeaking?: () => void;
 }) {
   const time = new Date(interaction.createdAt).toLocaleTimeString([], {
     hour: "2-digit",
@@ -157,6 +162,7 @@ function InteractionCard({
             isSpeaking={isSpeaking}
             speakEligible={speakEligible}
             onSpeak={onSpeak}
+            onStopSpeaking={onStopSpeaking}
           />
         )}
       </div>
@@ -295,6 +301,7 @@ function CompleteResponse({
   isSpeaking,
   speakEligible,
   onSpeak,
+  onStopSpeaking,
 }: {
   interaction: LisaInteraction;
   linkedToolResult?: ToolResult;
@@ -303,6 +310,7 @@ function CompleteResponse({
   isSpeaking?: boolean;
   speakEligible?: boolean;
   onSpeak?: (interaction: LisaInteraction) => void;
+  onStopSpeaking?: () => void;
 }) {
   const isToolResult = interaction.kind === "tool_result";
   const suggestion = interaction.toolSuggestion;
@@ -358,15 +366,27 @@ function CompleteResponse({
           )}
         </div>
       )}
-      {speakEligible && onSpeak && (
+      {(isSpeaking || (speakEligible && onSpeak)) && (
         <div className="console-speak-actions">
           {isSpeaking ? (
-            <span className="console-speaking-indicator">Speaking…</span>
+            <>
+              <span className="console-speaking-indicator">Speaking…</span>
+              {onStopSpeaking && (
+                <button
+                  className="console-stop-speaking-btn"
+                  type="button"
+                  onClick={onStopSpeaking}
+                  title="Stop speaking"
+                >
+                  ■ Stop
+                </button>
+              )}
+            </>
           ) : (
             <button
               className="console-speak-btn"
               type="button"
-              onClick={() => onSpeak(interaction)}
+              onClick={() => onSpeak!(interaction)}
               title="Speak this response using local TTS"
             >
               ▶ Speak

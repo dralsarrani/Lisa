@@ -905,6 +905,104 @@ export const CommandInput: React.FC = () => {
         break;
       }
 
+      case "tts_stop_speaking": {
+        const isTauriTts = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+        if (isTauriTts) {
+          const { invoke } = await import("@tauri-apps/api/core");
+          await invoke("stop_speaking").catch(() => {});
+        }
+        dispatch({ type: "CLEAR_TTS_STATE" });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: route.response ?? "Speech stopped.", createdAt: now(), completedAt: now() },
+        });
+        addAudit({ eventType: "tts_speech_stopped", source: "command_input", summary: "Stop speaking command received.", severity: "info" });
+        break;
+      }
+
+      case "tts_test_voice": {
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: "Use Settings → Voice Output → Test Voice to test local speech.", createdAt: now(), completedAt: now() },
+        });
+        addAudit({ eventType: "tts_test_started", source: "command_input", summary: "Test voice command received — redirected to Settings.", severity: "info" });
+        break;
+      }
+
+      case "tts_enable": {
+        dispatch({ type: "SET_SETTINGS", payload: { voiceOutputEnabled: true } });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: route.response ?? "Voice output enabled.", createdAt: now(), completedAt: now() },
+        });
+        break;
+      }
+
+      case "tts_disable": {
+        dispatch({ type: "SET_SETTINGS", payload: { voiceOutputEnabled: false } });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: route.response ?? "Voice output disabled.", createdAt: now(), completedAt: now() },
+        });
+        break;
+      }
+
+      case "tts_auto_speak_on": {
+        dispatch({ type: "SET_SETTINGS", payload: { voiceOutputAutoSpeak: true } });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: route.response ?? "Auto-speak enabled.", createdAt: now(), completedAt: now() },
+        });
+        break;
+      }
+
+      case "tts_auto_speak_off": {
+        dispatch({ type: "SET_SETTINGS", payload: { voiceOutputAutoSpeak: false } });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: route.response ?? "Auto-speak disabled.", createdAt: now(), completedAt: now() },
+        });
+        break;
+      }
+
+      case "tts_speak_again": {
+        const lastEligible = [...state.interactions].reverse().find(
+          (ix) => ix.kind === "local_ai" && ix.status === "complete" && ix.response?.trim()
+        );
+        if (!lastEligible || !state.settings.voiceOutputEnabled) {
+          const noMsg = !state.settings.voiceOutputEnabled
+            ? "Voice output is disabled. Enable it in Settings → Voice Output first."
+            : "No previous local AI response to repeat.";
+          dispatch({ type: "SET_COMMAND_RESPONSE", payload: noMsg });
+          dispatch({
+            type: "ADD_INTERACTION",
+            payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: noMsg, createdAt: now(), completedAt: now() },
+          });
+          break;
+        }
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: route.response ?? "Repeating last response…", createdAt: now(), completedAt: now() },
+        });
+        dispatch({ type: "SET_TTS_SPEAKING", payload: { interactionId: lastEligible.id } });
+        dispatch({ type: "MARK_INTERACTION_SPOKEN", payload: lastEligible.id });
+        {
+          const isTauriSpeak = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+          if (isTauriSpeak) {
+            const { invoke } = await import("@tauri-apps/api/core");
+            const speakResult = await invoke<{ success: boolean; error?: string }>("speak_text", { text: lastEligible.response }).catch((e: unknown) => ({ success: false, error: String(e) }));
+            dispatch({ type: "CLEAR_TTS_STATE" });
+            addAudit({
+              eventType: speakResult.success ? "tts_speech_completed" : "tts_speech_failed",
+              source: "command_input",
+              summary: speakResult.success ? "TTS speak-again completed." : "TTS speak-again failed.",
+              severity: speakResult.success ? "info" : "error",
+            });
+          }
+        }
+        break;
+      }
+
       default: {
         // Guard: block desktop-action commands before they reach the LLM.
         const guardMsg = getDesktopActionGuardMessage(raw);

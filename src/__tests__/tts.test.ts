@@ -56,6 +56,10 @@ describe("isInteractionSpeakEligible", () => {
     expect(isInteractionSpeakEligible(makeInteraction({ kind: "command" }), opts)).toBe(false);
   });
 
+  it("returns false when voiceStatus is transcribing", () => {
+    expect(isInteractionSpeakEligible(makeInteraction(), { ...opts, voiceStatus: "transcribing" })).toBe(false);
+  });
+
   it("returns false when status is not complete", () => {
     expect(isInteractionSpeakEligible(makeInteraction({ status: "streaming" }), opts)).toBe(false);
     expect(isInteractionSpeakEligible(makeInteraction({ status: "thinking" }), opts)).toBe(false);

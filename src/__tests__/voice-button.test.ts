@@ -310,3 +310,26 @@ describe("Phase 3D — HUD title constants are full untruncated strings", () => 
     expect(VOICE_ERROR_TITLE.startsWith("Voice")).toBe(true);
   });
 });
+
+// ── Phase 3F — TTS conflict: getKeyVAction still returns "start"/"restart" ────
+// Conflict resolution (stop TTS before record) is in the VoiceInputControl
+// keydown handler, not in getKeyVAction. These tests confirm getKeyVAction's
+// output is unchanged — the handler layer adds stop-before-record behavior.
+
+describe("Phase 3F — getKeyVAction output is unchanged by TTS state (handler layer resolves conflict)", () => {
+  it("returns 'start' from idle — handler stops TTS before recording if needed", () => {
+    expect(getKeyVAction("idle", true)).toBe("start");
+  });
+
+  it("returns 'restart' from preview — handler stops TTS before restarting if needed", () => {
+    expect(getKeyVAction("preview", true)).toBe("restart");
+  });
+
+  it("returns 'ignore' while recording — no overlap possible once record is active", () => {
+    expect(getKeyVAction("recording", true)).toBe("ignore");
+  });
+
+  it("returns 'ignore' while transcribing — wait for cycle to complete", () => {
+    expect(getKeyVAction("transcribing", true)).toBe("ignore");
+  });
+});

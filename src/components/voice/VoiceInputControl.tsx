@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import type { VoiceStatus } from "../../core/types";
+import type { VoiceStatus, TtsUiStatus } from "../../core/types";
 import { useLisa } from "../../app/useLisa";
 import "./VoiceInputControl.css";
 
@@ -96,7 +96,7 @@ export const VoiceInputControl: React.FC<VoiceInputControlProps> = ({
   onSendTranscript,
 }) => {
   const { state, dispatch, addAudit } = useLisa();
-  const { voiceStatus, voiceTranscriptDraft, voiceError } = state;
+  const { voiceStatus, voiceTranscriptDraft, voiceError, ttsUiStatus } = state;
   const { voiceInputEnabled, sttEngineStatus, pushToTalkKey, sttModelPath } = state.settings;
   const isEmergencyStopped = state.orbState === "emergency_stopped";
   const canRecord = voiceInputEnabled && !isEmergencyStopped && !isProcessing;
@@ -130,6 +130,9 @@ export const VoiceInputControl: React.FC<VoiceInputControlProps> = ({
   const voiceTranscriptDraftRef = useRef(voiceTranscriptDraft);
   voiceTranscriptDraftRef.current = voiceTranscriptDraft;
 
+  const ttsUiStatusRef = useRef<TtsUiStatus>(ttsUiStatus);
+  ttsUiStatusRef.current = ttsUiStatus;
+
   // Tracks whether in-progress recording was keyboard-started.
   // KeyV keyup only stops a keyboard-started recording.
   const recordingSourceRef = useRef<"keyboard" | null>(null);
@@ -140,6 +143,7 @@ export const VoiceInputControl: React.FC<VoiceInputControlProps> = ({
   const doTranscribeRef = useRef<() => Promise<void>>(async () => {});
   const doDiscardRef = useRef<() => void>(() => {});
   const doCancelRef = useRef<() => Promise<void>>(async () => {});
+  const doStopTtsIfSpeakingRef = useRef<() => void>(() => {});
 
   // ── Stable keyboard + blur effect — registered once on mount ─────────────────
   useEffect(() => {
@@ -173,10 +177,14 @@ export const VoiceInputControl: React.FC<VoiceInputControlProps> = ({
 
       if (e.code === pushToTalkKeyRef.current) {
         const action = getKeyVAction(voiceStatusRef.current, canRecordRef.current);
-        if (action === "start") {
-          void doBeginRef.current();
-        } else if (action === "restart") {
-          void doClearAndBeginRef.current();
+        if (action === "start" || action === "restart") {
+          // Stop TTS first if Lisa is speaking — prevents audio overlap
+          doStopTtsIfSpeakingRef.current();
+          if (action === "start") {
+            void doBeginRef.current();
+          } else {
+            void doClearAndBeginRef.current();
+          }
         }
         // "ignore" → recording or transcribing in progress; do nothing
       }
@@ -399,12 +407,28 @@ export const VoiceInputControl: React.FC<VoiceInputControlProps> = ({
     await onSendTranscript(draft.trim());
   }
 
+  function stopTtsIfSpeaking(): void {
+    if (ttsUiStatusRef.current !== "speaking") return;
+    dispatch({ type: "CLEAR_TTS_STATE" });
+    const isTauriStop = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    if (isTauriStop) {
+      import("@tauri-apps/api/core").then(({ invoke }) => invoke("stop_speaking").catch(() => {}));
+    }
+    addAudit({
+      eventType: "tts_speech_stopped",
+      source: "keyvptt_conflict",
+      summary: "TTS stopped: KeyV push-to-talk requested during speech.",
+      severity: "info",
+    });
+  }
+
   // ── Update action refs with latest implementations ────────────────────────────
   doBeginRef.current = beginRecording;
   doClearAndBeginRef.current = clearAndBeginRecording;
   doTranscribeRef.current = performTranscription;
   doDiscardRef.current = discardVoice;
   doCancelRef.current = cancelRecording;
+  doStopTtsIfSpeakingRef.current = stopTtsIfSpeaking;
 
   const keyLabel = pushToTalkKey.replace("Key", "");
 
