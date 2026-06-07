@@ -701,8 +701,18 @@ describe("buildLisaSystemPrompt — Phase 3D voice capability boundary", () => {
     expect(buildLisaSystemPrompt().toLowerCase()).toContain("whisper model file must be configured");
   });
 
-  it("states voice output (TTS) is not yet implemented", () => {
-    expect(buildLisaSystemPrompt().toLowerCase()).toContain("voice output (tts)");
+  it("describes Phase 3E local TTS availability", () => {
+    const prompt = buildLisaSystemPrompt();
+    expect(prompt).toContain("Phase 3E");
+    expect(prompt.toLowerCase()).toContain("settings → voice output");
+  });
+
+  it("states voice output is suppressed in privacy modes", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("suppressed in sleep, privacy, and lockdown");
+  });
+
+  it("states no cloud tts", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("no cloud tts");
   });
 
   it("states there is no on-screen mic button", () => {

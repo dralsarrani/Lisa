@@ -48,6 +48,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
   const [sttTesting, setSttTesting] = useState(false);
   const [sttValidating, setSttValidating] = useState(false);
 
+  // TTS local state
+  const [ttsStatusInfo, setTtsStatusInfo] = useState<{ available: boolean; provider: string; label: string } | null>(null);
+  const [ttsTesting, setTtsTesting] = useState(false);
+  const [ttsTestResult, setTtsTestResult] = useState<{ success: boolean; error?: string } | null>(null);
+  const [ttsStopping, setTtsStopping] = useState(false);
+
   useEffect(() => {
     return () => {
       if (confirmResetRef.current) clearTimeout(confirmResetRef.current);
@@ -242,6 +248,94 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
       setSttTestResult({ success: false, latency_ms: 0, engine_name: "", error: err instanceof Error ? err.message : String(err) });
     }
     setSttTesting(false);
+  }
+
+  async function checkTtsStatus() {
+    const isInTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    if (!isInTauri) {
+      setTtsStatusInfo({ available: false, provider: "none", label: "Requires desktop app." });
+      return;
+    }
+    dispatch({ type: "SET_TTS_STATUS", payload: { status: "checking" } });
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const result = await invoke<{ available: boolean; provider: string; label: string; error?: string }>("get_tts_status");
+      setTtsStatusInfo(result);
+      dispatch({ type: "SET_TTS_STATUS", payload: { status: result.available ? "available" : "unavailable", provider: result.provider } });
+      addAudit({
+        eventType: "tts_status_checked",
+        source: "settings_panel",
+        summary: `TTS status checked — ${result.label}`,
+        details: `provider=${result.provider} available=${result.available}`,
+        severity: "info",
+      });
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      setTtsStatusInfo({ available: false, provider: "none", label: "Status check failed." });
+      dispatch({ type: "SET_TTS_STATUS", payload: { status: "unavailable", error } });
+    }
+  }
+
+  async function handleTestVoice() {
+    const isInTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    if (!isInTauri) {
+      setTtsTestResult({ success: false, error: "Requires desktop app." });
+      return;
+    }
+    setTtsTesting(true);
+    setTtsTestResult(null);
+    const testPhrase = "Hello, I am Lisa.";
+    addAudit({
+      eventType: "tts_test_started",
+      source: "settings_panel",
+      summary: "TTS test started.",
+      details: `chars=${testPhrase.length} provider=windows_sapi source=test_voice`,
+      severity: "info",
+    });
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const result = await invoke<{ success: boolean; error?: string }>("speak_text", { text: testPhrase });
+      setTtsTestResult(result);
+      addAudit({
+        eventType: result.success ? "tts_test_completed" : "tts_test_failed",
+        source: "settings_panel",
+        summary: result.success ? "TTS test completed." : "TTS test failed.",
+        details: result.success ? `chars=${testPhrase.length} provider=windows_sapi source=test_voice` : (result.error ?? "unknown error"),
+        severity: result.success ? "info" : "error",
+      });
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      setTtsTestResult({ success: false, error });
+      addAudit({
+        eventType: "tts_test_failed",
+        source: "settings_panel",
+        summary: "TTS test failed.",
+        details: error,
+        severity: "error",
+      });
+    }
+    setTtsTesting(false);
+  }
+
+  async function handleStopSpeaking() {
+    const isInTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    if (!isInTauri) return;
+    setTtsStopping(true);
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("stop_speaking");
+      dispatch({ type: "CLEAR_TTS_STATE" });
+      addAudit({
+        eventType: "tts_speech_stopped",
+        source: "settings_panel",
+        summary: "TTS speech stopped via settings.",
+        severity: "info",
+      });
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      dispatch({ type: "SET_TTS_STATUS", payload: { status: "error", error } });
+    }
+    setTtsStopping(false);
   }
 
   function handleClearHistory() {
@@ -742,6 +836,99 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
             Last tested: {new Date(settings.sttModelLastTestedAt).toLocaleString()}
           </p>
         )}
+      </div>
+
+      {/* ── Voice Output ── */}
+      <div className="settings-section">
+        <div className="settings-section-label">Voice Output</div>
+
+        {/* Backend status */}
+        <div className="settings-toggle-row">
+          <span className="settings-toggle-label">TTS Engine</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {state.ttsUiStatus === "checking" ? (
+              <span className="ai-status-badge ai-status-checking">Checking…</span>
+            ) : ttsStatusInfo ? (
+              <span className={`ai-status-badge ${ttsStatusInfo.available ? "ai-status-online" : "ai-status-offline"}`}>
+                {ttsStatusInfo.label}
+              </span>
+            ) : (
+              <span className="ai-status-badge ai-status-offline">Not checked</span>
+            )}
+            <button className="btn ai-refresh-btn" onClick={checkTtsStatus} disabled={state.ttsUiStatus === "checking"}>
+              {state.ttsUiStatus === "checking" ? "Checking…" : "Check"}
+            </button>
+          </div>
+        </div>
+
+        {/* Enable Voice Output */}
+        <div className="settings-toggle-row">
+          <span className="settings-toggle-label">Enable Voice Output</span>
+          <button
+            className={`settings-toggle ${settings.voiceOutputEnabled ? "settings-toggle-on" : ""}`}
+            onClick={() => dispatch({ type: "SET_SETTINGS", payload: { voiceOutputEnabled: !settings.voiceOutputEnabled } })}
+            aria-pressed={settings.voiceOutputEnabled}
+          >
+            {settings.voiceOutputEnabled ? "ON" : "OFF"}
+          </button>
+        </div>
+
+        {/* Auto-Speak */}
+        <div className={`settings-toggle-row ${!settings.voiceOutputEnabled ? "settings-toggle-row-disabled" : ""}`}>
+          <span className="settings-toggle-label">Auto-Speak Responses</span>
+          <button
+            className={`settings-toggle ${settings.voiceOutputAutoSpeak ? "settings-toggle-on" : ""}`}
+            onClick={() => dispatch({ type: "SET_SETTINGS", payload: { voiceOutputAutoSpeak: !settings.voiceOutputAutoSpeak } })}
+            aria-pressed={settings.voiceOutputAutoSpeak}
+            disabled={!settings.voiceOutputEnabled}
+          >
+            {settings.voiceOutputAutoSpeak ? "ON" : "OFF"}
+          </button>
+        </div>
+
+        {/* Suppress in privacy modes */}
+        <div className={`settings-toggle-row ${!settings.voiceOutputEnabled ? "settings-toggle-row-disabled" : ""}`}>
+          <span className="settings-toggle-label">Suppress in Sleep / Privacy / Lockdown</span>
+          <button
+            className={`settings-toggle ${settings.voiceOutputSuppressInPrivacyModes ? "settings-toggle-on" : ""}`}
+            onClick={() => dispatch({ type: "SET_SETTINGS", payload: { voiceOutputSuppressInPrivacyModes: !settings.voiceOutputSuppressInPrivacyModes } })}
+            aria-pressed={settings.voiceOutputSuppressInPrivacyModes}
+            disabled={!settings.voiceOutputEnabled}
+          >
+            {settings.voiceOutputSuppressInPrivacyModes ? "ON" : "OFF"}
+          </button>
+        </div>
+
+        {/* Test Voice / Stop Speaking */}
+        <div className="settings-action-row" style={{ marginTop: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <button
+            className="btn ai-test-btn"
+            onClick={handleTestVoice}
+            disabled={ttsTesting || !settings.voiceOutputEnabled || state.ttsUiStatus === "speaking"}
+            title='Speaks "Hello, I am Lisa." using Windows SAPI. Requires Voice Output enabled.'
+          >
+            {ttsTesting ? "Speaking…" : "Test Voice"}
+          </button>
+          <button
+            className="btn"
+            onClick={handleStopSpeaking}
+            disabled={ttsStopping || state.ttsUiStatus !== "speaking"}
+            style={{ opacity: state.ttsUiStatus === "speaking" ? 1 : 0.5 }}
+            title="Stop current TTS speech immediately."
+          >
+            {ttsStopping ? "Stopping…" : "Stop Speaking"}
+          </button>
+        </div>
+
+        {ttsTestResult && (
+          <div className={`ai-test-result ${ttsTestResult.success ? "ai-test-result-pass" : "ai-test-result-fail"}`}>
+            {ttsTestResult.success ? "✓ Voice test completed." : `✗ ${ttsTestResult.error ?? "Test failed"}`}
+          </div>
+        )}
+
+        <p className="history-note" style={{ marginTop: "8px" }}>
+          Phase 3E — Local Voice Output. Uses Windows built-in SAPI speech engine. No audio is stored or sent to any network service. Audit logs record metadata only — spoken text is never logged. Voice output is suppressed in Sleep, Privacy, and Lockdown modes when suppression is enabled.
+        </p>
       </div>
 
       {/* ── Phase Flags ── */}

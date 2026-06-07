@@ -1,10 +1,11 @@
 #[allow(dead_code)]
 mod stt;
-use stt::{validate_model_path, SttModelValidationResult, SttModelTestResult, SttTranscriptResult};
 #[cfg(all(feature = "audio-capture", feature = "whisper"))]
 use stt::SttEngine;
+use stt::{validate_model_path, SttModelTestResult, SttModelValidationResult, SttTranscriptResult};
 
 mod audio;
+mod tts;
 
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -251,9 +252,17 @@ const MIN_TRANSCRIPTION_SAMPLES: usize = 1_600;
 #[cfg(all(feature = "audio-capture", feature = "whisper"))]
 fn is_whisper_no_speech(text: &str) -> bool {
     const NO_SPEECH: &[&str] = &[
-        "[BLANK_AUDIO]", "(silence)", "(Silence)", "(blank)", "(Blank)",
-        "[MUSIC]",        "[NOISE]",   "(music)",   "(noise)",
-        "[ Silence ]",    "[silence]",
+        "[BLANK_AUDIO]",
+        "(silence)",
+        "(Silence)",
+        "(blank)",
+        "(Blank)",
+        "[MUSIC]",
+        "[NOISE]",
+        "(music)",
+        "(noise)",
+        "[ Silence ]",
+        "[silence]",
     ];
     let t = text.trim();
     t.is_empty() || NO_SPEECH.iter().any(|&tok| tok == t)
@@ -441,7 +450,10 @@ fn classify_ollama_error(raw: &str) -> String {
     }
 
     // Disk full — model cannot be loaded or swapped.
-    if lower.contains("no space left") || lower.contains("disk full") || lower.contains("not enough space") {
+    if lower.contains("no space left")
+        || lower.contains("disk full")
+        || lower.contains("not enough space")
+    {
         return "Ollama could not load the model because disk space is insufficient. \
                 Free up disk space and try again."
             .to_string();
@@ -585,7 +597,7 @@ async fn send_ollama_chat(model: String, messages: Vec<OllamaChatMessage>) -> Ol
                 error: Some(msg),
                 model,
                 latency_ms: start.elapsed().as_millis() as u64,
-            }
+            };
         }
     };
 
@@ -612,9 +624,7 @@ async fn send_ollama_chat(model: String, messages: Vec<OllamaChatMessage>) -> Ol
         },
         Err(e) => OllamaChatResult {
             response: None,
-            error: Some(classify_ollama_error(&format!(
-                "response parse error: {e}"
-            ))),
+            error: Some(classify_ollama_error(&format!("response parse error: {e}"))),
             model,
             latency_ms,
         },
@@ -648,19 +658,17 @@ async fn stream_ollama_chat(
         },
     };
 
-    let resp = match client
-        .post(OLLAMA_CHAT_URL)
-        .json(&body)
-        .send()
-        .await
-    {
+    let resp = match client.post(OLLAMA_CHAT_URL).json(&body).send().await {
         Ok(r) => r,
         Err(e) => {
             cancel.end_stream();
             let msg = if e.is_timeout() {
                 "Local model did not respond before the timeout. First responses can be slow while Ollama loads the model. Try again, choose a smaller model, or restart Ollama.".to_string()
             } else {
-                format!("Ollama chat failed at {OLLAMA_CHAT_URL}: {}", reqwest_error_detail(&e))
+                format!(
+                    "Ollama chat failed at {OLLAMA_CHAT_URL}: {}",
+                    reqwest_error_detail(&e)
+                )
             };
             return Err(msg);
         }
@@ -786,7 +794,9 @@ async fn test_ollama_model(model: String) -> OllamaModelTestResult {
     let start = std::time::Instant::now();
 
     let client = match reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(OLLAMA_MODEL_TEST_TIMEOUT_SECS))
+        .timeout(std::time::Duration::from_secs(
+            OLLAMA_MODEL_TEST_TIMEOUT_SECS,
+        ))
         .build()
     {
         Ok(c) => c,
@@ -910,10 +920,9 @@ fn transcribe_local_audio_file(
 ) -> Result<SttTranscriptResult, String> {
     #[cfg(feature = "whisper")]
     {
-        let engine = stt::whisper::WhisperEngine::from_model_path(
-            std::path::Path::new(&model_path),
-        )
-        .map_err(|e| e.to_string())?;
+        let engine =
+            stt::whisper::WhisperEngine::from_model_path(std::path::Path::new(&model_path))
+                .map_err(|e| e.to_string())?;
         engine
             .transcribe_wav_path(std::path::Path::new(&audio_path))
             .map_err(|e| e.to_string())
@@ -921,7 +930,10 @@ fn transcribe_local_audio_file(
     #[cfg(not(feature = "whisper"))]
     {
         let _ = (model_path, audio_path);
-        Err("Whisper engine not compiled. Build Lisa with --features whisper to enable STT.".to_string())
+        Err(
+            "Whisper engine not compiled. Build Lisa with --features whisper to enable STT."
+                .to_string(),
+        )
     }
 }
 
@@ -964,8 +976,7 @@ async fn stop_voice_capture_and_transcribe(
         let start = std::time::Instant::now();
         let (raw_samples, sample_rate, channels) =
             audio::capture::stop_and_get_samples(&manager.active)?;
-        let whisper_f32 =
-            audio::process_capture_to_whisper(raw_samples, sample_rate, channels)?;
+        let whisper_f32 = audio::process_capture_to_whisper(raw_samples, sample_rate, channels)?;
 
         if whisper_f32.len() < MIN_TRANSCRIPTION_SAMPLES {
             return Ok(VoiceTranscriptionResult {
@@ -994,7 +1005,11 @@ async fn stop_voice_capture_and_transcribe(
             match transcript_result {
                 Ok(text) => Ok(VoiceTranscriptionResult {
                     success: true,
-                    transcript: if is_whisper_no_speech(&text) { None } else { Some(text) },
+                    transcript: if is_whisper_no_speech(&text) {
+                        None
+                    } else {
+                        Some(text)
+                    },
                     duration_ms: start.elapsed().as_millis() as u64,
                     error: None,
                 }),
@@ -1065,6 +1080,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .manage(CancelState::new())
         .manage(VoiceCaptureManager::new())
+        .manage(tts::TtsManager::new())
         .invoke_handler(tauri::generate_handler![
             ping_backend,
             get_runtime_health,
@@ -1083,6 +1099,9 @@ pub fn run() {
             stop_voice_capture_and_transcribe,
             cancel_voice_capture,
             audio_input_status,
+            tts::get_tts_status,
+            tts::speak_text,
+            tts::stop_speaking,
         ])
         .run(tauri::generate_context!())
         .expect("Error while running Lisa application");
@@ -1118,7 +1137,10 @@ mod tests {
     #[test]
     fn timeout_constants_have_correct_values() {
         assert_eq!(OLLAMA_TAGS_TIMEOUT_SECS, 5, "tags timeout must be short");
-        assert_eq!(OLLAMA_CHAT_TIMEOUT_SECS, 180, "chat timeout must allow slow first loads");
+        assert_eq!(
+            OLLAMA_CHAT_TIMEOUT_SECS, 180,
+            "chat timeout must allow slow first loads"
+        );
         assert!(
             OLLAMA_CHAT_TIMEOUT_SECS > OLLAMA_TAGS_TIMEOUT_SECS,
             "chat timeout must exceed tags timeout"
@@ -1177,8 +1199,7 @@ mod tests {
     #[test]
     fn stream_chunk_parses_content_token() {
         let json = r#"{"model":"llama3.2:1b","message":{"role":"assistant","content":"Hello"},"done":false}"#;
-        let chunk: OllamaStreamChunk =
-            serde_json::from_str(json).expect("must parse stream chunk");
+        let chunk: OllamaStreamChunk = serde_json::from_str(json).expect("must parse stream chunk");
         assert_eq!(chunk.message.unwrap().content, "Hello");
         assert_eq!(chunk.done, Some(false));
         assert!(chunk.error.is_none());
@@ -1187,16 +1208,14 @@ mod tests {
     #[test]
     fn stream_chunk_parses_done_marker() {
         let json = r#"{"model":"llama3.2:1b","message":{"role":"assistant","content":""},"done":true,"done_reason":"stop"}"#;
-        let chunk: OllamaStreamChunk =
-            serde_json::from_str(json).expect("must parse done chunk");
+        let chunk: OllamaStreamChunk = serde_json::from_str(json).expect("must parse done chunk");
         assert_eq!(chunk.done, Some(true));
     }
 
     #[test]
     fn stream_chunk_parses_error_field() {
         let json = r#"{"error":"model not found"}"#;
-        let chunk: OllamaStreamChunk =
-            serde_json::from_str(json).expect("must parse error chunk");
+        let chunk: OllamaStreamChunk = serde_json::from_str(json).expect("must parse error chunk");
         assert_eq!(chunk.error.as_deref(), Some("model not found"));
         assert!(chunk.message.is_none());
     }
@@ -1213,7 +1232,10 @@ mod tests {
     fn cancel_state_begin_stream_resets_flag() {
         let state = CancelState::new();
         state.begin_stream("req-1");
-        assert!(!state.is_cancelled(), "flag must be false after begin_stream");
+        assert!(
+            !state.is_cancelled(),
+            "flag must be false after begin_stream"
+        );
     }
 
     #[test]
@@ -1282,7 +1304,10 @@ mod tests {
     #[test]
     fn classify_ollama_error_memory_allocation() {
         let msg = classify_ollama_error("unable to allocate CPU buffer");
-        assert!(msg.contains("could not allocate enough memory"), "got: {msg}");
+        assert!(
+            msg.contains("could not allocate enough memory"),
+            "got: {msg}"
+        );
         assert!(msg.contains("llama3.2:1b"), "got: {msg}");
         assert!(msg.contains("qwen2.5-coder:1.5b"), "got: {msg}");
         assert!(msg.contains("deepseek-r1:1.5b"), "got: {msg}");
@@ -1291,13 +1316,19 @@ mod tests {
     #[test]
     fn classify_ollama_error_llama_runner_terminated() {
         let msg = classify_ollama_error("llama runner process has terminated");
-        assert!(msg.contains("could not allocate enough memory"), "got: {msg}");
+        assert!(
+            msg.contains("could not allocate enough memory"),
+            "got: {msg}"
+        );
     }
 
     #[test]
     fn classify_ollama_error_out_of_memory() {
         let msg = classify_ollama_error("out of memory: kill process");
-        assert!(msg.contains("could not allocate enough memory"), "got: {msg}");
+        assert!(
+            msg.contains("could not allocate enough memory"),
+            "got: {msg}"
+        );
     }
 
     #[test]
@@ -1333,7 +1364,10 @@ mod tests {
     #[test]
     fn classify_ollama_error_timeout() {
         let msg = classify_ollama_error("request timed out after 15s");
-        assert!(msg.contains("timeout") || msg.contains("slow"), "got: {msg}");
+        assert!(
+            msg.contains("timeout") || msg.contains("slow"),
+            "got: {msg}"
+        );
     }
 
     #[test]
@@ -1352,7 +1386,10 @@ mod tests {
     #[test]
     fn classify_ollama_error_case_insensitive() {
         let msg = classify_ollama_error("UNABLE TO ALLOCATE CPU BUFFER");
-        assert!(msg.contains("could not allocate enough memory"), "got: {msg}");
+        assert!(
+            msg.contains("could not allocate enough memory"),
+            "got: {msg}"
+        );
     }
 
     #[test]

@@ -664,9 +664,10 @@ describe("getVoiceCapabilityMessage — TTS / speak back questions", () => {
     expect(getVoiceCapabilityMessage("can you talk back")).not.toBeNull();
   });
 
-  it("response says TTS not implemented", () => {
+  it("response describes Phase 3E TTS availability", () => {
     const msg = getVoiceCapabilityMessage("can you speak back") ?? "";
-    expect(msg.toLowerCase()).toContain("not implemented");
+    expect(msg.toLowerCase()).toContain("settings");
+    expect(msg.toLowerCase()).toContain("voice output");
   });
 });
 
@@ -824,5 +825,54 @@ describe("getVoiceCapabilityMessage — mic button missing troubleshooting", () 
 
   it("answers 'no mic button' phrase", () => {
     expect(getVoiceCapabilityMessage("no mic button is showing")).not.toBeNull();
+  });
+});
+
+describe("routeCommand — TTS voice output commands (Phase 3E)", () => {
+  it("routes 'test voice'", () => {
+    expect(routeCommand("test voice").intent).toBe("tts_test_voice");
+  });
+
+  it("routes 'stop speaking'", () => {
+    expect(routeCommand("stop speaking").intent).toBe("tts_stop_speaking");
+  });
+
+  it("routes 'enable voice output'", () => {
+    expect(routeCommand("enable voice output").intent).toBe("tts_enable");
+  });
+
+  it("routes 'turn on voice output'", () => {
+    expect(routeCommand("turn on voice output").intent).toBe("tts_enable");
+  });
+
+  it("routes 'disable voice output'", () => {
+    expect(routeCommand("disable voice output").intent).toBe("tts_disable");
+  });
+
+  it("routes 'turn off voice output'", () => {
+    expect(routeCommand("turn off voice output").intent).toBe("tts_disable");
+  });
+
+  it("routes 'auto speak on'", () => {
+    expect(routeCommand("auto speak on").intent).toBe("tts_auto_speak_on");
+  });
+
+  it("routes 'auto speak off'", () => {
+    expect(routeCommand("auto speak off").intent).toBe("tts_auto_speak_off");
+  });
+
+  it("routes 'speak again'", () => {
+    expect(routeCommand("speak again").intent).toBe("tts_speak_again");
+  });
+
+  it("routes 'repeat that'", () => {
+    expect(routeCommand("repeat that").intent).toBe("tts_speak_again");
+  });
+
+  it("all TTS commands return high confidence", () => {
+    const commands = ["test voice", "stop speaking", "enable voice output", "disable voice output"];
+    for (const cmd of commands) {
+      expect(routeCommand(cmd).confidence).toBe("high");
+    }
   });
 });

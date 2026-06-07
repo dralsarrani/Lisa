@@ -1129,3 +1129,61 @@ describe("Phase 2F — cleanOrphans on loadState", () => {
     expect(loaded.toolApprovals[0].id).toBe("apv-1");
   });
 });
+
+describe("Phase 3E — voice output settings migration", () => {
+  it("state without voiceOutputEnabled gets false default", async () => {
+    localStorage.setItem(
+      "lisa_state_v1",
+      JSON.stringify({
+        version: STATE_VERSION,
+        settings: { ollamaModel: "llama3.2:1b" },
+        missions: [], approvals: [], auditEvents: [],
+        conversationHistory: [], memoryNotes: [],
+        toolRequests: [], toolApprovals: [], toolResults: [],
+        savedAt: new Date().toISOString(),
+      })
+    );
+    const state = await loadState();
+    expect(state.settings.voiceOutputEnabled).toBe(false);
+  });
+
+  it("state without voiceOutputAutoSpeak gets false default", async () => {
+    localStorage.setItem(
+      "lisa_state_v1",
+      JSON.stringify({
+        version: STATE_VERSION,
+        settings: { ollamaModel: "llama3.2:1b" },
+        missions: [], approvals: [], auditEvents: [],
+        conversationHistory: [], memoryNotes: [],
+        toolRequests: [], toolApprovals: [], toolResults: [],
+        savedAt: new Date().toISOString(),
+      })
+    );
+    const state = await loadState();
+    expect(state.settings.voiceOutputAutoSpeak).toBe(false);
+  });
+
+  it("state without voiceOutputSuppressInPrivacyModes gets true default", async () => {
+    localStorage.setItem(
+      "lisa_state_v1",
+      JSON.stringify({
+        version: STATE_VERSION,
+        settings: { ollamaModel: "llama3.2:1b" },
+        missions: [], approvals: [], auditEvents: [],
+        conversationHistory: [], memoryNotes: [],
+        toolRequests: [], toolApprovals: [], toolResults: [],
+        savedAt: new Date().toISOString(),
+      })
+    );
+    const state = await loadState();
+    expect(state.settings.voiceOutputSuppressInPrivacyModes).toBe(true);
+  });
+
+  it("default state includes voice output settings", async () => {
+    const state = await loadState();
+    expect(state.settings.voiceOutputEnabled).toBe(false);
+    expect(state.settings.voiceOutputAutoSpeak).toBe(false);
+    expect(state.settings.voiceOutputProvider).toBe("windows");
+    expect(state.settings.voiceOutputSuppressInPrivacyModes).toBe(true);
+  });
+});

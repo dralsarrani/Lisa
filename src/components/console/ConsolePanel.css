@@ -556,3 +556,43 @@
   color: var(--text-muted);
   letter-spacing: 0.04em;
 }
+
+/* ── TTS Speak actions ───────────────────────────────────────────────────────── */
+.console-speak-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.console-speak-btn {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  color: var(--color-info);
+  background: transparent;
+  border: 1px solid rgba(26, 159, 255, 0.3);
+  border-radius: 4px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+  opacity: 0.75;
+}
+
+.console-speak-btn:hover {
+  background: rgba(26, 159, 255, 0.08);
+  opacity: 1;
+}
+
+.console-speaking-indicator {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  color: var(--color-info);
+  animation: console-speaking-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes console-speaking-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}

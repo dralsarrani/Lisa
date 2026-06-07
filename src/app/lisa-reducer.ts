@@ -15,6 +15,7 @@ import type {
   ToolResult,
   ToolApprovalContract,
   VoiceStatus,
+  TtsUiStatus,
 } from "../core/types";
 import {
   DEFAULT_SETTINGS,
@@ -51,6 +52,12 @@ export interface LisaState {
   voiceStatus: VoiceStatus;
   voiceTranscriptDraft: string | null;
   voiceError: string | null;
+  // TTS transient state — not persisted
+  ttsUiStatus: TtsUiStatus;
+  ttsProvider: string | null;
+  ttsError: string | null;
+  ttsSpeakingInteractionId: string | null;
+  spokenInteractionIds: string[];
 }
 
 export const initialState: LisaState = {
@@ -72,6 +79,11 @@ export const initialState: LisaState = {
   voiceStatus: "idle",
   voiceTranscriptDraft: null,
   voiceError: null,
+  ttsUiStatus: "idle",
+  ttsProvider: null,
+  ttsError: null,
+  ttsSpeakingInteractionId: null,
+  spokenInteractionIds: [],
 };
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
@@ -143,6 +155,10 @@ export type LisaAction =
   | { type: "SET_VOICE_TRANSCRIPT_DRAFT"; payload: string | null }
   | { type: "SET_VOICE_ERROR"; payload: string | null }
   | { type: "CLEAR_VOICE_STATE" }
+  | { type: "SET_TTS_STATUS"; payload: { status: TtsUiStatus; provider?: string | null; error?: string | null } }
+  | { type: "SET_TTS_SPEAKING"; payload: { interactionId: string | null } }
+  | { type: "CLEAR_TTS_STATE" }
+  | { type: "MARK_INTERACTION_SPOKEN"; payload: string }
   | { type: "DISMISS_TOOL_SUGGESTION"; payload: { interactionId: string } }
   | { type: "CONVERT_TOOL_SUGGESTION"; payload: { interactionId: string; requestId: string } }
   | {
@@ -241,6 +257,10 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
         voiceStatus: "idle" as VoiceStatus,
         voiceTranscriptDraft: null,
         voiceError: null,
+        ttsUiStatus: "idle" as TtsUiStatus,
+        ttsProvider: null,
+        ttsError: null,
+        ttsSpeakingInteractionId: null,
       };
     }
 
@@ -550,6 +570,46 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
         voiceError: null,
         orbState: state.orbState === "listening" ? "idle" : state.orbState,
       };
+
+    case "SET_TTS_STATUS":
+      return {
+        ...state,
+        ttsUiStatus: action.payload.status,
+        ttsProvider: action.payload.provider ?? state.ttsProvider,
+        ttsError: action.payload.error ?? null,
+      };
+
+    case "SET_TTS_SPEAKING":
+      return {
+        ...state,
+        ttsSpeakingInteractionId: action.payload.interactionId,
+        ttsUiStatus: action.payload.interactionId !== null ? "speaking" : "available",
+        orbState:
+          action.payload.interactionId !== null
+            ? "speaking"
+            : state.orbState === "speaking"
+            ? "idle"
+            : state.orbState,
+      };
+
+    case "CLEAR_TTS_STATE":
+      return {
+        ...state,
+        ttsUiStatus: "idle",
+        ttsProvider: null,
+        ttsError: null,
+        ttsSpeakingInteractionId: null,
+        orbState: state.orbState === "speaking" ? "idle" : state.orbState,
+      };
+
+    case "MARK_INTERACTION_SPOKEN": {
+      const id = action.payload;
+      if (state.spokenInteractionIds.includes(id)) return state;
+      return {
+        ...state,
+        spokenInteractionIds: [...state.spokenInteractionIds, id],
+      };
+    }
 
     case "DISMISS_TOOL_SUGGESTION": {
       const { interactionId } = action.payload;

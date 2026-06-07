@@ -245,6 +245,57 @@ export function routeCommand(raw: string): CommandRouteResult {
     return result("mode_change", raw, normalized, { modeId: bareModeId }, "high", modeResponse(bareModeId));
   }
 
+  // ── Voice output (TTS) commands ──
+
+  // Test voice.
+  if (normalized === "test voice" || normalized === "test your voice") {
+    return result("tts_test_voice", raw, normalized, {}, "high", "Testing local voice output…");
+  }
+
+  // Stop speaking.
+  if (
+    normalized === "stop speaking" ||
+    normalized === "be quiet" ||
+    normalized === "shh" ||
+    normalized === "silence"
+  ) {
+    return result("tts_stop_speaking", raw, normalized, {}, "high", "Stopping speech.");
+  }
+
+  // Enable voice output.
+  if (normalized === "enable voice output" || normalized === "turn on voice output") {
+    return result("tts_enable", raw, normalized, {}, "high", "Voice output enabled.");
+  }
+
+  // Disable voice output.
+  if (normalized === "disable voice output" || normalized === "turn off voice output") {
+    return result("tts_disable", raw, normalized, {}, "high", "Voice output disabled.");
+  }
+
+  // Auto-speak on.
+  if (
+    normalized === "turn on auto speak" ||
+    normalized === "enable auto speak" ||
+    normalized === "auto speak on"
+  ) {
+    return result("tts_auto_speak_on", raw, normalized, {}, "high", "Auto-speak enabled. Lisa will speak completed local AI responses automatically.");
+  }
+
+  // Auto-speak off / silent mode.
+  if (
+    normalized === "turn off auto speak" ||
+    normalized === "disable auto speak" ||
+    normalized === "auto speak off" ||
+    normalized === "silent mode"
+  ) {
+    return result("tts_auto_speak_off", raw, normalized, {}, "high", "Auto-speak disabled.");
+  }
+
+  // Speak again.
+  if (normalized === "speak again" || normalized === "repeat that") {
+    return result("tts_speak_again", raw, normalized, {}, "high", "Repeating last response…");
+  }
+
   // Fallback: unknown command.
   return result(
     "unknown",
@@ -277,7 +328,7 @@ const VOICE_CAPABILITY_QA: Array<[RegExp, string]> = [
   // TTS / speak back / voice output
   [
     /\b(?:tts|text.to.speech|voice\s+output|voice\s+synthesis)\b|\bspeak\s+(?:back|out\s+loud|aloud)\b|\btalk\s+back\b|\bread\s+(?:out\s+loud|aloud|back)\b|\bcan\s+(?:you\s+)?(?:speak|talk)\s+(?:back|out\s+loud|aloud)\b/i,
-    "No. Voice output/TTS is not implemented yet. Lisa responds in text only.",
+    "Phase 3E: Local voice output (TTS) is available when enabled in Settings → Voice Output. Lisa can speak completed local AI responses using your system's built-in speech engine (Windows SAPI). Enable it in settings, then use 'Test Voice' to verify. Auto-speak can be turned on for automatic speech after each AI response. Voice output is suppressed in Sleep, Privacy, and Lockdown modes. No cloud TTS, no voice cloning, no always-on listening.",
   ],
   // No mic button / can't find / "there is no mic button"
   [

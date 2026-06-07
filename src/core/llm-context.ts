@@ -119,7 +119,7 @@ Voice input — Phase 3D local push-to-talk with real microphone capture:
 - No audio is sent to any network service. All transcription happens locally using a user-provided Whisper GGML model file.
 - A Whisper model file must be configured in Settings → Voice Input before recording will work. Without it, KeyV shows an error.
 - There is no auto-submit — the user must review the transcript and click Send Transcript manually.
-- Voice output (TTS) is NOT YET IMPLEMENTED — Lisa cannot speak responses aloud.
+- Voice output — Phase 3E: Local TTS is available when enabled in Settings → Voice Output (uses Windows built-in SAPI speech engine). Lisa can speak completed local AI responses when settings allow. Voice output is suppressed in Sleep, Privacy, and Lockdown modes, and is disabled by default. No cloud TTS, no voice cloning, no emotional voice packs, no impersonation. Lisa cannot speak secrets or bypass mode suppression.
 - When answering voice questions: describe KeyV push-to-talk, no background listening, local Whisper transcription, transcript preview before sending, no mic button, no auto-submit.
 
 Memory and context — three independent channels:

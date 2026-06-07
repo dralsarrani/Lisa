@@ -13,7 +13,8 @@ import { getModeDisplayName } from "./core/mode-store";
 import { getToolDefinition } from "./core/tool-registry";
 import { hasActiveToolRequestForParams } from "./core/tool-request-utils";
 import { createAuditEvent } from "./core/audit-store";
-import type { RuntimeHealth as RuntimeHealthData, ToolRequest, ToolApprovalContract } from "./core/types";
+import { shouldAutoSpeakInteraction, buildTtsSpeechAuditDetails } from "./core/tts";
+import type { RuntimeHealth as RuntimeHealthData, ToolRequest, ToolApprovalContract, LisaInteraction } from "./core/types";
 import "./App.css";
 
 type TabId = "console" | "missions" | "approvals" | "audit" | "runtime" | "settings";
@@ -171,6 +172,77 @@ function App() {
     setActiveTab("approvals");
   }, [state.toolRequests, dispatch]);
 
+  const handleSpeak = useCallback(async (interaction: LisaInteraction) => {
+    if (!interaction.response?.trim()) return;
+    const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    if (!isTauri) return;
+    dispatch({ type: "SET_TTS_SPEAKING", payload: { interactionId: interaction.id } });
+    dispatch({ type: "MARK_INTERACTION_SPOKEN", payload: interaction.id });
+    addAudit({
+      eventType: "tts_speech_started",
+      source: "console_speak_button",
+      summary: "TTS speech started.",
+      details: buildTtsSpeechAuditDetails({
+        interactionId: interaction.id,
+        charCount: interaction.response.length,
+        provider: "windows_sapi",
+        source: "manual",
+      }),
+      severity: "info",
+    });
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const result = await invoke<{ success: boolean; error?: string }>("speak_text", { text: interaction.response });
+      dispatch({ type: "CLEAR_TTS_STATE" });
+      addAudit({
+        eventType: result.success ? "tts_speech_completed" : "tts_speech_failed",
+        source: "console_speak_button",
+        summary: result.success ? "TTS speech completed." : "TTS speech failed.",
+        details: result.success
+          ? buildTtsSpeechAuditDetails({ interactionId: interaction.id, charCount: interaction.response.length, provider: "windows_sapi", source: "manual" })
+          : (result.error ?? "unknown error"),
+        severity: result.success ? "info" : "error",
+      });
+    } catch (err) {
+      dispatch({ type: "CLEAR_TTS_STATE" });
+      addAudit({
+        eventType: "tts_speech_failed",
+        source: "console_speak_button",
+        summary: "TTS speech failed.",
+        details: err instanceof Error ? err.message : String(err),
+        severity: "error",
+      });
+    }
+  }, [dispatch, addAudit]);
+
+  // Auto-speak: fire once per new completed local_ai interaction when allowed.
+  const autoSpeakCheckedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!state.settings.voiceOutputAutoSpeak || !state.settings.voiceOutputEnabled) return;
+    const last = [...state.interactions].reverse().find(
+      (ix) => ix.kind === "local_ai" && ix.status === "complete"
+    );
+    if (!last || autoSpeakCheckedRef.current === last.id) return;
+    autoSpeakCheckedRef.current = last.id;
+    const result = shouldAutoSpeakInteraction(last, {
+      settings: state.settings,
+      orbState: state.orbState,
+      voiceStatus: state.voiceStatus,
+      activeMode: state.settings.activeMode,
+      spokenInteractionIds: state.spokenInteractionIds,
+    });
+    if (result.allowed) {
+      handleSpeak(last);
+    } else if (result.reason) {
+      addAudit({
+        eventType: "tts_auto_speak_blocked",
+        source: "auto_speak_effect",
+        summary: `Auto-speak blocked: ${result.reason}`,
+        severity: "info",
+      });
+    }
+  }, [state.interactions, state.settings, state.orbState, state.voiceStatus, state.spokenInteractionIds, handleSpeak, addAudit]);
+
   if (!state.isLoaded) {
     return (
       <div className="app-loading">
@@ -272,6 +344,10 @@ function App() {
                   toolResults={state.toolResults}
                   toolRequests={state.toolRequests}
                   onPrepareMemoryNoteSave={handlePrepareMemoryNoteSave}
+                  ttsUiStatus={state.ttsUiStatus}
+                  ttsSpeakingInteractionId={state.ttsSpeakingInteractionId}
+                  voiceStatus={state.voiceStatus}
+                  onSpeak={state.settings.voiceOutputEnabled ? handleSpeak : undefined}
                 />
               )}
               {activeTab === "missions" && (

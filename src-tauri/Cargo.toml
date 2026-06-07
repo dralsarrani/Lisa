@@ -26,6 +26,9 @@ audio-capture = ["dep:cpal"]
 # Full local voice pipeline: Whisper engine + microphone capture.
 # Build: cargo build --features voice-live
 voice-live = ["whisper", "audio-capture"]
+# Enable Windows-native SAPI TTS via PowerShell stdin pipe. No extra deps.
+# Build: cargo build --features tts-sapi
+tts-sapi = []
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

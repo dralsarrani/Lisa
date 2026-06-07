@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
-import type { LisaInteraction, LisaSettings, OrbState, ToolResult, ToolRequest } from "../../core/types";
+import type { LisaInteraction, LisaSettings, OrbState, ToolResult, ToolRequest, VoiceStatus, TtsUiStatus } from "../../core/types";
 import { hasActiveToolRequestForParams } from "../../core/tool-request-utils";
+import { isInteractionSpeakEligible } from "../../core/tts";
 import { MarkdownResponse } from "./MarkdownResponse";
 import { ToolSuggestionChip } from "./ToolSuggestionChip";
 import "./ConsolePanel.css";
@@ -13,6 +14,10 @@ interface ConsolePanelProps {
   toolResults?: ToolResult[];
   toolRequests?: ToolRequest[];
   onPrepareMemoryNoteSave?: (resultId: string) => void;
+  ttsUiStatus?: TtsUiStatus;
+  ttsSpeakingInteractionId?: string | null;
+  voiceStatus?: VoiceStatus;
+  onSpeak?: (interaction: LisaInteraction) => void;
 }
 
 export const ConsolePanel: React.FC<ConsolePanelProps> = ({
@@ -23,6 +28,9 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
   toolResults,
   toolRequests,
   onPrepareMemoryNoteSave,
+  ttsSpeakingInteractionId,
+  voiceStatus,
+  onSpeak,
 }) => {
   const feedRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -63,6 +71,11 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
                 ? hasActiveToolRequestForParams(toolRequests, "save-tool-result-memory-note", { sourceResultId: linkedResult.id }) !== null
                 : false)
             : true;
+          const speakEligible = onSpeak != null && isInteractionSpeakEligible(ix, {
+            settings: { voiceOutputEnabled: settings.voiceOutputEnabled ?? false },
+            orbState,
+            voiceStatus: voiceStatus ?? "idle",
+          });
           return (
             <InteractionCard
               key={ix.id}
@@ -71,6 +84,9 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
               linkedToolResult={linkedResult}
               saveDisabled={saveDisabled}
               onPrepareMemoryNoteSave={onPrepareMemoryNoteSave}
+              isSpeaking={ttsSpeakingInteractionId === ix.id}
+              speakEligible={speakEligible}
+              onSpeak={speakEligible ? onSpeak : undefined}
             />
           );
         })}
@@ -88,12 +104,18 @@ function InteractionCard({
   linkedToolResult,
   saveDisabled,
   onPrepareMemoryNoteSave,
+  isSpeaking,
+  speakEligible,
+  onSpeak,
 }: {
   interaction: LisaInteraction;
   onCancelStream?: (id: string) => void;
   linkedToolResult?: ToolResult;
   saveDisabled?: boolean;
   onPrepareMemoryNoteSave?: (resultId: string) => void;
+  isSpeaking?: boolean;
+  speakEligible?: boolean;
+  onSpeak?: (interaction: LisaInteraction) => void;
 }) {
   const time = new Date(interaction.createdAt).toLocaleTimeString([], {
     hour: "2-digit",
@@ -132,6 +154,9 @@ function InteractionCard({
             linkedToolResult={linkedToolResult}
             saveDisabled={saveDisabled}
             onPrepareMemoryNoteSave={onPrepareMemoryNoteSave}
+            isSpeaking={isSpeaking}
+            speakEligible={speakEligible}
+            onSpeak={onSpeak}
           />
         )}
       </div>
@@ -267,11 +292,17 @@ function CompleteResponse({
   linkedToolResult,
   saveDisabled,
   onPrepareMemoryNoteSave,
+  isSpeaking,
+  speakEligible,
+  onSpeak,
 }: {
   interaction: LisaInteraction;
   linkedToolResult?: ToolResult;
   saveDisabled?: boolean;
   onPrepareMemoryNoteSave?: (resultId: string) => void;
+  isSpeaking?: boolean;
+  speakEligible?: boolean;
+  onSpeak?: (interaction: LisaInteraction) => void;
 }) {
   const isToolResult = interaction.kind === "tool_result";
   const suggestion = interaction.toolSuggestion;
@@ -324,6 +355,22 @@ function CompleteResponse({
           </button>
           {saveDisabled && (
             <span className="console-save-note-hint">Review in Approvals.</span>
+          )}
+        </div>
+      )}
+      {speakEligible && onSpeak && (
+        <div className="console-speak-actions">
+          {isSpeaking ? (
+            <span className="console-speaking-indicator">Speaking…</span>
+          ) : (
+            <button
+              className="console-speak-btn"
+              type="button"
+              onClick={() => onSpeak(interaction)}
+              title="Speak this response using local TTS"
+            >
+              ▶ Speak
+            </button>
           )}
         </div>
       )}

@@ -273,7 +273,16 @@ export type AuditEventType =
   | "voice_transcription_completed"
   | "voice_transcription_failed"
   | "voice_transcript_submitted"
-  | "voice_transcript_discarded";
+  | "voice_transcript_discarded"
+  | "tts_status_checked"
+  | "tts_test_started"
+  | "tts_test_completed"
+  | "tts_test_failed"
+  | "tts_speech_started"
+  | "tts_speech_completed"
+  | "tts_speech_stopped"
+  | "tts_speech_failed"
+  | "tts_auto_speak_blocked";
 
 export interface AuditEvent {
   id: string;
@@ -329,6 +338,14 @@ export interface LisaSettings {
   sttEngineLabel?: string;
   sttModelPath: string;
   sttModelLastTestedAt?: string;
+  // Voice output (TTS) — Phase 3E
+  voiceOutputEnabled: boolean;
+  voiceOutputAutoSpeak: boolean;
+  voiceOutputProvider: "windows" | "piper" | "none";
+  voiceOutputVoiceId?: string;
+  voiceOutputRate?: number;
+  voiceOutputVolume?: number;
+  voiceOutputSuppressInPrivacyModes: boolean;
 }
 
 export const DEFAULT_SETTINGS: LisaSettings = {
@@ -350,6 +367,11 @@ export const DEFAULT_SETTINGS: LisaSettings = {
   sttEngineStatus: "not_configured",
   sttEngineLabel: "Not configured",
   sttModelPath: "",
+  // Voice output defaults — conservative: disabled, no auto-speak, suppress in sensitive modes
+  voiceOutputEnabled: false,
+  voiceOutputAutoSpeak: false,
+  voiceOutputProvider: "windows",
+  voiceOutputSuppressInPrivacyModes: true,
 };
 
 // ─── Command Router ───────────────────────────────────────────────────────────
@@ -372,6 +394,13 @@ export type CommandIntent =
   | "request_tool"
   | "approve_tool_request"
   | "reject_tool_request"
+  | "tts_test_voice"
+  | "tts_stop_speaking"
+  | "tts_enable"
+  | "tts_disable"
+  | "tts_auto_speak_on"
+  | "tts_auto_speak_off"
+  | "tts_speak_again"
   | "unknown";
 
 export interface CommandRouteResult {
@@ -404,6 +433,7 @@ export interface LisaInteraction {
 
 export type VoiceStatus = "idle" | "recording" | "transcribing" | "preview" | "error" | "no_transcript";
 export type SttEngineStatus = "not_configured" | "ready" | "error";
+export type TtsUiStatus = "idle" | "checking" | "available" | "unavailable" | "speaking" | "error";
 
 export const INTERACTION_CAP = 25;
 export const CONVERSATION_HISTORY_CAP = 50;

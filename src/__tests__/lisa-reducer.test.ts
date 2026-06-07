@@ -757,3 +757,64 @@ describe("Phase 3A — EMERGENCY_STOP clears voice state", () => {
     expect(state.voiceError).toBeNull();
   });
 });
+
+describe("Phase 3E — TTS state actions", () => {
+  it("SET_TTS_STATUS sets ttsUiStatus", () => {
+    const state = lisaReducer(initialState, { type: "SET_TTS_STATUS", payload: { status: "available", provider: "windows_sapi" } });
+    expect(state.ttsUiStatus).toBe("available");
+    expect(state.ttsProvider).toBe("windows_sapi");
+  });
+
+  it("SET_TTS_STATUS sets error field", () => {
+    const state = lisaReducer(initialState, { type: "SET_TTS_STATUS", payload: { status: "error", error: "Engine not found" } });
+    expect(state.ttsUiStatus).toBe("error");
+    expect(state.ttsError).toBe("Engine not found");
+  });
+
+  it("SET_TTS_SPEAKING with interactionId transitions orbState to speaking", () => {
+    const state = lisaReducer(initialState, { type: "SET_TTS_SPEAKING", payload: { interactionId: "ix-1" } });
+    expect(state.ttsSpeakingInteractionId).toBe("ix-1");
+    expect(state.orbState).toBe("speaking");
+  });
+
+  it("SET_TTS_SPEAKING with null clears speaking state and restores orbState", () => {
+    let state = lisaReducer(initialState, { type: "SET_TTS_SPEAKING", payload: { interactionId: "ix-1" } });
+    expect(state.orbState).toBe("speaking");
+    state = lisaReducer(state, { type: "SET_TTS_SPEAKING", payload: { interactionId: null } });
+    expect(state.ttsSpeakingInteractionId).toBeNull();
+    expect(state.orbState).toBe("idle");
+  });
+
+  it("CLEAR_TTS_STATE resets tts fields to idle", () => {
+    let state = lisaReducer(initialState, { type: "SET_TTS_SPEAKING", payload: { interactionId: "ix-1" } });
+    state = lisaReducer(state, { type: "CLEAR_TTS_STATE" });
+    expect(state.ttsUiStatus).toBe("idle");
+    expect(state.ttsSpeakingInteractionId).toBeNull();
+    expect(state.ttsError).toBeNull();
+  });
+
+  it("MARK_INTERACTION_SPOKEN adds id to spokenInteractionIds", () => {
+    const state = lisaReducer(initialState, { type: "MARK_INTERACTION_SPOKEN", payload: "ix-abc" });
+    expect(state.spokenInteractionIds).toContain("ix-abc");
+  });
+
+  it("MARK_INTERACTION_SPOKEN is idempotent — no duplicates", () => {
+    let state = lisaReducer(initialState, { type: "MARK_INTERACTION_SPOKEN", payload: "ix-abc" });
+    state = lisaReducer(state, { type: "MARK_INTERACTION_SPOKEN", payload: "ix-abc" });
+    expect(state.spokenInteractionIds.filter((id) => id === "ix-abc").length).toBe(1);
+  });
+
+  it("EMERGENCY_STOP clears ttsUiStatus and ttsSpeakingInteractionId", () => {
+    let state = lisaReducer(initialState, { type: "SET_TTS_SPEAKING", payload: { interactionId: "ix-1" } });
+    state = lisaReducer(state, { type: "EMERGENCY_STOP" });
+    expect(state.ttsUiStatus).toBe("idle");
+    expect(state.ttsSpeakingInteractionId).toBeNull();
+    expect(state.orbState).toBe("emergency_stopped");
+  });
+
+  it("EMERGENCY_STOP does NOT clear spokenInteractionIds", () => {
+    let state = lisaReducer(initialState, { type: "MARK_INTERACTION_SPOKEN", payload: "ix-1" });
+    state = lisaReducer(state, { type: "EMERGENCY_STOP" });
+    expect(state.spokenInteractionIds).toContain("ix-1");
+  });
+});
