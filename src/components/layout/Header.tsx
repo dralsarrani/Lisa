@@ -44,7 +44,7 @@ export const Header: React.FC<HeaderProps> = ({ orbState, activeMode, onEmergenc
           <div className="header-logo-orb" />
           <span className="header-name">LISA</span>
         </div>
-        <span className="header-subtitle">AI Operating Companion · Phase 0</span>
+        <span className="header-subtitle">AI Operating Companion</span>
       </div>
 
       {/* Center: Status */}

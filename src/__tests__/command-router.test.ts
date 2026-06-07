@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { routeCommand, getDesktopActionGuardMessage, getVoiceCapabilityMessage, getScreenCapabilityMessage } from "../core/command-router";
+import { routeCommand, getDesktopActionGuardMessage, getVoiceCapabilityMessage, getScreenCapabilityMessage, formatScreenContextResponse } from "../core/command-router";
 
 describe("routeCommand — emergency_stop", () => {
   it("routes 'emergency stop'", () => {
@@ -1085,5 +1085,101 @@ describe("routeCommand — TTS voice output commands (Phase 3E)", () => {
     for (const cmd of commands) {
       expect(routeCommand(cmd).confidence).toBe("high");
     }
+  });
+});
+
+describe("formatScreenContextResponse — no screen context (Phase 4A grounding)", () => {
+  it("returns no-context message when status is idle", () => {
+    const msg = formatScreenContextResponse({ screenStatus: "idle" });
+    expect(msg).toContain("I do not have screen context yet");
+  });
+
+  it("returns no-context message when status is capturing", () => {
+    const msg = formatScreenContextResponse({ screenStatus: "capturing" });
+    expect(msg).toContain("I do not have screen context yet");
+  });
+
+  it("returns no-context message when status is error", () => {
+    const msg = formatScreenContextResponse({ screenStatus: "error" });
+    expect(msg).toContain("I do not have screen context yet");
+  });
+
+  it("returns no-context message when available but width/height missing", () => {
+    const msg = formatScreenContextResponse({ screenStatus: "available" });
+    expect(msg).toContain("I do not have screen context yet");
+  });
+
+  it("does not invent fake resolution in no-context response", () => {
+    const msg = formatScreenContextResponse({ screenStatus: "idle" });
+    expect(msg).not.toMatch(/1920|1080|2023|provider=Windows/);
+  });
+
+  it("mentions capture command in no-context response", () => {
+    const msg = formatScreenContextResponse({ screenStatus: "idle" });
+    expect(msg).toContain("capture screen");
+  });
+});
+
+describe("formatScreenContextResponse — with screen context (Phase 4A grounding)", () => {
+  const baseState = {
+    screenStatus: "available" as const,
+    screenWidth: 1280,
+    screenHeight: 720,
+    screenProvider: "windows_capture",
+    screenCapturedAt: new Date("2026-06-07T17:33:09").getTime(),
+  };
+
+  it("returns grounded response with actual resolution", () => {
+    const msg = formatScreenContextResponse(baseState);
+    expect(msg).toContain("1280×720");
+  });
+
+  it("returns grounded response with actual provider", () => {
+    const msg = formatScreenContextResponse(baseState);
+    expect(msg).toContain("windows_capture");
+  });
+
+  it("does not invent fake 1920×1080 resolution", () => {
+    const msg = formatScreenContextResponse(baseState);
+    expect(msg).not.toContain("1920");
+    expect(msg).not.toContain("1080");
+  });
+
+  it("does not invent fake provider string", () => {
+    const msg = formatScreenContextResponse(baseState);
+    expect(msg).not.toMatch(/provider=Windows|provider=unknown.*fake/i);
+  });
+
+  it("does not invent fake 2023 timestamp", () => {
+    const msg = formatScreenContextResponse(baseState);
+    expect(msg).not.toContain("2023-02-20");
+  });
+
+  it("states metadata-only limitation — no OCR, no pixels", () => {
+    const msg = formatScreenContextResponse(baseState);
+    expect(msg).toContain("OCR");
+    expect(msg).toContain("metadata");
+  });
+
+  it("states Phase 4A limitation accurately", () => {
+    const msg = formatScreenContextResponse(baseState);
+    expect(msg).toContain("Phase 4A");
+  });
+
+  it("states cannot read text on screen", () => {
+    const msg = formatScreenContextResponse(baseState);
+    expect(msg).toContain("cannot read text");
+  });
+
+  it("uses different provider when state says different provider", () => {
+    const msg = formatScreenContextResponse({ ...baseState, screenProvider: "test_provider" });
+    expect(msg).toContain("test_provider");
+    expect(msg).not.toContain("windows_capture");
+  });
+
+  it("uses different resolution when state says different resolution", () => {
+    const msg = formatScreenContextResponse({ ...baseState, screenWidth: 3840, screenHeight: 2160 });
+    expect(msg).toContain("3840×2160");
+    expect(msg).not.toContain("1280");
   });
 });

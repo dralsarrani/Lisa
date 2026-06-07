@@ -1,4 +1,4 @@
-import type { CommandIntent, CommandRouteResult, LisaModeId } from "./types";
+import type { CommandIntent, CommandRouteResult, LisaModeId, ScreenStatus } from "./types";
 
 // ─── Mode name → ID mappings ──────────────────────────────────────────────────
 
@@ -468,6 +468,35 @@ export function getScreenCapabilityMessage(raw: string): string | null {
     }
   }
   return null;
+}
+
+// ─── Screen context formatter ─────────────────────────────────────────────────
+//
+// Pure helper: returns a grounded answer from actual reducer state.
+// Used by CommandInput for deterministic screen_what_can_you_see — no LLM involved.
+
+export function formatScreenContextResponse(screenState: {
+  screenStatus: ScreenStatus;
+  screenCapturedAt?: number;
+  screenWidth?: number;
+  screenHeight?: number;
+  screenProvider?: string;
+}): string {
+  const { screenStatus, screenCapturedAt, screenWidth, screenHeight, screenProvider } = screenState;
+  if (screenStatus !== "available" || screenWidth === undefined || screenHeight === undefined) {
+    return "I do not have screen context yet. Use 'capture screen' or the Screen Awareness button to capture metadata manually.";
+  }
+  const resolution = `${screenWidth}×${screenHeight}`;
+  const provider = screenProvider ?? "unknown";
+  const capturedAt = screenCapturedAt ? new Date(screenCapturedAt).toLocaleTimeString() : "unknown";
+  return [
+    "I have manual screen context from the latest capture:",
+    `- Resolution: ${resolution}`,
+    `- Provider: ${provider}`,
+    `- Captured: ${capturedAt}`,
+    "",
+    "I only have metadata in Phase 4A. I cannot read text on the screen, inspect pixels, perform OCR, or control the desktop yet.",
+  ].join("\n");
 }
 
 // ─── Desktop-action guard ─────────────────────────────────────────────────────

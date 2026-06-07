@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useLisa } from "../../app/useLisa";
-import { routeCommand, getDesktopActionGuardMessage, getVoiceCapabilityMessage } from "../../core/command-router";
+import { routeCommand, getDesktopActionGuardMessage, getVoiceCapabilityMessage, getScreenCapabilityMessage, formatScreenContextResponse } from "../../core/command-router";
 import { createTestMission, applyApprovalDecision } from "../../core/mission-store";
 import { createAuditEvent } from "../../core/audit-store";
 import { getModeDisplayName } from "../../core/mode-store";
@@ -1093,6 +1093,145 @@ export const CommandInput: React.FC = () => {
         break;
       }
 
+      case "capture_screen": {
+        if (!state.settings.screenAwarenessEnabled) {
+          const disabledMsg = "Screen awareness is disabled. Enable it in Settings → Screen Awareness first.";
+          dispatch({ type: "SET_COMMAND_RESPONSE", payload: disabledMsg });
+          dispatch({
+            type: "ADD_INTERACTION",
+            payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: disabledMsg, createdAt: now(), completedAt: now() },
+          });
+          addAudit({ eventType: "screen_capture_failed", source: "command_input", summary: "Screen capture blocked — screen awareness disabled.", severity: "warning" });
+          break;
+        }
+        dispatch({ type: "SET_SCREEN_STATUS", payload: { status: "capturing" } });
+        addAudit({ eventType: "screen_capture_started", source: "command_input", summary: "Screen capture initiated by user command.", severity: "info" });
+        const isTauriScreen = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+        if (!isTauriScreen) {
+          const noTauriMsg = "Screen capture is only available in the desktop app (Tauri).";
+          dispatch({ type: "SET_SCREEN_STATUS", payload: { status: "error", error: noTauriMsg } });
+          dispatch({ type: "SET_COMMAND_RESPONSE", payload: noTauriMsg });
+          dispatch({
+            type: "ADD_INTERACTION",
+            payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: noTauriMsg, createdAt: now(), completedAt: now() },
+          });
+          break;
+        }
+        try {
+          const { invoke } = await import("@tauri-apps/api/core");
+          const capture = await invoke<{
+            accepted: boolean;
+            capture_id: string;
+            width?: number;
+            height?: number;
+            captured_at: number;
+            provider: string;
+            error?: string;
+          }>("capture_screen");
+          if (capture.accepted && capture.width !== undefined && capture.height !== undefined) {
+            dispatch({
+              type: "SET_SCREEN_STATUS",
+              payload: {
+                status: "available",
+                captureId: capture.capture_id,
+                capturedAt: capture.captured_at,
+                width: capture.width,
+                height: capture.height,
+                provider: capture.provider,
+              },
+            });
+            const captureMsg = `Screen context captured: ${capture.width}×${capture.height} (${capture.provider}).`;
+            dispatch({ type: "SET_COMMAND_RESPONSE", payload: captureMsg });
+            dispatch({
+              type: "ADD_INTERACTION",
+              payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: captureMsg, createdAt: now(), completedAt: now() },
+            });
+            addAudit({ eventType: "screen_capture_completed", source: "command_input", summary: captureMsg, severity: "info" });
+          } else {
+            const errMsg = capture.error ?? "Screen capture not accepted.";
+            dispatch({ type: "SET_SCREEN_STATUS", payload: { status: "error", error: errMsg } });
+            const failMsg = `Screen capture failed: ${errMsg}`;
+            dispatch({ type: "SET_COMMAND_RESPONSE", payload: failMsg });
+            dispatch({
+              type: "ADD_INTERACTION",
+              payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: failMsg, createdAt: now(), completedAt: now() },
+            });
+            addAudit({ eventType: "screen_capture_failed", source: "command_input", summary: failMsg, severity: "error" });
+          }
+        } catch (e: unknown) {
+          const errMsg = e instanceof Error ? e.message : String(e);
+          dispatch({ type: "SET_SCREEN_STATUS", payload: { status: "error", error: errMsg } });
+          const failMsg = `Screen capture failed: ${errMsg}`;
+          dispatch({ type: "SET_COMMAND_RESPONSE", payload: failMsg });
+          dispatch({
+            type: "ADD_INTERACTION",
+            payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: failMsg, createdAt: now(), completedAt: now() },
+          });
+          addAudit({ eventType: "screen_capture_failed", source: "command_input", summary: `Screen capture error: ${errMsg}`, severity: "error" });
+        }
+        break;
+      }
+
+      case "screen_what_can_you_see": {
+        const screenResponse = formatScreenContextResponse({
+          screenStatus: state.screenStatus,
+          screenCapturedAt: state.screenCapturedAt,
+          screenWidth: state.screenWidth,
+          screenHeight: state.screenHeight,
+          screenProvider: state.screenProvider,
+        });
+        dispatch({ type: "SET_COMMAND_RESPONSE", payload: screenResponse });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: screenResponse, createdAt: now(), completedAt: now() },
+        });
+        addAudit({
+          eventType: "command_routed",
+          source: "command_input",
+          summary: "Screen context query answered deterministically.",
+          details: `screen_status=${state.screenStatus}`,
+          severity: "info",
+        });
+        break;
+      }
+
+      case "clear_screen_context": {
+        const isTauriClear = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+        if (isTauriClear) {
+          const { invoke } = await import("@tauri-apps/api/core");
+          await invoke("clear_screen_capture").catch(() => {});
+        }
+        dispatch({ type: "CLEAR_SCREEN_CONTEXT" });
+        const clearMsg = "Screen context cleared.";
+        dispatch({ type: "SET_COMMAND_RESPONSE", payload: clearMsg });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: clearMsg, createdAt: now(), completedAt: now() },
+        });
+        addAudit({ eventType: "screen_context_cleared", source: "command_input", summary: "Screen context cleared by user command.", severity: "info" });
+        break;
+      }
+
+      case "screen_awareness_enable": {
+        dispatch({ type: "SET_SETTINGS", payload: { screenAwarenessEnabled: true } });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: route.response ?? "Screen awareness enabled.", createdAt: now(), completedAt: now() },
+        });
+        addAudit({ eventType: "screen_awareness_enabled", source: "command_input", summary: "Screen awareness enabled by user command.", severity: "info" });
+        break;
+      }
+
+      case "screen_awareness_disable": {
+        dispatch({ type: "SET_SETTINGS", payload: { screenAwarenessEnabled: false } });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: route.response ?? "Screen awareness disabled.", createdAt: now(), completedAt: now() },
+        });
+        addAudit({ eventType: "screen_awareness_disabled", source: "command_input", summary: "Screen awareness disabled by user command.", severity: "info" });
+        break;
+      }
+
       default: {
         // Guard: block desktop-action commands before they reach the LLM.
         const guardMsg = getDesktopActionGuardMessage(raw);
@@ -1131,6 +1270,27 @@ export const CommandInput: React.FC = () => {
             eventType: "command_routed",
             source: "command_input",
             summary: "Voice capability question answered deterministically.",
+            details: `input_chars=${raw.length}`,
+            severity: "info",
+          });
+          break;
+        }
+
+        // Guard: answer screen capability questions deterministically before LLM.
+        const screenCapMsg = getScreenCapabilityMessage(raw);
+        if (screenCapMsg) {
+          dispatch({ type: "SET_COMMAND_RESPONSE", payload: screenCapMsg });
+          dispatch({
+            type: "ADD_INTERACTION",
+            payload: {
+              id: makeId(), kind: "command", prompt: raw, status: "complete",
+              response: screenCapMsg, createdAt: now(), completedAt: now(),
+            },
+          });
+          addAudit({
+            eventType: "command_routed",
+            source: "command_input",
+            summary: "Screen capability question answered deterministically.",
             details: `input_chars=${raw.length}`,
             severity: "info",
           });
