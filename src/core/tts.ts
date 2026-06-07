@@ -107,6 +107,12 @@ export interface SpeakTextResult {
   text_chars: number;
 }
 
+export function buildTtsStatusLabel(available: boolean, provider: string, speaking: boolean): string {
+  if (!available) return `Unavailable — ${provider}`;
+  if (speaking) return `Speaking — ${provider}`;
+  return `Available — ${provider}`;
+}
+
 export function buildSpeakTextInvokeArgs(input: {
   text: string;
   source: string;

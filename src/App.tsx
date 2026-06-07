@@ -32,6 +32,7 @@ function App() {
   const { state, dispatch, addAudit } = useLisa();
   const [activeTab, setActiveTab] = useState<TabId>("console");
   const prevInteractionsLengthRef = useRef(0);
+  const speakTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const pendingApprovals = state.approvals.filter((a) => a.status === "pending");
   const pendingToolApprovals = state.toolApprovals.filter((a) => a.decision === null);
@@ -173,6 +174,10 @@ function App() {
   }, [state.toolRequests, dispatch]);
 
   const handleStopSpeaking = useCallback(async () => {
+    if (speakTimeoutRef.current) {
+      clearTimeout(speakTimeoutRef.current);
+      speakTimeoutRef.current = null;
+    }
     const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
     if (isTauri) {
       const { invoke } = await import("@tauri-apps/api/core");
@@ -208,16 +213,25 @@ function App() {
     try {
       const { invoke } = await import("@tauri-apps/api/core");
       const result = await invoke<SpeakTextResult>("speak_text", buildSpeakTextInvokeArgs({ text: interaction.response, source: "console_manual_speak" }));
-      dispatch({ type: "CLEAR_TTS_STATE" });
-      addAudit({
-        eventType: result.accepted ? "tts_speech_completed" : "tts_speech_failed",
-        source: "console_speak_button",
-        summary: result.accepted ? "TTS speech completed." : "TTS speech failed.",
-        details: result.accepted
-          ? buildTtsSpeechAuditDetails({ interactionId: interaction.id, charCount: interaction.response.length, provider: result.provider, source: "console_manual_speak" })
-          : `provider=${result.provider}`,
-        severity: result.accepted ? "info" : "error",
-      });
+      if (result.accepted && result.speaking) {
+        // Process confirmed running — keep speaking state.
+        // Auto-expire as fallback: min 3 s, max 60 s, ~80 ms per char.
+        const expireMs = Math.max(3000, Math.min(60_000, interaction.response.length * 80));
+        if (speakTimeoutRef.current) clearTimeout(speakTimeoutRef.current);
+        speakTimeoutRef.current = setTimeout(() => {
+          dispatch({ type: "CLEAR_TTS_STATE" });
+          speakTimeoutRef.current = null;
+        }, expireMs);
+      } else {
+        dispatch({ type: "CLEAR_TTS_STATE" });
+        addAudit({
+          eventType: "tts_speech_failed",
+          source: "console_speak_button",
+          summary: "TTS speech not accepted.",
+          details: `provider=${result.provider}`,
+          severity: "error",
+        });
+      }
     } catch (err) {
       dispatch({ type: "CLEAR_TTS_STATE" });
       addAudit({

@@ -122,6 +122,8 @@ const SAPI_SPEAK_SCRIPT: &str = "\
 $text = $input | Out-String; \
 Add-Type -AssemblyName System.Speech; \
 $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; \
+$s.Volume = 100; \
+$s.Rate = 0; \
 $s.Speak($text.Trim()); \
 $s.Dispose();";
 
@@ -162,11 +164,20 @@ impl TtsManager {
     pub fn status(&self) -> TtsStatus {
         #[cfg(all(windows, feature = "tts-sapi"))]
         {
-            let speaking = self
-                .child
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .is_some();
+            let speaking = {
+                let mut guard = self.child.lock().unwrap_or_else(|e| e.into_inner());
+                // try_wait reaps a child that finished naturally (speech ended).
+                // Without this, is_some() would permanently report speaking=true
+                // after speech finishes.
+                let still_running = match guard.as_mut() {
+                    Some(child) => matches!(child.try_wait(), Ok(None)),
+                    None => false,
+                };
+                if !still_running {
+                    *guard = None;
+                }
+                still_running
+            };
             return TtsStatus {
                 available: true,
                 provider: TTS_PROVIDER_WINDOWS_SAPI.to_string(),
@@ -234,16 +245,33 @@ impl TtsManager {
                 // stdin dropped here, pipe closed.
             }
 
-            // Store the running child for future stop/status queries.
-            let mut guard = self.child.lock().unwrap_or_else(|e| e.into_inner());
-            *guard = Some(child);
+            // Brief pause so a startup failure (wrong PowerShell path, policy
+            // block, assembly load error) surfaces as an immediate process exit
+            // rather than being silently treated as "speaking: true".
+            std::thread::sleep(std::time::Duration::from_millis(200));
 
-            return Ok(SpeakTextResult {
-                accepted: true,
-                provider,
-                speaking: true,
-                text_chars: char_count,
-            });
+            match child.try_wait() {
+                Ok(Some(_status)) => {
+                    // Process exited before speech could start.
+                    return Err(
+                        "Local TTS process exited before speech started.".to_string(),
+                    );
+                }
+                Ok(None) => {
+                    // Still running — store child for stop/status queries.
+                    let mut guard = self.child.lock().unwrap_or_else(|e| e.into_inner());
+                    *guard = Some(child);
+                    return Ok(SpeakTextResult {
+                        accepted: true,
+                        provider,
+                        speaking: true,
+                        text_chars: char_count,
+                    });
+                }
+                Err(e) => {
+                    return Err(format!("Failed to monitor TTS process: {e}"));
+                }
+            }
         }
 
         #[cfg(all(not(windows), feature = "tts-sapi"))]
@@ -547,6 +575,50 @@ mod tests {
                 "script must be a fixed constant — no Rust format placeholders"
             );
         }
+    }
+
+    #[test]
+    fn sapi_script_sets_volume_100() {
+        #[cfg(all(windows, feature = "tts-sapi"))]
+        assert!(
+            SAPI_SPEAK_SCRIPT.contains("Volume = 100"),
+            "script must set Volume = 100 so audio is audible"
+        );
+    }
+
+    #[test]
+    fn sapi_script_sets_rate_0() {
+        #[cfg(all(windows, feature = "tts-sapi"))]
+        assert!(
+            SAPI_SPEAK_SCRIPT.contains("Rate = 0"),
+            "script must set Rate = 0 for natural speech speed"
+        );
+    }
+
+    #[test]
+    fn sapi_script_uses_blocking_speak_not_speak_async() {
+        #[cfg(all(windows, feature = "tts-sapi"))]
+        {
+            // Synchronous Speak() is required so the process stays alive while
+            // speaking and the try_wait check correctly detects early exit.
+            assert!(
+                SAPI_SPEAK_SCRIPT.contains(".Speak("),
+                "script must use synchronous Speak(), not SpeakAsync()"
+            );
+            assert!(
+                !SAPI_SPEAK_SCRIPT.contains("SpeakAsync"),
+                "script must not use SpeakAsync — process would exit immediately"
+            );
+        }
+    }
+
+    #[test]
+    fn early_exit_error_does_not_contain_spoken_text() {
+        // The error returned when a process exits early must never echo the text.
+        let early_exit_err = "Local TTS process exited before speech started.";
+        assert!(!early_exit_err.contains("Hello"));
+        assert!(!early_exit_err.contains("Lisa"));
+        assert!(!early_exit_err.is_empty());
     }
 
     // ── Serialization ─────────────────────────────────────────────────────────

@@ -6,6 +6,7 @@ import {
   buildTtsSpeechAuditDetails,
   buildTtsTestAuditDetails,
   buildSpeakTextInvokeArgs,
+  buildTtsStatusLabel,
 } from "../core/tts";
 import type { LisaInteraction, LisaSettings } from "../core/types";
 
@@ -229,5 +230,61 @@ describe("buildSpeakTextInvokeArgs — wraps payload in `request` key", () => {
   it("does not include a top-level `text` key (old broken shape)", () => {
     const args = buildSpeakTextInvokeArgs({ text: "Hello", source: "test" }) as Record<string, unknown>;
     expect(args["text"]).toBeUndefined();
+  });
+});
+
+// ─── buildTtsStatusLabel ──────────────────────────────────────────────────────
+
+describe("buildTtsStatusLabel — maps backend fields to visible label", () => {
+  it("unavailable provider shows Unavailable prefix", () => {
+    expect(buildTtsStatusLabel(false, "not_compiled", false)).toBe("Unavailable — not_compiled");
+  });
+
+  it("available not-speaking shows Available prefix", () => {
+    expect(buildTtsStatusLabel(true, "windows_sapi", false)).toBe("Available — windows_sapi");
+  });
+
+  it("available and speaking shows Speaking prefix", () => {
+    expect(buildTtsStatusLabel(true, "windows_sapi", true)).toBe("Speaking — windows_sapi");
+  });
+
+  it("unavailable even when speaking=true shows Unavailable (available wins)", () => {
+    expect(buildTtsStatusLabel(false, "unsupported", true)).toBe("Unavailable — unsupported");
+  });
+
+  it("includes provider name verbatim", () => {
+    const label = buildTtsStatusLabel(true, "windows_sapi", false);
+    expect(label).toContain("windows_sapi");
+  });
+});
+
+// ─── Phase 3F lifecycle semantics — status wording is not 'completed' ────────
+
+describe("Phase 3F — TTS test result must say accepted/started not completed", () => {
+  it("buildTtsTestAuditDetails source is test_voice (not test_completed)", () => {
+    const details = buildTtsTestAuditDetails({ charCount: 17, provider: "windows_sapi" });
+    expect(details).toContain("source=test_voice");
+    expect(details).not.toContain("completed");
+  });
+
+  it("buildTtsSpeechAuditDetails does not contain spoken text", () => {
+    const details = buildTtsSpeechAuditDetails({
+      interactionId: "ix-1",
+      charCount: 42,
+      provider: "windows_sapi",
+      source: "console_manual_speak",
+    });
+    expect(details).not.toContain("Hello");
+    expect(details).not.toContain("Lisa");
+  });
+
+  it("buildTtsSpeechAuditDetails contains charCount not text content", () => {
+    const details = buildTtsSpeechAuditDetails({
+      interactionId: "ix-1",
+      charCount: 42,
+      provider: "windows_sapi",
+      source: "console_manual_speak",
+    });
+    expect(details).toContain("chars=42");
   });
 });

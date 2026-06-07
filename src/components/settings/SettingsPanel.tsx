@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import type { LisaSettings, LisaModeId } from "../../core/types";
-import { buildSpeakTextInvokeArgs, SpeakTextResult } from "../../core/tts";
+import { buildSpeakTextInvokeArgs, SpeakTextResult, buildTtsStatusLabel } from "../../core/tts";
 import { CONVERSATION_HISTORY_CAP, MEMORY_NOTES_CAP, MEMORY_NOTE_CHAR_LIMIT } from "../../core/types";
 import { LISA_MODES } from "../../core/mode-store";
 import { useLisa } from "../../app/useLisa";
@@ -260,14 +260,15 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
     dispatch({ type: "SET_TTS_STATUS", payload: { status: "checking" } });
     try {
       const { invoke } = await import("@tauri-apps/api/core");
-      const result = await invoke<{ available: boolean; provider: string; label: string; error?: string }>("get_tts_status");
-      setTtsStatusInfo(result);
-      dispatch({ type: "SET_TTS_STATUS", payload: { status: result.available ? "available" : "unavailable", provider: result.provider } });
+      const result = await invoke<{ available: boolean; provider: string; speaking: boolean; error?: string }>("get_tts_status");
+      const label = buildTtsStatusLabel(result.available, result.provider, result.speaking);
+      setTtsStatusInfo({ available: result.available, provider: result.provider, label });
+      dispatch({ type: "SET_TTS_STATUS", payload: { status: result.available ? (result.speaking ? "speaking" : "available") : "unavailable", provider: result.provider } });
       addAudit({
         eventType: "tts_status_checked",
         source: "settings_panel",
-        summary: `TTS status checked — ${result.label}`,
-        details: `provider=${result.provider} available=${result.available}`,
+        summary: `TTS status checked — ${label}`,
+        details: `provider=${result.provider} available=${result.available} speaking=${result.speaking}`,
         severity: "info",
       });
     } catch (err) {
@@ -298,9 +299,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
       const result = await invoke<SpeakTextResult>("speak_text", buildSpeakTextInvokeArgs({ text: testPhrase, source: "settings_test_voice" }));
       setTtsTestResult({ accepted: result.accepted });
       addAudit({
-        eventType: result.accepted ? "tts_test_completed" : "tts_test_failed",
+        eventType: result.accepted ? "tts_test_started" : "tts_test_failed",
         source: "settings_panel",
-        summary: result.accepted ? "TTS test completed." : "TTS test failed.",
+        summary: result.accepted ? "TTS test started." : "TTS test failed.",
         details: result.accepted ? `chars=${testPhrase.length} provider=${result.provider} source=test_voice` : `provider=${result.provider}`,
         severity: result.accepted ? "info" : "error",
       });
@@ -923,7 +924,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
 
         {ttsTestResult && (
           <div className={`ai-test-result ${ttsTestResult.accepted ? "ai-test-result-pass" : "ai-test-result-fail"}`}>
-            {ttsTestResult.accepted ? "✓ Voice test completed." : `✗ ${ttsTestResult.error ?? "Test failed"}`}
+            {ttsTestResult.accepted ? "✓ Voice request accepted." : `✗ ${ttsTestResult.error ?? "Test failed"}`}
           </div>
         )}
 

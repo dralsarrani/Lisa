@@ -993,13 +993,25 @@ export const CommandInput: React.FC = () => {
             const { invoke } = await import("@tauri-apps/api/core");
             try {
               const speakResult = await invoke<SpeakTextResult>("speak_text", buildSpeakTextInvokeArgs({ text: lastEligible.response, source: "command_speak_again" }));
-              dispatch({ type: "CLEAR_TTS_STATE" });
-              addAudit({
-                eventType: speakResult.accepted ? "tts_speech_completed" : "tts_speech_failed",
-                source: "command_input",
-                summary: speakResult.accepted ? "TTS speak-again completed." : "TTS speak-again failed.",
-                severity: speakResult.accepted ? "info" : "error",
-              });
+              if (speakResult.accepted && speakResult.speaking) {
+                // Process confirmed running — keep speaking state, auto-expire as fallback.
+                const expireMs = Math.max(3000, Math.min(60_000, lastEligible.response.length * 80));
+                setTimeout(() => dispatch({ type: "CLEAR_TTS_STATE" }), expireMs);
+                addAudit({
+                  eventType: "tts_speech_started",
+                  source: "command_input",
+                  summary: "TTS speak-again started.",
+                  severity: "info",
+                });
+              } else {
+                dispatch({ type: "CLEAR_TTS_STATE" });
+                addAudit({
+                  eventType: "tts_speech_failed",
+                  source: "command_input",
+                  summary: "TTS speak-again not accepted.",
+                  severity: "error",
+                });
+              }
             } catch (e: unknown) {
               dispatch({ type: "CLEAR_TTS_STATE" });
               addAudit({
