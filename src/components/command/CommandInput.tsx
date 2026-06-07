@@ -1147,6 +1147,7 @@ export const CommandInput: React.FC = () => {
             captured_at: number;
             provider: string;
             error?: string;
+            file_path?: string;
           }>("capture_screen");
           if (capture.accepted && capture.width !== undefined && capture.height !== undefined) {
             dispatch({
@@ -1158,6 +1159,7 @@ export const CommandInput: React.FC = () => {
                 width: capture.width,
                 height: capture.height,
                 provider: capture.provider,
+                filePath: capture.file_path,
               },
             });
             const captureMsg = `Screen context captured: ${capture.width}×${capture.height} (${capture.provider}).`;
@@ -1199,6 +1201,7 @@ export const CommandInput: React.FC = () => {
           screenWidth: state.screenWidth,
           screenHeight: state.screenHeight,
           screenProvider: state.screenProvider,
+          screenFilePath: state.screenFilePath,
         });
         dispatch({ type: "SET_COMMAND_RESPONSE", payload: screenResponse });
         dispatch({

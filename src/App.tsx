@@ -383,6 +383,7 @@ function App() {
                   screenWidth={state.screenWidth}
                   screenHeight={state.screenHeight}
                   screenProvider={state.screenProvider}
+                  screenFilePath={state.screenFilePath}
                 />
               )}
               {activeTab === "missions" && (

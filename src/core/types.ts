@@ -362,11 +362,12 @@ export interface LisaSettings {
   voiceNoTranscriptAction: "clarify" | "silent";
   voiceAutoSpeakReplies: boolean;
   voiceConversationSuppressInPrivacyModes: boolean;
-  // Screen awareness — Phase 4A
+  // Screen awareness — Phase 4A/4B
   screenAwarenessEnabled: boolean;
   screenCaptureProvider: "windows_capture" | "none";
   screenContextEnabledForPrompt: boolean;
   screenSuppressInPrivacyModes: boolean;
+  showScreenPreview: boolean;
 }
 
 export const DEFAULT_SETTINGS: LisaSettings = {
@@ -399,11 +400,12 @@ export const DEFAULT_SETTINGS: LisaSettings = {
   voiceNoTranscriptAction: "clarify",
   voiceAutoSpeakReplies: true,
   voiceConversationSuppressInPrivacyModes: true,
-  // Screen awareness defaults — disabled, suppress in sensitive modes, no prompt injection
+  // Screen awareness defaults — disabled, suppress in sensitive modes, no prompt injection, preview on
   screenAwarenessEnabled: false,
   screenCaptureProvider: "none",
   screenContextEnabledForPrompt: false,
   screenSuppressInPrivacyModes: true,
+  showScreenPreview: true,
 };
 
 // ─── Command Router ───────────────────────────────────────────────────────────

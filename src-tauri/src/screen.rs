@@ -37,6 +37,10 @@ pub struct ScreenCaptureResult {
     pub captured_at: u64,
     pub provider: String,
     pub error: Option<String>,
+    /// Absolute path to the temp PNG written during capture.
+    /// `None` when capture failed or the screen-capture feature is not compiled.
+    /// Never contains base64, pixels, or OCR data — path only.
+    pub file_path: Option<String>,
 }
 
 // ─── Manager ──────────────────────────────────────────────────────────────────
@@ -189,7 +193,7 @@ pub fn capture_screen(manager: tauri::State<'_, ScreenManager>) -> ScreenCapture
                 *manager
                     .last_capture_path
                     .lock()
-                    .unwrap_or_else(|e| e.into_inner()) = Some(out_path_str);
+                    .unwrap_or_else(|e| e.into_inner()) = Some(out_path_str.clone());
 
                 ScreenCaptureResult {
                     accepted: true,
@@ -199,6 +203,7 @@ pub fn capture_screen(manager: tauri::State<'_, ScreenManager>) -> ScreenCapture
                     captured_at,
                     provider: SCREEN_PROVIDER_WINDOWS.to_string(),
                     error: None,
+                    file_path: Some(out_path_str),
                 }
             }
             Ok(o) => {
@@ -211,6 +216,7 @@ pub fn capture_screen(manager: tauri::State<'_, ScreenManager>) -> ScreenCapture
                     captured_at,
                     provider: SCREEN_PROVIDER_WINDOWS.to_string(),
                     error: Some(format!("Screen capture failed: {}", stderr.trim())),
+                    file_path: None,
                 }
             }
             Err(e) => ScreenCaptureResult {
@@ -221,6 +227,7 @@ pub fn capture_screen(manager: tauri::State<'_, ScreenManager>) -> ScreenCapture
                 captured_at,
                 provider: SCREEN_PROVIDER_WINDOWS.to_string(),
                 error: Some(format!("Failed to launch screen capture: {e}")),
+                file_path: None,
             },
         }
     }
@@ -240,6 +247,7 @@ pub fn capture_screen(manager: tauri::State<'_, ScreenManager>) -> ScreenCapture
             captured_at,
             provider: SCREEN_PROVIDER_UNSUPPORTED.to_string(),
             error: Some("Screen capture is only supported on Windows in this build.".to_string()),
+            file_path: None,
         }
     }
     #[cfg(not(feature = "screen-capture"))]
@@ -261,6 +269,7 @@ pub fn capture_screen(manager: tauri::State<'_, ScreenManager>) -> ScreenCapture
                 "Screen capture not compiled. Build Lisa with --features screen-capture to enable."
                     .to_string(),
             ),
+            file_path: None,
         }
     }
 }
@@ -324,6 +333,7 @@ mod tests {
             captured_at: 1_700_000_000_000,
             provider: "not_compiled".to_string(),
             error: Some("not compiled".to_string()),
+            file_path: None,
         };
         let json = serde_json::to_string(&result).expect("must serialize");
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -333,6 +343,7 @@ mod tests {
         assert!(v["height"].is_null());
         assert_eq!(v["captured_at"], 1_700_000_000_000_u64);
         assert!(v["error"].as_str().unwrap().contains("not compiled"));
+        assert!(v["file_path"].is_null());
     }
 
     #[test]
@@ -345,6 +356,7 @@ mod tests {
             captured_at: 1_700_000_001_000,
             provider: "windows_capture".to_string(),
             error: None,
+            file_path: Some("/tmp/lisa_screen_1700000001000.png".to_string()),
         };
         let json = serde_json::to_string(&result).expect("must serialize");
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -352,6 +364,7 @@ mod tests {
         assert_eq!(v["width"], 1920);
         assert_eq!(v["height"], 1080);
         assert!(v["error"].is_null());
+        assert_eq!(v["file_path"].as_str().unwrap(), "/tmp/lisa_screen_1700000001000.png");
     }
 
     #[test]
@@ -394,6 +407,7 @@ mod tests {
             captured_at: 0,
             provider: "windows_capture".to_string(),
             error: None,
+            file_path: Some("/tmp/lisa_screen_0.png".to_string()),
         };
         let json = serde_json::to_string(&result).expect("must serialize");
         assert!(!json.contains("pixels"), "result must not contain raw pixels field");

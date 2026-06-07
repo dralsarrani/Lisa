@@ -500,22 +500,26 @@ export function formatScreenContextResponse(screenState: {
   screenWidth?: number;
   screenHeight?: number;
   screenProvider?: string;
+  screenFilePath?: string;
 }): string {
-  const { screenStatus, screenCapturedAt, screenWidth, screenHeight, screenProvider } = screenState;
+  const { screenStatus, screenCapturedAt, screenWidth, screenHeight, screenProvider, screenFilePath } = screenState;
   if (screenStatus !== "available" || screenWidth === undefined || screenHeight === undefined) {
     return "I do not have screen context yet. Use 'capture screen' or the Screen Awareness button to capture metadata manually.";
   }
   const resolution = `${screenWidth}×${screenHeight}`;
   const provider = screenProvider ?? "unknown";
   const capturedAt = screenCapturedAt ? new Date(screenCapturedAt).toLocaleTimeString() : "unknown";
-  return [
+  const lines = [
     "I have manual screen context from the latest capture:",
     `- Resolution: ${resolution}`,
     `- Provider: ${provider}`,
     `- Captured: ${capturedAt}`,
-    "",
-    "I only have metadata in Phase 4A. I cannot read text on the screen, inspect pixels, perform OCR, or control the desktop yet.",
-  ].join("\n");
+  ];
+  if (screenFilePath) {
+    lines.push("- Preview: Available in Console (local file · not uploaded · no OCR)");
+  }
+  lines.push("", "I only have metadata in Phase 4B. I cannot read text on the screen, inspect pixels, perform OCR, or control the desktop yet.");
+  return lines.join("\n");
 }
 
 // ─── Desktop-action guard ─────────────────────────────────────────────────────

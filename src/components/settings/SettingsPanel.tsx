@@ -1161,6 +1161,20 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
         {settings.screenAwarenessEnabled && (
           <>
             <div className="settings-toggle-row" style={{ marginTop: "10px" }}>
+              <span className="settings-toggle-label">Show Preview in Console</span>
+              <button
+                className={`settings-toggle ${settings.showScreenPreview ? "settings-toggle-on" : ""}`}
+                onClick={() => dispatch({ type: "SET_SETTINGS", payload: { showScreenPreview: !settings.showScreenPreview } })}
+                aria-pressed={settings.showScreenPreview}
+                title="Show a local screenshot thumbnail in the Console panel after each capture. Preview only — no OCR, not uploaded."
+              >
+                {settings.showScreenPreview ? "ON" : "OFF"}
+              </button>
+            </div>
+            <p className="settings-description" style={{ marginTop: 4, marginBottom: 8 }}>
+              Preview is local only · Not uploaded · No OCR · Temp file deleted on Clear
+            </p>
+            <div className="settings-toggle-row">
               <span className="settings-toggle-label">Include Screen Context in Local AI</span>
               <button
                 className={`settings-toggle ${settings.screenContextEnabledForPrompt ? "settings-toggle-on" : ""}`}

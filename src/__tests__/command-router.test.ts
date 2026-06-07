@@ -1161,9 +1161,9 @@ describe("formatScreenContextResponse — with screen context (Phase 4A groundin
     expect(msg).toContain("metadata");
   });
 
-  it("states Phase 4A limitation accurately", () => {
+  it("states phase limitation accurately", () => {
     const msg = formatScreenContextResponse(baseState);
-    expect(msg).toContain("Phase 4A");
+    expect(msg).toMatch(/Phase 4[AB]/);
   });
 
   it("states cannot read text on screen", () => {

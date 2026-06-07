@@ -67,6 +67,7 @@ export interface LisaState {
   screenHeight?: number;
   screenProvider?: string;
   screenError?: string;
+  screenFilePath?: string;
 }
 
 export const initialState: LisaState = {
@@ -181,6 +182,7 @@ export type LisaAction =
         height?: number;
         provider?: string;
         error?: string;
+        filePath?: string;
       };
     }
   | { type: "CLEAR_SCREEN_CONTEXT" }
@@ -291,6 +293,7 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
         screenHeight: undefined,
         screenProvider: undefined,
         screenError: undefined,
+        screenFilePath: undefined,
       };
     }
 
@@ -682,7 +685,7 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
       };
 
     case "SET_SCREEN_STATUS": {
-      const { status, captureId, capturedAt, width, height, provider, error } = action.payload;
+      const { status, captureId, capturedAt, width, height, provider, error, filePath } = action.payload;
       return {
         ...state,
         screenStatus: status,
@@ -692,6 +695,7 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
         screenHeight: height ?? state.screenHeight,
         screenProvider: provider ?? state.screenProvider,
         screenError: error ?? undefined,
+        screenFilePath: filePath ?? state.screenFilePath,
       };
     }
 
@@ -705,6 +709,7 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
         screenHeight: undefined,
         screenProvider: undefined,
         screenError: undefined,
+        screenFilePath: undefined,
       };
 
     default:

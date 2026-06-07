@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import type { LisaInteraction, LisaSettings, OrbState, ToolResult, ToolRequest, VoiceStatus, TtsUiStatus, ScreenStatus } from "../../core/types";
 import { hasActiveToolRequestForParams } from "../../core/tool-request-utils";
 import { isInteractionSpeakEligible } from "../../core/tts";
@@ -24,6 +25,7 @@ interface ConsolePanelProps {
   screenWidth?: number;
   screenHeight?: number;
   screenProvider?: string;
+  screenFilePath?: string;
 }
 
 export const ConsolePanel: React.FC<ConsolePanelProps> = ({
@@ -43,6 +45,7 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
   screenWidth,
   screenHeight,
   screenProvider,
+  screenFilePath,
 }) => {
   const feedRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -93,8 +96,17 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
             <span className="console-screen-context-label">Provider</span>
             <span className="console-screen-context-value">{screenProvider ?? "unknown"}</span>
           </div>
+          {screenFilePath && settings.showScreenPreview && (
+            <img
+              src={convertFileSrc(screenFilePath)}
+              className="console-screen-preview-img"
+              alt="Screen preview — local only, not uploaded"
+            />
+          )}
           <div className="console-screen-context-note">
-            Metadata only · Local · No OCR · Not uploaded
+            {screenFilePath && settings.showScreenPreview
+              ? "Preview only · Local · No OCR · Not uploaded"
+              : "Metadata only · Local · No OCR · Not uploaded"}
           </div>
         </div>
       )}
