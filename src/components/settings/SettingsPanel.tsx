@@ -58,6 +58,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
   // Screen awareness local state
   const [screenCapturing, setScreenCapturing] = useState(false);
   const [screenCaptureError, setScreenCaptureError] = useState<string | null>(null);
+  // OCR local state
+  const [ocrRunning, setOcrRunning] = useState(false);
+  const [ocrError, setOcrError] = useState<string | null>(null);
 
   useEffect(() => {
     return () => {
@@ -444,6 +447,100 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
       eventType: "screen_context_cleared",
       source: "settings_panel",
       summary: "Screen context cleared.",
+      details: "source=manual_clear",
+      severity: "info",
+    });
+  }
+
+  async function handleRunOcr() {
+    const isInTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    const privacyModes = ["sleep", "privacy", "lockdown"];
+    if (settings.screenOcrSuppressInPrivacyModes && privacyModes.includes(settings.activeMode)) {
+      setOcrError("OCR is suppressed in Sleep, Privacy, and Lockdown modes.");
+      return;
+    }
+    if (!settings.screenOcrEnabled) {
+      setOcrError("Enable OCR / Screen Text Understanding first.");
+      return;
+    }
+    if (state.screenStatus !== "available" || !state.screenFilePath) {
+      setOcrError("Capture the screen first, then run OCR.");
+      return;
+    }
+    setOcrRunning(true);
+    setOcrError(null);
+    dispatch({ type: "SET_SCREEN_OCR_STATUS", payload: { status: "running" } });
+    addAudit({
+      eventType: "ocr_started",
+      source: "settings_panel",
+      summary: "OCR started on latest screen capture.",
+      details: "source=manual_button",
+      severity: "info",
+    });
+    if (isInTauri) {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const result = await invoke<{ accepted: boolean; provider: string; text?: string; chars: number; lines: number; error?: string }>(
+          "run_screen_ocr",
+          { imagePath: state.screenFilePath }
+        );
+        if (result.accepted && result.text !== undefined) {
+          dispatch({
+            type: "SET_SCREEN_OCR_STATUS",
+            payload: {
+              status: "available",
+              text: result.text,
+              chars: result.chars,
+              lines: result.lines,
+              provider: result.provider,
+              capturedAt: Date.now(),
+            },
+          });
+          addAudit({
+            eventType: "ocr_completed",
+            source: "settings_panel",
+            // Audit contains only metadata — never OCR text body.
+            summary: `OCR completed. chars=${result.chars} lines=${result.lines}`,
+            details: `provider=${result.provider} chars=${result.chars} lines=${result.lines} source=manual_command`,
+            severity: "info",
+          });
+        } else {
+          dispatch({ type: "SET_SCREEN_OCR_STATUS", payload: { status: "error", error: result.error } });
+          setOcrError(result.error ?? "OCR failed.");
+          addAudit({
+            eventType: "ocr_failed",
+            source: "settings_panel",
+            summary: "OCR failed.",
+            details: `reason=${result.error ?? "unknown"}`,
+            severity: "warning",
+          });
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        dispatch({ type: "SET_SCREEN_OCR_STATUS", payload: { status: "error", error: msg } });
+        setOcrError(msg);
+        addAudit({
+          eventType: "ocr_failed",
+          source: "settings_panel",
+          summary: "OCR failed.",
+          details: `reason=${msg}`,
+          severity: "warning",
+        });
+      }
+    } else {
+      dispatch({ type: "SET_SCREEN_OCR_STATUS", payload: { status: "error", error: "Not running in Tauri." } });
+      setOcrError("Not running in Tauri — OCR unavailable in browser mode.");
+    }
+    setOcrRunning(false);
+  }
+
+  function handleClearScreenText() {
+    dispatch({ type: "CLEAR_SCREEN_TEXT" });
+    setOcrError(null);
+    addAudit({
+      eventType: "screen_text_cleared",
+      source: "settings_panel",
+      summary: "Screen text (OCR) cleared.",
       details: "source=manual_clear",
       severity: "info",
     });
@@ -1253,8 +1350,82 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
           </>
         )}
 
+        {/* ── OCR / Screen Text ── */}
+        <div className="settings-toggle-row" style={{ marginTop: "14px" }}>
+          <span className="settings-toggle-label">Enable OCR / Screen Text</span>
+          <button
+            className={`settings-toggle ${settings.screenOcrEnabled ? "settings-toggle-on" : ""}`}
+            onClick={() => dispatch({ type: "SET_SETTINGS", payload: { screenOcrEnabled: !settings.screenOcrEnabled } })}
+            aria-pressed={settings.screenOcrEnabled}
+            title="Allow Lisa to extract text from manually captured screenshots using local Windows OCR."
+          >
+            {settings.screenOcrEnabled ? "ON" : "OFF"}
+          </button>
+        </div>
+
+        {settings.screenOcrEnabled && (
+          <>
+            <div className="settings-toggle-row" style={{ marginTop: "8px" }}>
+              <span className="settings-toggle-label">Show Screen Text Preview</span>
+              <button
+                className={`settings-toggle ${settings.showScreenTextPreview ? "settings-toggle-on" : ""}`}
+                onClick={() => dispatch({ type: "SET_SETTINGS", payload: { showScreenTextPreview: !settings.showScreenTextPreview } })}
+                aria-pressed={settings.showScreenTextPreview}
+              >
+                {settings.showScreenTextPreview ? "ON" : "OFF"}
+              </button>
+            </div>
+
+            <div className="settings-toggle-row" style={{ marginTop: "8px" }}>
+              <span className="settings-toggle-label">Include Screen Text in Local AI</span>
+              <button
+                className={`settings-toggle ${settings.screenTextEnabledForPrompt ? "settings-toggle-on" : ""}`}
+                onClick={() => dispatch({ type: "SET_SETTINGS", payload: { screenTextEnabledForPrompt: !settings.screenTextEnabledForPrompt } })}
+                aria-pressed={settings.screenTextEnabledForPrompt}
+                title="When enabled, extracted OCR text is included in local AI prompts (capped at 4000 chars). Local AI only — never sent to cloud."
+              >
+                {settings.screenTextEnabledForPrompt ? "ON" : "OFF"}
+              </button>
+            </div>
+
+            {state.screenOcrStatus === "available" && (
+              <div className="settings-field" style={{ marginTop: "8px" }}>
+                <span className="settings-field-label">OCR Result</span>
+                <span className="settings-field-value">
+                  {state.screenOcrLines ?? 0} lines · {state.screenOcrChars ?? 0} chars · {state.screenOcrProvider ?? "local"}
+                </span>
+              </div>
+            )}
+
+            {ocrError && (
+              <div className="stt-test-result stt-test-failed" style={{ marginTop: "6px" }}>
+                {ocrError}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: "8px", marginTop: "10px", flexWrap: "wrap" }}>
+              <button
+                className="settings-action-btn"
+                onClick={handleRunOcr}
+                disabled={ocrRunning || state.screenStatus !== "available"}
+                title="Extract text from the latest screen capture using local Windows OCR."
+              >
+                {ocrRunning ? "Running OCR…" : "Read Screen Text"}
+              </button>
+              {state.screenOcrStatus === "available" && (
+                <button
+                  className="settings-action-btn"
+                  onClick={handleClearScreenText}
+                >
+                  Clear Screen Text
+                </button>
+              )}
+            </div>
+          </>
+        )}
+
         <p className="history-note" style={{ marginTop: "12px" }}>
-          Screen capture is manual only. Lisa does not watch your screen in the background. Screenshots are local and are not sent to any network service. No OCR or image understanding in Phase 4A. Commands: "capture screen" / "clear screen context" / "what can you see".
+          OCR is manual and local. Lisa does not read the screen continuously, does not upload screenshots or text, and may make OCR mistakes. Commands: "capture screen" · "read screen text" · "what can you read" · "clear screen text" · "what can you see".
         </p>
       </div>
 

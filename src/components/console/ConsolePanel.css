@@ -693,3 +693,38 @@
   border: 1px solid rgba(6, 182, 212, 0.2);
   opacity: 0.85;
 }
+
+/* ── OCR text card variant ───────────────────────────────────────────────────── */
+.console-ocr-card {
+  background: rgba(99, 102, 241, 0.04);
+  border-color: rgba(99, 102, 241, 0.18);
+}
+
+.console-ocr-card .console-screen-context-title {
+  color: rgba(99, 102, 241, 0.75);
+}
+
+.console-ocr-card .console-screen-context-badge {
+  color: rgba(99, 102, 241, 0.50);
+  border-color: rgba(99, 102, 241, 0.20);
+}
+
+.console-ocr-card .console-screen-context-note {
+  color: rgba(99, 102, 241, 0.35);
+}
+
+.console-ocr-text-preview {
+  margin-top: 8px;
+  padding: 6px 8px;
+  background: rgba(99, 102, 241, 0.06);
+  border: 1px solid rgba(99, 102, 241, 0.14);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.60rem;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 120px;
+  overflow-y: auto;
+  line-height: 1.5;
+}

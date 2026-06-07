@@ -292,7 +292,11 @@ export type AuditEventType =
   | "screen_capture_failed"
   | "screen_context_cleared"
   | "screen_awareness_enabled"
-  | "screen_awareness_disabled";
+  | "screen_awareness_disabled"
+  | "ocr_started"
+  | "ocr_completed"
+  | "ocr_failed"
+  | "screen_text_cleared";
 
 export interface AuditEvent {
   id: string;
@@ -368,6 +372,12 @@ export interface LisaSettings {
   screenContextEnabledForPrompt: boolean;
   screenSuppressInPrivacyModes: boolean;
   showScreenPreview: boolean;
+  // OCR / screen text — Phase 4C
+  screenOcrEnabled: boolean;
+  screenOcrProvider: "windows_ocr" | "not_configured" | "none";
+  screenTextEnabledForPrompt: boolean;
+  screenOcrSuppressInPrivacyModes: boolean;
+  showScreenTextPreview: boolean;
 }
 
 export const DEFAULT_SETTINGS: LisaSettings = {
@@ -406,6 +416,12 @@ export const DEFAULT_SETTINGS: LisaSettings = {
   screenContextEnabledForPrompt: false,
   screenSuppressInPrivacyModes: true,
   showScreenPreview: true,
+  // OCR defaults — conservative: disabled, no prompt injection, suppress in sensitive modes, preview on
+  screenOcrEnabled: false,
+  screenOcrProvider: "not_configured",
+  screenTextEnabledForPrompt: false,
+  screenOcrSuppressInPrivacyModes: true,
+  showScreenTextPreview: true,
 };
 
 // ─── Command Router ───────────────────────────────────────────────────────────
@@ -442,6 +458,10 @@ export type CommandIntent =
   | "screen_awareness_enable"
   | "screen_awareness_disable"
   | "screen_what_can_you_see"
+  | "run_screen_ocr"
+  | "screen_what_can_you_read"
+  | "clear_screen_text"
+  | "check_ocr_status"
   | "repeat_last_response"
   | "unknown";
 
@@ -478,6 +498,7 @@ export type VoiceStatus = "idle" | "recording" | "transcribing" | "preview" | "e
 export type SttEngineStatus = "not_configured" | "ready" | "error";
 export type TtsUiStatus = "idle" | "checking" | "available" | "unavailable" | "speaking" | "error";
 export type ScreenStatus = "idle" | "capturing" | "available" | "error";
+export type ScreenOcrStatus = "idle" | "running" | "available" | "error";
 
 export const INTERACTION_CAP = 25;
 export const CONVERSATION_HISTORY_CAP = 50;
@@ -506,4 +527,4 @@ export interface PersistedState {
   savedAt: string;
 }
 
-export const STATE_VERSION = 9;
+export const STATE_VERSION = 10;

@@ -983,3 +983,93 @@ describe("Phase 3E — TTS state actions", () => {
     expect(state.spokenInteractionIds).toContain("ix-1");
   });
 });
+
+// ─── Phase 4C — OCR state ─────────────────────────────────────────────────────
+
+describe("Phase 4C — SET_SCREEN_OCR_STATUS", () => {
+  it("initial screenOcrStatus is idle", () => {
+    expect(initialState.screenOcrStatus).toBe("idle");
+  });
+
+  it("sets status to running", () => {
+    const state = lisaReducer(initialState, {
+      type: "SET_SCREEN_OCR_STATUS",
+      payload: { status: "running" },
+    });
+    expect(state.screenOcrStatus).toBe("running");
+  });
+
+  it("sets status to available with full OCR result", () => {
+    const state = lisaReducer(initialState, {
+      type: "SET_SCREEN_OCR_STATUS",
+      payload: {
+        status: "available",
+        text: "Hello screen",
+        chars: 12,
+        lines: 1,
+        provider: "windows_ocr",
+        capturedAt: 1700000000000,
+      },
+    });
+    expect(state.screenOcrStatus).toBe("available");
+    expect(state.screenOcrText).toBe("Hello screen");
+    expect(state.screenOcrChars).toBe(12);
+    expect(state.screenOcrLines).toBe(1);
+    expect(state.screenOcrProvider).toBe("windows_ocr");
+    expect(state.screenOcrCapturedAt).toBe(1700000000000);
+  });
+
+  it("sets status to error with error message", () => {
+    const state = lisaReducer(initialState, {
+      type: "SET_SCREEN_OCR_STATUS",
+      payload: { status: "error", error: "OCR engine failed" },
+    });
+    expect(state.screenOcrStatus).toBe("error");
+    expect(state.screenOcrError).toBe("OCR engine failed");
+  });
+});
+
+describe("Phase 4C — CLEAR_SCREEN_TEXT", () => {
+  it("resets all OCR state to idle", () => {
+    let state = lisaReducer(initialState, {
+      type: "SET_SCREEN_OCR_STATUS",
+      payload: { status: "available", text: "Hello", chars: 5, lines: 1, provider: "windows_ocr" },
+    });
+    state = lisaReducer(state, { type: "CLEAR_SCREEN_TEXT" });
+    expect(state.screenOcrStatus).toBe("idle");
+    expect(state.screenOcrText).toBeUndefined();
+    expect(state.screenOcrChars).toBeUndefined();
+    expect(state.screenOcrLines).toBeUndefined();
+    expect(state.screenOcrProvider).toBeUndefined();
+    expect(state.screenOcrError).toBeUndefined();
+    expect(state.screenOcrCapturedAt).toBeUndefined();
+  });
+});
+
+describe("Phase 4C — CLEAR_SCREEN_CONTEXT clears OCR", () => {
+  it("clears all OCR state when screen context is cleared", () => {
+    let state = lisaReducer(initialState, {
+      type: "SET_SCREEN_OCR_STATUS",
+      payload: { status: "available", text: "Screen text", chars: 11, lines: 1, provider: "windows_ocr" },
+    });
+    state = lisaReducer(state, { type: "CLEAR_SCREEN_CONTEXT" });
+    expect(state.screenOcrStatus).toBe("idle");
+    expect(state.screenOcrText).toBeUndefined();
+  });
+});
+
+describe("Phase 4C — EMERGENCY_STOP clears OCR", () => {
+  it("clears all OCR state on emergency stop", () => {
+    let state = lisaReducer(initialState, {
+      type: "SET_SCREEN_OCR_STATUS",
+      payload: { status: "available", text: "OCR text", chars: 8, lines: 1, provider: "windows_ocr" },
+    });
+    state = lisaReducer(state, { type: "EMERGENCY_STOP" });
+    expect(state.screenOcrStatus).toBe("idle");
+    expect(state.screenOcrText).toBeUndefined();
+    expect(state.screenOcrChars).toBeUndefined();
+    expect(state.screenOcrLines).toBeUndefined();
+    expect(state.screenOcrProvider).toBeUndefined();
+    expect(state.orbState).toBe("emergency_stopped");
+  });
+});

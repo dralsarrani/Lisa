@@ -36,9 +36,9 @@ describe("loadState — invalid JSON", () => {
   });
 });
 
-describe("Phase 3C — STATE_VERSION is 9", () => {
-  it("STATE_VERSION constant equals 9", () => {
-    expect(STATE_VERSION).toBe(9);
+describe("Phase 4C — STATE_VERSION is 10", () => {
+  it("STATE_VERSION constant equals 10", () => {
+    expect(STATE_VERSION).toBe(10);
   });
 });
 
@@ -796,8 +796,8 @@ describe("tool persistence — caps", () => {
 // ─── Phase 2E — STATE_VERSION and toolResultContextEnabled ───────────────────
 
 describe("Phase 2E — STATE_VERSION and toolResultContextEnabled defaults", () => {
-  it("STATE_VERSION is 9", () => {
-    expect(STATE_VERSION).toBe(9);
+  it("STATE_VERSION is 10", () => {
+    expect(STATE_VERSION).toBe(10);
   });
 
   it("DEFAULT_SETTINGS.toolResultContextEnabled is true", () => {
@@ -1290,5 +1290,51 @@ describe("Phase 3E — voice output settings migration", () => {
     expect(state.settings.voiceOutputAutoSpeak).toBe(false);
     expect(state.settings.voiceOutputProvider).toBe("windows");
     expect(state.settings.voiceOutputSuppressInPrivacyModes).toBe(true);
+  });
+});
+
+describe("Phase 4C — OCR settings defaults", () => {
+  it("STATE_VERSION is 10", () => {
+    expect(STATE_VERSION).toBe(10);
+  });
+
+  it("DEFAULT_SETTINGS has screenOcrEnabled false", () => {
+    expect(DEFAULT_SETTINGS.screenOcrEnabled).toBe(false);
+  });
+
+  it("DEFAULT_SETTINGS has screenTextEnabledForPrompt false", () => {
+    expect(DEFAULT_SETTINGS.screenTextEnabledForPrompt).toBe(false);
+  });
+
+  it("DEFAULT_SETTINGS has screenOcrSuppressInPrivacyModes true", () => {
+    expect(DEFAULT_SETTINGS.screenOcrSuppressInPrivacyModes).toBe(true);
+  });
+
+  it("DEFAULT_SETTINGS has showScreenTextPreview true", () => {
+    expect(DEFAULT_SETTINGS.showScreenTextPreview).toBe(true);
+  });
+
+  it("state without screenOcrEnabled gets false default on load", async () => {
+    localStorage.setItem(
+      "lisa_state_v1",
+      JSON.stringify({
+        version: STATE_VERSION,
+        settings: { ollamaModel: "llama3.2:1b" },
+        missions: [], approvals: [], auditEvents: [],
+        conversationHistory: [], memoryNotes: [],
+        toolRequests: [], toolApprovals: [], toolResults: [],
+        savedAt: new Date().toISOString(),
+      })
+    );
+    const state = await loadState();
+    expect(state.settings.screenOcrEnabled).toBe(false);
+    expect(state.settings.screenTextEnabledForPrompt).toBe(false);
+    expect(state.settings.screenOcrSuppressInPrivacyModes).toBe(true);
+    expect(state.settings.showScreenTextPreview).toBe(true);
+  });
+
+  it("OCR state is not persisted — loaded state has no screenOcrStatus field", async () => {
+    const state = await loadState();
+    expect((state as unknown as Record<string, unknown>).screenOcrStatus).toBeUndefined();
   });
 });

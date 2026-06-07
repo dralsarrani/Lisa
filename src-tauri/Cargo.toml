@@ -33,6 +33,11 @@ tts-sapi = []
 # Manual user-initiated only — no background capture, no network, no OCR.
 # Build: cargo build --features screen-capture
 screen-capture = []
+# Enable local OCR / screen text extraction via Windows WinRT OCR API (PowerShell).
+# Requires screen-capture to have a screenshot to process. No extra cargo deps.
+# Manual user-initiated only — no background OCR, no cloud, no periodic extraction.
+# Build: cargo build --features ocr
+ocr = []
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

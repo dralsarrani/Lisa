@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import type { LisaInteraction, LisaSettings, OrbState, ToolResult, ToolRequest, VoiceStatus, TtsUiStatus, ScreenStatus } from "../../core/types";
+import type { LisaInteraction, LisaSettings, OrbState, ToolResult, ToolRequest, VoiceStatus, TtsUiStatus, ScreenStatus, ScreenOcrStatus } from "../../core/types";
 import { hasActiveToolRequestForParams } from "../../core/tool-request-utils";
 import { isInteractionSpeakEligible } from "../../core/tts";
 import { MarkdownResponse } from "./MarkdownResponse";
@@ -26,6 +26,12 @@ interface ConsolePanelProps {
   screenHeight?: number;
   screenProvider?: string;
   screenFilePath?: string;
+  screenOcrStatus?: ScreenOcrStatus;
+  screenOcrText?: string;
+  screenOcrChars?: number;
+  screenOcrLines?: number;
+  screenOcrProvider?: string;
+  showScreenTextPreview?: boolean;
 }
 
 export const ConsolePanel: React.FC<ConsolePanelProps> = ({
@@ -46,6 +52,12 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
   screenHeight,
   screenProvider,
   screenFilePath,
+  screenOcrStatus,
+  screenOcrText,
+  screenOcrChars,
+  screenOcrLines,
+  screenOcrProvider,
+  showScreenTextPreview,
 }) => {
   const feedRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -107,6 +119,38 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
             {screenFilePath && settings.showScreenPreview
               ? "Preview only · Local · No OCR · Not uploaded"
               : "Metadata only · Local · No OCR · Not uploaded"}
+          </div>
+        </div>
+      )}
+      {screenOcrStatus === "available" && showScreenTextPreview && screenOcrText && (
+        <div className="console-screen-context-card console-ocr-card">
+          <div className="console-screen-context-header">
+            <span className="console-screen-context-title">Screen Text</span>
+            <span className="console-screen-context-badge">Manual OCR</span>
+          </div>
+          {screenOcrLines != null && (
+            <div className="console-screen-context-row">
+              <span className="console-screen-context-label">Lines</span>
+              <span className="console-screen-context-value">{screenOcrLines}</span>
+            </div>
+          )}
+          {screenOcrChars != null && (
+            <div className="console-screen-context-row">
+              <span className="console-screen-context-label">Characters</span>
+              <span className="console-screen-context-value">{screenOcrChars}</span>
+            </div>
+          )}
+          <div className="console-screen-context-row">
+            <span className="console-screen-context-label">Provider</span>
+            <span className="console-screen-context-value">{screenOcrProvider ?? "unknown"}</span>
+          </div>
+          <div className="console-ocr-text-preview">
+            {screenOcrText.length > 500
+              ? screenOcrText.slice(0, 500) + "… [truncated]"
+              : screenOcrText}
+          </div>
+          <div className="console-screen-context-note">
+            Local OCR only · Not uploaded · May be imperfect
           </div>
         </div>
       )}

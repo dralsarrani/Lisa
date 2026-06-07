@@ -5,6 +5,7 @@ use stt::SttEngine;
 use stt::{validate_model_path, SttModelTestResult, SttModelValidationResult, SttTranscriptResult};
 
 mod audio;
+mod ocr;
 mod screen;
 mod tts;
 
@@ -1083,6 +1084,7 @@ pub fn run() {
         .manage(VoiceCaptureManager::new())
         .manage(tts::TtsManager::new())
         .manage(screen::ScreenManager::new())
+        .manage(ocr::OcrManager::new())
         .invoke_handler(tauri::generate_handler![
             ping_backend,
             get_runtime_health,
@@ -1107,6 +1109,9 @@ pub fn run() {
             screen::get_screen_capture_status,
             screen::capture_screen,
             screen::clear_screen_capture,
+            ocr::get_ocr_status,
+            ocr::run_screen_ocr,
+            ocr::clear_screen_text,
         ])
         .run(tauri::generate_context!())
         .expect("Error while running Lisa application");

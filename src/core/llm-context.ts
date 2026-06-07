@@ -110,16 +110,21 @@ Desktop and app control is NOT YET IMPLEMENTED:
 - You cannot click, drag, scroll, download files, or operate any app on behalf of the user
 - This is not a permission issue — desktop control is not built yet. User approval cannot unlock something that is not yet implemented.
 
-Screen awareness — Phase 4A manual capture only:
+Screen awareness — Phase 4B/4C:
 - The user can manually capture the current screen using 'capture screen' or the button in Settings → Screen Awareness
-- Lisa captures metadata only (resolution, timestamp, provider) — no OCR, no image understanding, no pixel analysis
+- Lisa captures metadata only (resolution, timestamp, provider) from the raw screenshot — no pixel analysis, no image upload
 - Screen context is never uploaded to any network service — all capture is local only
 - Lisa does not watch the screen in the background — there is no continuous monitoring, periodic capture, or always-on observation
-- If screen context is available and enabled, it appears as metadata text (width, height, timestamp) in the prompt — not as a raw image or OCR text
-- Lisa cannot read text visible on screen unless a future OCR phase explicitly implements it — do not guess or infer screen content
-- If asked "what can you see" without screen context available: say "I don't have screen context yet. Type 'capture screen' or use the button in Settings → Screen Awareness."
-- Screen capture is suppressed in Sleep, Privacy, and Lockdown modes unless explicitly overridden in settings
-- The user can clear screen context at any time with 'clear screen context'
+- If screen metadata is available and enabled, it appears as metadata text (width, height, timestamp) in the prompt
+- Phase 4C local OCR: the user can run 'read screen text' after capturing a screen to extract visible text locally using the Windows built-in OCR engine
+- OCR is manual and explicit — it only runs when the user requests it; there is no automatic, background, or periodic OCR
+- OCR may be imperfect — do not treat OCR text as authoritative; acknowledge uncertainty when referencing it
+- Extracted OCR text may appear below if the user has enabled 'Include Screen Text in Local AI' in Settings — local AI only, never cloud
+- If no OCR text appears in context, Lisa cannot read text visible on screen — do not guess or infer screen content
+- If asked "what can you see": describe metadata only. If asked "what can you read": describe OCR text only if it was explicitly extracted
+- Screen capture and OCR are suppressed in Sleep, Privacy, and Lockdown modes unless explicitly overridden
+- The user can clear OCR text with 'clear screen text'; clear all screen context with 'clear screen context'
+- No desktop control — Lisa cannot click, type, move the mouse, or control any application
 
 Voice input — Phase 3D/3G local push-to-talk:
 - Hold KeyV (when the command box is not focused) to record from the microphone. Release to transcribe locally. The microphone never opens automatically — the user must hold KeyV for every new spoken turn.
@@ -190,15 +195,32 @@ export function trimConversationHistory(
   return history.slice(history.length - maxTurns);
 }
 
+const OCR_CONTEXT_CHAR_CAP = 4000;
+
+export function formatOcrTextForContext(ocrText: string): string {
+  const capped = ocrText.length > OCR_CONTEXT_CHAR_CAP
+    ? ocrText.slice(0, OCR_CONTEXT_CHAR_CAP) + "\n… [OCR text truncated at 4000 chars]"
+    : ocrText;
+  return `--- Extracted screen text (local OCR — may be imperfect, manual capture only) ---\n${capped}\n--- End of extracted screen text ---`;
+}
+
 export function buildOllamaMessages(
   history: LisaConversationTurn[],
   userInput: string,
   memoryNotes: MemoryNote[] = [],
-  toolResults: ToolResultContext[] = []
+  toolResults: ToolResultContext[] = [],
+  ocrText?: string,
+  includeOcrText: boolean = false
 ): LisaChatMessage[] {
   const systemBase = buildLisaSystemPrompt(memoryNotes);
   const toolResultsBlock = formatToolResultsForContext(toolResults);
-  const systemContent = toolResultsBlock ? `${systemBase}\n\n${toolResultsBlock}` : systemBase;
+  // OCR text is injected only when the user has enabled "Include Screen Text in Local AI"
+  // and OCR text exists. It is capped to prevent prompt flooding.
+  const ocrBlock = includeOcrText && ocrText ? formatOcrTextForContext(ocrText) : "";
+
+  const parts = [systemBase, toolResultsBlock, ocrBlock].filter(Boolean);
+  const systemContent = parts.join("\n\n");
+
   const messages: LisaChatMessage[] = [
     { role: "system", content: systemContent },
   ];

@@ -5,6 +5,7 @@ import {
   trimConversationHistory,
   formatToolResultsForContext,
   filterToolResultsByPolicy,
+  formatOcrTextForContext,
   TOOL_RESULT_CONTEXT_CAP,
   TOOL_RESULT_CONTEXT_SUMMARY_CHAR_LIMIT,
 } from "../core/llm-context";
@@ -782,5 +783,91 @@ describe("buildLisaSystemPrompt — Phase 3D voice capability boundary", () => {
 
   it("does not imply always-on listening is available", () => {
     expect(buildLisaSystemPrompt().toLowerCase()).not.toContain("always-on listening is available");
+  });
+});
+
+// ─── Phase 4C — OCR context injection ────────────────────────────────────────
+
+describe("buildLisaSystemPrompt — OCR / screen text boundaries", () => {
+  it("mentions Phase 4C local OCR", () => {
+    expect(buildLisaSystemPrompt()).toContain("Phase 4C");
+  });
+
+  it("states OCR is manual and explicit — no background OCR", () => {
+    const prompt = buildLisaSystemPrompt().toLowerCase();
+    expect(prompt).toContain("manual");
+    expect(prompt).toContain("no automatic");
+  });
+
+  it("states OCR may be imperfect", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("imperfect");
+  });
+
+  it("states OCR text is never uploaded", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("never uploaded");
+  });
+
+  it("distinguishes what can you see from what can you read", () => {
+    const prompt = buildLisaSystemPrompt();
+    expect(prompt).toContain("what can you see");
+    expect(prompt).toContain("what can you read");
+  });
+});
+
+describe("formatOcrTextForContext", () => {
+  it("wraps OCR text in delimiters", () => {
+    const result = formatOcrTextForContext("Hello world");
+    expect(result).toContain("--- Extracted screen text");
+    expect(result).toContain("Hello world");
+    expect(result).toContain("--- End of extracted screen text ---");
+  });
+
+  it("truncates text over 4000 chars", () => {
+    const longText = "X".repeat(5000);
+    const result = formatOcrTextForContext(longText);
+    expect(result).toContain("… [OCR text truncated at 4000 chars]");
+    expect(result.length).toBeLessThan(longText.length);
+  });
+
+  it("does not truncate text under 4000 chars", () => {
+    const shortText = "Short text";
+    const result = formatOcrTextForContext(shortText);
+    expect(result).toContain(shortText);
+    expect(result).not.toContain("[OCR text truncated");
+  });
+
+  it("labels text as local OCR only", () => {
+    const result = formatOcrTextForContext("Some text");
+    expect(result.toLowerCase()).toContain("local ocr");
+  });
+});
+
+describe("buildOllamaMessages — OCR injection", () => {
+  it("does not inject OCR block when includeOcrText is false", () => {
+    const msgs = buildOllamaMessages([], "hello", [], [], "Screen content", false);
+    const system = msgs[0].content;
+    expect(system).not.toContain("Screen content");
+    expect(system).not.toContain("Extracted screen text");
+  });
+
+  it("does not inject OCR block when ocrText is undefined", () => {
+    const msgs = buildOllamaMessages([], "hello", [], [], undefined, true);
+    const system = msgs[0].content;
+    expect(system).not.toContain("Extracted screen text");
+  });
+
+  it("injects OCR block when includeOcrText is true and ocrText is provided", () => {
+    const msgs = buildOllamaMessages([], "hello", [], [], "Visible text here", true);
+    const system = msgs[0].content;
+    expect(system).toContain("Visible text here");
+    expect(system).toContain("Extracted screen text");
+  });
+
+  it("OCR block appears in system message not user message", () => {
+    const msgs = buildOllamaMessages([], "what can you read", [], [], "OCR content", true);
+    expect(msgs[0].role).toBe("system");
+    expect(msgs[0].content).toContain("OCR content");
+    const userMsg = msgs.find((m) => m.role === "user");
+    expect(userMsg?.content).not.toContain("OCR content");
   });
 });

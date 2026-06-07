@@ -1,4 +1,4 @@
-import type { CommandIntent, CommandRouteResult, LisaInteraction, LisaModeId, ScreenStatus } from "./types";
+import type { CommandIntent, CommandRouteResult, LisaInteraction, LisaModeId, ScreenStatus, ScreenOcrStatus } from "./types";
 
 // ─── Mode name → ID mappings ──────────────────────────────────────────────────
 
@@ -381,6 +381,48 @@ export function routeCommand(raw: string): CommandRouteResult {
     return result("screen_awareness_disable", raw, normalized, {}, "high", "Screen awareness disabled.");
   }
 
+  // ── OCR / screen text commands (Phase 4C) ──
+
+  // Run OCR / Read screen text — explicit user-triggered action.
+  if (
+    normalized === "read screen text" ||
+    normalized === "run ocr" ||
+    normalized === "extract screen text" ||
+    normalized === "scan screen text" ||
+    normalized === "ocr screen"
+  ) {
+    return result("run_screen_ocr", raw, normalized, {}, "high", "Running local OCR on latest screen capture...");
+  }
+
+  // What can you read — grounded OCR text response, no LLM.
+  if (
+    normalized === "what can you read" ||
+    normalized === "what text is on my screen" ||
+    normalized === "what text can you see" ||
+    normalized === "read screen" ||
+    normalized === "show screen text"
+  ) {
+    return result("screen_what_can_you_read", raw, normalized, {}, "high", "Checking extracted screen text...");
+  }
+
+  // Clear screen text.
+  if (
+    normalized === "clear screen text" ||
+    normalized === "forget screen text" ||
+    normalized === "delete screen text"
+  ) {
+    return result("clear_screen_text", raw, normalized, {}, "high", "Screen text cleared.");
+  }
+
+  // Check OCR status.
+  if (
+    normalized === "check ocr" ||
+    normalized === "check ocr status" ||
+    normalized === "ocr status"
+  ) {
+    return result("check_ocr_status", raw, normalized, {}, "high", "Checking OCR status...");
+  }
+
   // Fallback: unknown command.
   return result(
     "unknown",
@@ -466,7 +508,7 @@ const SCREEN_CAPABILITY_QA: Array<[RegExp, string]> = [
   // OCR / reading text from screen
   [
     /\bocr\b|\bread\s+text\s+(?:from|on|off)\s+(?:the\s+|my\s+)?screen\b|\bextract\s+text\s+from\s+(?:the\s+|my\s+)?screen\b/i,
-    "OCR (reading text from screenshots) is not implemented in Phase 4A. Lisa captures metadata only — resolution and timestamp. No text extraction, no optical character recognition.",
+    "Phase 4C: Local OCR is available. Capture the screen first with 'capture screen', then type 'read screen text' to extract visible text using the Windows built-in OCR engine. Type 'what can you read' to see the extracted text. OCR is manual, local-only, and may be imperfect. No cloud upload, no background OCR, no desktop control.",
   ],
   // Screenshot upload / cloud
   [
@@ -563,6 +605,50 @@ export function getDesktopActionGuardMessage(raw: string): string | null {
     }
   }
   return null;
+}
+
+// ─── OCR response formatter ──────────────────────────────────────────────────
+//
+// Pure helper: returns a grounded answer from OCR state.
+// Used by CommandInput for deterministic screen_what_can_you_read — no LLM.
+// The OCR text body may appear in the UI preview because the user explicitly
+// requested OCR, but it must NOT appear in audit details.
+
+const OCR_EXCERPT_CHARS = 500;
+
+export function formatOcrResponse(ocrState: {
+  screenOcrStatus: ScreenOcrStatus;
+  screenOcrText?: string;
+  screenOcrChars?: number;
+  screenOcrLines?: number;
+  screenOcrProvider?: string;
+  screenOcrCapturedAt?: number;
+}): string {
+  const { screenOcrStatus, screenOcrText, screenOcrChars, screenOcrLines, screenOcrProvider, screenOcrCapturedAt } = ocrState;
+
+  if (screenOcrStatus !== "available" || !screenOcrText) {
+    return "I do not have extracted screen text yet. Capture the screen first, then run 'read screen text' to extract text with local OCR.";
+  }
+
+  const provider = screenOcrProvider ?? "local_ocr";
+  const capturedAt = screenOcrCapturedAt ? new Date(screenOcrCapturedAt).toLocaleTimeString() : "unknown";
+  const excerpt = screenOcrText.length > OCR_EXCERPT_CHARS
+    ? screenOcrText.slice(0, OCR_EXCERPT_CHARS) + "… [truncated]"
+    : screenOcrText;
+
+  const lines = [
+    "I extracted text from the latest manual screen capture:",
+    `- Lines: ${screenOcrLines ?? 0}`,
+    `- Characters: ${screenOcrChars ?? 0}`,
+    `- Provider: ${provider}`,
+    `- Captured: ${capturedAt}`,
+    "",
+    "Excerpt:",
+    `"${excerpt}"`,
+    "",
+    "OCR can be imperfect. I cannot infer visual details beyond extracted text, and I cannot control the desktop yet.",
+  ];
+  return lines.join("\n");
 }
 
 // ─── Repeat helper ───────────────────────────────────────────────────────────

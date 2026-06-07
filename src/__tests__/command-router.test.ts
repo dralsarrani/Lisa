@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { routeCommand, getDesktopActionGuardMessage, getVoiceCapabilityMessage, getScreenCapabilityMessage, formatScreenContextResponse, findLastRepeatableResponse } from "../core/command-router";
+import { routeCommand, getDesktopActionGuardMessage, getVoiceCapabilityMessage, getScreenCapabilityMessage, formatScreenContextResponse, findLastRepeatableResponse, formatOcrResponse } from "../core/command-router";
 
 describe("routeCommand — emergency_stop", () => {
   it("routes 'emergency stop'", () => {
@@ -971,15 +971,15 @@ describe("getScreenCapabilityMessage — OCR questions (Phase 4A)", () => {
     expect(getScreenCapabilityMessage("can you read text from the screen")).not.toBeNull();
   });
 
-  it("response states OCR is not implemented in Phase 4A", () => {
+  it("response describes Phase 4C OCR capability", () => {
     const msg = getScreenCapabilityMessage("can you do OCR") ?? "";
-    expect(msg.toLowerCase()).toContain("not implemented");
-    expect(msg.toLowerCase()).toContain("phase 4a");
+    expect(msg.toLowerCase()).toContain("phase 4c");
+    expect(msg.toLowerCase()).toContain("ocr");
   });
 
-  it("response states metadata only", () => {
+  it("response instructs user to run read screen text command", () => {
     const msg = getScreenCapabilityMessage("can you read text from the screen") ?? "";
-    expect(msg.toLowerCase()).toContain("metadata");
+    expect(msg.toLowerCase()).toContain("read screen text");
   });
 });
 
@@ -1370,5 +1370,165 @@ describe("findLastRepeatableResponse — helper (hotfix)", () => {
     expect(result).not.toContain("1080");
     expect(result).not.toContain("2023-02-20");
     expect(result).not.toMatch(/provider=Windows/i);
+  });
+});
+
+// ─── OCR command routing ──────────────────────────────────────────────────────
+
+describe("routeCommand — run_screen_ocr", () => {
+  it("routes 'read screen text'", () => {
+    expect(routeCommand("read screen text").intent).toBe("run_screen_ocr");
+  });
+  it("routes 'run ocr'", () => {
+    expect(routeCommand("run ocr").intent).toBe("run_screen_ocr");
+  });
+  it("routes 'extract screen text'", () => {
+    expect(routeCommand("extract screen text").intent).toBe("run_screen_ocr");
+  });
+  it("routes 'scan screen text'", () => {
+    expect(routeCommand("scan screen text").intent).toBe("run_screen_ocr");
+  });
+  it("routes 'ocr screen'", () => {
+    expect(routeCommand("ocr screen").intent).toBe("run_screen_ocr");
+  });
+  it("routes with Lisa prefix", () => {
+    expect(routeCommand("Lisa, read screen text").intent).toBe("run_screen_ocr");
+  });
+  it("has high confidence", () => {
+    expect(routeCommand("read screen text").confidence).toBe("high");
+  });
+});
+
+describe("routeCommand — screen_what_can_you_read", () => {
+  it("routes 'what can you read'", () => {
+    expect(routeCommand("what can you read").intent).toBe("screen_what_can_you_read");
+  });
+  it("routes 'what text is on my screen'", () => {
+    expect(routeCommand("what text is on my screen").intent).toBe("screen_what_can_you_read");
+  });
+  it("routes 'what text can you see'", () => {
+    expect(routeCommand("what text can you see").intent).toBe("screen_what_can_you_read");
+  });
+  it("routes 'show screen text'", () => {
+    expect(routeCommand("show screen text").intent).toBe("screen_what_can_you_read");
+  });
+  it("has high confidence", () => {
+    expect(routeCommand("what can you read").confidence).toBe("high");
+  });
+});
+
+describe("routeCommand — clear_screen_text", () => {
+  it("routes 'clear screen text'", () => {
+    expect(routeCommand("clear screen text").intent).toBe("clear_screen_text");
+  });
+  it("routes 'forget screen text'", () => {
+    expect(routeCommand("forget screen text").intent).toBe("clear_screen_text");
+  });
+  it("routes 'delete screen text'", () => {
+    expect(routeCommand("delete screen text").intent).toBe("clear_screen_text");
+  });
+  it("has high confidence", () => {
+    expect(routeCommand("clear screen text").confidence).toBe("high");
+  });
+});
+
+describe("routeCommand — check_ocr_status", () => {
+  it("routes 'check ocr'", () => {
+    expect(routeCommand("check ocr").intent).toBe("check_ocr_status");
+  });
+  it("routes 'check ocr status'", () => {
+    expect(routeCommand("check ocr status").intent).toBe("check_ocr_status");
+  });
+  it("routes 'ocr status'", () => {
+    expect(routeCommand("ocr status").intent).toBe("check_ocr_status");
+  });
+  it("has high confidence", () => {
+    expect(routeCommand("check ocr").confidence).toBe("high");
+  });
+});
+
+// ─── formatOcrResponse ────────────────────────────────────────────────────────
+
+describe("formatOcrResponse", () => {
+  it("returns no-text message when status is idle", () => {
+    const result = formatOcrResponse({ screenOcrStatus: "idle" });
+    expect(result).toContain("do not have extracted screen text");
+    expect(result).toContain("read screen text");
+  });
+
+  it("returns no-text message when status is error", () => {
+    const result = formatOcrResponse({ screenOcrStatus: "error" });
+    expect(result).toContain("do not have extracted screen text");
+  });
+
+  it("returns no-text message when status is running", () => {
+    const result = formatOcrResponse({ screenOcrStatus: "running" });
+    expect(result).toContain("do not have extracted screen text");
+  });
+
+  it("returns no-text message when status is available but text is empty", () => {
+    const result = formatOcrResponse({ screenOcrStatus: "available", screenOcrText: "" });
+    expect(result).toContain("do not have extracted screen text");
+  });
+
+  it("returns grounded OCR response when status is available with text", () => {
+    const result = formatOcrResponse({
+      screenOcrStatus: "available",
+      screenOcrText: "Hello from screen",
+      screenOcrChars: 18,
+      screenOcrLines: 1,
+      screenOcrProvider: "windows_ocr",
+    });
+    expect(result).toContain("Hello from screen");
+    expect(result).toContain("Lines: 1");
+    expect(result).toContain("Characters: 18");
+    expect(result).toContain("windows_ocr");
+  });
+
+  it("truncates long OCR text at 500 chars", () => {
+    const longText = "A".repeat(600);
+    const result = formatOcrResponse({
+      screenOcrStatus: "available",
+      screenOcrText: longText,
+      screenOcrChars: 600,
+      screenOcrLines: 1,
+      screenOcrProvider: "windows_ocr",
+    });
+    expect(result).toContain("… [truncated]");
+    expect(result).not.toContain("A".repeat(601));
+  });
+
+  it("does not truncate text under 500 chars", () => {
+    const shortText = "Short text content.";
+    const result = formatOcrResponse({
+      screenOcrStatus: "available",
+      screenOcrText: shortText,
+      screenOcrChars: shortText.length,
+      screenOcrLines: 1,
+      screenOcrProvider: "windows_ocr",
+    });
+    expect(result).toContain(shortText);
+    expect(result).not.toContain("… [truncated]");
+  });
+
+  it("acknowledges OCR imperfection in response", () => {
+    const result = formatOcrResponse({
+      screenOcrStatus: "available",
+      screenOcrText: "Some text",
+      screenOcrChars: 9,
+      screenOcrLines: 1,
+      screenOcrProvider: "windows_ocr",
+    });
+    expect(result).toMatch(/imperfect|cannot infer/i);
+  });
+
+  it("does not invent metadata when provider/lines are missing", () => {
+    const result = formatOcrResponse({
+      screenOcrStatus: "available",
+      screenOcrText: "Hello",
+    });
+    expect(result).toContain("Hello");
+    expect(result).toContain("Lines: 0");
+    expect(result).toContain("Characters: 0");
   });
 });

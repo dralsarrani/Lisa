@@ -17,6 +17,7 @@ import type {
   VoiceStatus,
   TtsUiStatus,
   ScreenStatus,
+  ScreenOcrStatus,
 } from "../core/types";
 import {
   DEFAULT_SETTINGS,
@@ -68,6 +69,14 @@ export interface LisaState {
   screenProvider?: string;
   screenError?: string;
   screenFilePath?: string;
+  // OCR / screen text transient state — not persisted, treated as sensitive
+  screenOcrStatus: ScreenOcrStatus;
+  screenOcrText?: string;
+  screenOcrChars?: number;
+  screenOcrLines?: number;
+  screenOcrProvider?: string;
+  screenOcrError?: string;
+  screenOcrCapturedAt?: number;
 }
 
 export const initialState: LisaState = {
@@ -95,6 +104,7 @@ export const initialState: LisaState = {
   ttsSpeakingInteractionId: null,
   spokenInteractionIds: [],
   screenStatus: "idle",
+  screenOcrStatus: "idle",
 };
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
@@ -185,6 +195,19 @@ export type LisaAction =
         filePath?: string;
       };
     }
+  | {
+      type: "SET_SCREEN_OCR_STATUS";
+      payload: {
+        status: ScreenOcrStatus;
+        text?: string;
+        chars?: number;
+        lines?: number;
+        provider?: string;
+        error?: string;
+        capturedAt?: number;
+      };
+    }
+  | { type: "CLEAR_SCREEN_TEXT" }
   | { type: "CLEAR_SCREEN_CONTEXT" }
   | {
       type: "LOAD_STATE";
@@ -294,6 +317,13 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
         screenProvider: undefined,
         screenError: undefined,
         screenFilePath: undefined,
+        screenOcrStatus: "idle" as ScreenOcrStatus,
+        screenOcrText: undefined,
+        screenOcrChars: undefined,
+        screenOcrLines: undefined,
+        screenOcrProvider: undefined,
+        screenOcrError: undefined,
+        screenOcrCapturedAt: undefined,
       };
     }
 
@@ -699,6 +729,32 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
       };
     }
 
+    case "SET_SCREEN_OCR_STATUS": {
+      const { status, text, chars, lines, provider, error, capturedAt } = action.payload;
+      return {
+        ...state,
+        screenOcrStatus: status,
+        screenOcrText: text ?? state.screenOcrText,
+        screenOcrChars: chars ?? state.screenOcrChars,
+        screenOcrLines: lines ?? state.screenOcrLines,
+        screenOcrProvider: provider ?? state.screenOcrProvider,
+        screenOcrError: error ?? undefined,
+        screenOcrCapturedAt: capturedAt ?? state.screenOcrCapturedAt,
+      };
+    }
+
+    case "CLEAR_SCREEN_TEXT":
+      return {
+        ...state,
+        screenOcrStatus: "idle",
+        screenOcrText: undefined,
+        screenOcrChars: undefined,
+        screenOcrLines: undefined,
+        screenOcrProvider: undefined,
+        screenOcrError: undefined,
+        screenOcrCapturedAt: undefined,
+      };
+
     case "CLEAR_SCREEN_CONTEXT":
       return {
         ...state,
@@ -710,6 +766,14 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
         screenProvider: undefined,
         screenError: undefined,
         screenFilePath: undefined,
+        // Also clear OCR text — it was derived from the captured screen
+        screenOcrStatus: "idle",
+        screenOcrText: undefined,
+        screenOcrChars: undefined,
+        screenOcrLines: undefined,
+        screenOcrProvider: undefined,
+        screenOcrError: undefined,
+        screenOcrCapturedAt: undefined,
       };
 
     default:

@@ -384,6 +384,12 @@ function App() {
                   screenHeight={state.screenHeight}
                   screenProvider={state.screenProvider}
                   screenFilePath={state.screenFilePath}
+                  screenOcrStatus={state.screenOcrStatus}
+                  screenOcrText={state.screenOcrText}
+                  screenOcrChars={state.screenOcrChars}
+                  screenOcrLines={state.screenOcrLines}
+                  screenOcrProvider={state.screenOcrProvider}
+                  showScreenTextPreview={state.settings.showScreenTextPreview}
                 />
               )}
               {activeTab === "missions" && (
