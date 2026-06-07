@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import type { LisaInteraction, LisaSettings, OrbState, ToolResult, ToolRequest, VoiceStatus, TtsUiStatus } from "../../core/types";
+import type { LisaInteraction, LisaSettings, OrbState, ToolResult, ToolRequest, VoiceStatus, TtsUiStatus, ScreenStatus } from "../../core/types";
 import { hasActiveToolRequestForParams } from "../../core/tool-request-utils";
 import { isInteractionSpeakEligible } from "../../core/tts";
 import { MarkdownResponse } from "./MarkdownResponse";
@@ -19,6 +19,11 @@ interface ConsolePanelProps {
   voiceStatus?: VoiceStatus;
   onSpeak?: (interaction: LisaInteraction) => void;
   onStopSpeaking?: () => void;
+  screenStatus?: ScreenStatus;
+  screenCapturedAt?: number;
+  screenWidth?: number;
+  screenHeight?: number;
+  screenProvider?: string;
 }
 
 export const ConsolePanel: React.FC<ConsolePanelProps> = ({
@@ -33,6 +38,11 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
   voiceStatus,
   onSpeak,
   onStopSpeaking,
+  screenStatus,
+  screenCapturedAt,
+  screenWidth,
+  screenHeight,
+  screenProvider,
 }) => {
   const feedRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -63,6 +73,31 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
           </span>
         )}
       </div>
+      {screenStatus === "available" && screenCapturedAt && (
+        <div className="console-screen-context-card">
+          <div className="console-screen-context-header">
+            <span className="console-screen-context-title">Screen Context</span>
+            <span className="console-screen-context-badge">Manual Capture</span>
+          </div>
+          <div className="console-screen-context-row">
+            <span className="console-screen-context-label">Captured</span>
+            <span className="console-screen-context-value">{new Date(screenCapturedAt).toLocaleTimeString()}</span>
+          </div>
+          {screenWidth && screenHeight && (
+            <div className="console-screen-context-row">
+              <span className="console-screen-context-label">Resolution</span>
+              <span className="console-screen-context-value">{screenWidth}×{screenHeight}</span>
+            </div>
+          )}
+          <div className="console-screen-context-row">
+            <span className="console-screen-context-label">Provider</span>
+            <span className="console-screen-context-value">{screenProvider ?? "unknown"}</span>
+          </div>
+          <div className="console-screen-context-note">
+            Metadata only · Local · No OCR · Not uploaded
+          </div>
+        </div>
+      )}
       <div className="console-feed" ref={feedRef}>
         {interactions.map((ix) => {
           const linkedResult = ix.kind === "tool_result"

@@ -378,6 +378,11 @@ function App() {
                   voiceStatus={state.voiceStatus}
                   onSpeak={state.settings.voiceOutputEnabled ? handleSpeak : undefined}
                   onStopSpeaking={state.settings.voiceOutputEnabled ? handleStopSpeaking : undefined}
+                  screenStatus={state.screenStatus}
+                  screenCapturedAt={state.screenCapturedAt}
+                  screenWidth={state.screenWidth}
+                  screenHeight={state.screenHeight}
+                  screenProvider={state.screenProvider}
                 />
               )}
               {activeTab === "missions" && (

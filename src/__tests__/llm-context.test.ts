@@ -682,6 +682,46 @@ describe("buildOllamaMessages — Phase 2J channel distinctness", () => {
   });
 });
 
+// ─── Phase 4A screen awareness boundary ──────────────────────────────────────
+
+describe("buildLisaSystemPrompt — Phase 4A screen awareness boundary", () => {
+  it("mentions screen awareness as manual capture", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("manually capture");
+  });
+
+  it("states no background screen monitoring", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("background");
+  });
+
+  it("states metadata only — no OCR", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("metadata only");
+  });
+
+  it("states screen is local only — not uploaded", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("local only");
+  });
+
+  it("states cannot read text visible on screen unless future OCR phase", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("cannot read text");
+  });
+
+  it("provides 'clear screen context' command to user", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("clear screen context");
+  });
+
+  it("describes what to say when asked 'what can you see' with no context", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("capture screen");
+  });
+
+  it("states screen capture is suppressed in privacy modes", () => {
+    expect(buildLisaSystemPrompt().toLowerCase()).toContain("sleep, privacy, and lockdown");
+  });
+
+  it("does not retain stale 'Screen awareness is NOT YET IMPLEMENTED' wording from before Phase 4A", () => {
+    expect(buildLisaSystemPrompt()).not.toContain("Screen awareness is NOT YET IMPLEMENTED");
+  });
+});
+
 // ─── Phase 3D voice capability boundary ──────────────────────────────────────
 
 describe("buildLisaSystemPrompt — Phase 3D voice capability boundary", () => {

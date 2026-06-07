@@ -758,6 +758,171 @@ describe("Phase 3A — EMERGENCY_STOP clears voice state", () => {
   });
 });
 
+// ─── Phase 4A — Screen state actions ─────────────────────────────────────────
+
+describe("Phase 4A — screen state defaults", () => {
+  it("initialState has screenStatus idle", () => {
+    expect(initialState.screenStatus).toBe("idle");
+  });
+
+  it("initialState has no screenCaptureId", () => {
+    expect(initialState.screenCaptureId).toBeUndefined();
+  });
+
+  it("initialState has no screenCapturedAt", () => {
+    expect(initialState.screenCapturedAt).toBeUndefined();
+  });
+
+  it("initialState has no screenWidth or screenHeight", () => {
+    expect(initialState.screenWidth).toBeUndefined();
+    expect(initialState.screenHeight).toBeUndefined();
+  });
+
+  it("initialState has no screenProvider or screenError", () => {
+    expect(initialState.screenProvider).toBeUndefined();
+    expect(initialState.screenError).toBeUndefined();
+  });
+});
+
+describe("Phase 4A — SET_SCREEN_STATUS", () => {
+  it("sets screenStatus to capturing", () => {
+    const next = lisaReducer(initialState, {
+      type: "SET_SCREEN_STATUS",
+      payload: { status: "capturing" },
+    });
+    expect(next.screenStatus).toBe("capturing");
+  });
+
+  it("sets screenStatus to available with all metadata", () => {
+    const next = lisaReducer(initialState, {
+      type: "SET_SCREEN_STATUS",
+      payload: { status: "available", captureId: "sc_123", capturedAt: 1700000000000, width: 1920, height: 1080, provider: "windows_capture" },
+    });
+    expect(next.screenStatus).toBe("available");
+    expect(next.screenCaptureId).toBe("sc_123");
+    expect(next.screenCapturedAt).toBe(1700000000000);
+    expect(next.screenWidth).toBe(1920);
+    expect(next.screenHeight).toBe(1080);
+    expect(next.screenProvider).toBe("windows_capture");
+    expect(next.screenError).toBeUndefined();
+  });
+
+  it("sets screenStatus to error with error message", () => {
+    const next = lisaReducer(initialState, {
+      type: "SET_SCREEN_STATUS",
+      payload: { status: "error", error: "Capture failed" },
+    });
+    expect(next.screenStatus).toBe("error");
+    expect(next.screenError).toBe("Capture failed");
+  });
+
+  it("does not mutate other state fields", () => {
+    const next = lisaReducer(initialState, {
+      type: "SET_SCREEN_STATUS",
+      payload: { status: "capturing" },
+    });
+    expect(next.voiceStatus).toBe("idle");
+    expect(next.interactions).toHaveLength(0);
+  });
+});
+
+describe("Phase 4A — CLEAR_SCREEN_CONTEXT", () => {
+  it("resets screenStatus to idle", () => {
+    let state = lisaReducer(initialState, {
+      type: "SET_SCREEN_STATUS",
+      payload: { status: "available", captureId: "sc_999", capturedAt: 1700000000000, width: 2560, height: 1440, provider: "windows_capture" },
+    });
+    const next = lisaReducer(state, { type: "CLEAR_SCREEN_CONTEXT" });
+    expect(next.screenStatus).toBe("idle");
+  });
+
+  it("clears screenCaptureId", () => {
+    let state = lisaReducer(initialState, {
+      type: "SET_SCREEN_STATUS",
+      payload: { status: "available", captureId: "sc_999", capturedAt: 1700000000000 },
+    });
+    const next = lisaReducer(state, { type: "CLEAR_SCREEN_CONTEXT" });
+    expect(next.screenCaptureId).toBeUndefined();
+  });
+
+  it("clears screenCapturedAt, screenWidth, screenHeight, screenProvider", () => {
+    let state = lisaReducer(initialState, {
+      type: "SET_SCREEN_STATUS",
+      payload: { status: "available", capturedAt: 1700000000000, width: 1920, height: 1080, provider: "windows_capture" },
+    });
+    const next = lisaReducer(state, { type: "CLEAR_SCREEN_CONTEXT" });
+    expect(next.screenCapturedAt).toBeUndefined();
+    expect(next.screenWidth).toBeUndefined();
+    expect(next.screenHeight).toBeUndefined();
+    expect(next.screenProvider).toBeUndefined();
+  });
+
+  it("clears screenError", () => {
+    let state = lisaReducer(initialState, {
+      type: "SET_SCREEN_STATUS",
+      payload: { status: "error", error: "fail" },
+    });
+    const next = lisaReducer(state, { type: "CLEAR_SCREEN_CONTEXT" });
+    expect(next.screenError).toBeUndefined();
+  });
+
+  it("is a no-op when screen state was already idle", () => {
+    const next = lisaReducer(initialState, { type: "CLEAR_SCREEN_CONTEXT" });
+    expect(next.screenStatus).toBe("idle");
+  });
+
+  it("does not affect other state fields", () => {
+    let state = lisaReducer(initialState, {
+      type: "SET_SCREEN_STATUS",
+      payload: { status: "available", captureId: "sc_1" },
+    });
+    state = lisaReducer(state, { type: "ADD_MEMORY_NOTE", payload: "keep this" });
+    const next = lisaReducer(state, { type: "CLEAR_SCREEN_CONTEXT" });
+    expect(next.memoryNotes).toHaveLength(1);
+    expect(next.memoryNotes[0].content).toBe("keep this");
+  });
+});
+
+describe("Phase 4A — EMERGENCY_STOP clears screen state", () => {
+  it("resets screenStatus to idle on emergency stop", () => {
+    let state = lisaReducer(initialState, {
+      type: "SET_SCREEN_STATUS",
+      payload: { status: "capturing" },
+    });
+    state = lisaReducer(state, { type: "EMERGENCY_STOP" });
+    expect(state.screenStatus).toBe("idle");
+  });
+
+  it("clears screenCaptureId on emergency stop", () => {
+    let state = lisaReducer(initialState, {
+      type: "SET_SCREEN_STATUS",
+      payload: { status: "available", captureId: "sc_e" },
+    });
+    state = lisaReducer(state, { type: "EMERGENCY_STOP" });
+    expect(state.screenCaptureId).toBeUndefined();
+  });
+
+  it("clears screenCapturedAt and dimensions on emergency stop", () => {
+    let state = lisaReducer(initialState, {
+      type: "SET_SCREEN_STATUS",
+      payload: { status: "available", capturedAt: 1700000001000, width: 800, height: 600 },
+    });
+    state = lisaReducer(state, { type: "EMERGENCY_STOP" });
+    expect(state.screenCapturedAt).toBeUndefined();
+    expect(state.screenWidth).toBeUndefined();
+    expect(state.screenHeight).toBeUndefined();
+  });
+
+  it("orbState is emergency_stopped regardless of screen state", () => {
+    let state = lisaReducer(initialState, {
+      type: "SET_SCREEN_STATUS",
+      payload: { status: "available", captureId: "sc_f" },
+    });
+    state = lisaReducer(state, { type: "EMERGENCY_STOP" });
+    expect(state.orbState).toBe("emergency_stopped");
+  });
+});
+
 describe("Phase 3E — TTS state actions", () => {
   it("SET_TTS_STATUS sets ttsUiStatus", () => {
     const state = lisaReducer(initialState, { type: "SET_TTS_STATUS", payload: { status: "available", provider: "windows_sapi" } });

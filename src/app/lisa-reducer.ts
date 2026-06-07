@@ -16,6 +16,7 @@ import type {
   ToolApprovalContract,
   VoiceStatus,
   TtsUiStatus,
+  ScreenStatus,
 } from "../core/types";
 import {
   DEFAULT_SETTINGS,
@@ -58,6 +59,14 @@ export interface LisaState {
   ttsError: string | null;
   ttsSpeakingInteractionId: string | null;
   spokenInteractionIds: string[];
+  // Screen awareness transient state — not persisted
+  screenStatus: ScreenStatus;
+  screenCaptureId?: string;
+  screenCapturedAt?: number;
+  screenWidth?: number;
+  screenHeight?: number;
+  screenProvider?: string;
+  screenError?: string;
 }
 
 export const initialState: LisaState = {
@@ -84,6 +93,7 @@ export const initialState: LisaState = {
   ttsError: null,
   ttsSpeakingInteractionId: null,
   spokenInteractionIds: [],
+  screenStatus: "idle",
 };
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
@@ -161,6 +171,19 @@ export type LisaAction =
   | { type: "MARK_INTERACTION_SPOKEN"; payload: string }
   | { type: "DISMISS_TOOL_SUGGESTION"; payload: { interactionId: string } }
   | { type: "CONVERT_TOOL_SUGGESTION"; payload: { interactionId: string; requestId: string } }
+  | {
+      type: "SET_SCREEN_STATUS";
+      payload: {
+        status: ScreenStatus;
+        captureId?: string;
+        capturedAt?: number;
+        width?: number;
+        height?: number;
+        provider?: string;
+        error?: string;
+      };
+    }
+  | { type: "CLEAR_SCREEN_CONTEXT" }
   | {
       type: "LOAD_STATE";
       payload: {
@@ -261,6 +284,13 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
         ttsProvider: null,
         ttsError: null,
         ttsSpeakingInteractionId: null,
+        screenStatus: "idle" as ScreenStatus,
+        screenCaptureId: undefined,
+        screenCapturedAt: undefined,
+        screenWidth: undefined,
+        screenHeight: undefined,
+        screenProvider: undefined,
+        screenError: undefined,
       };
     }
 
@@ -649,6 +679,32 @@ export function lisaReducer(state: LisaState, action: LisaAction): LisaState {
         toolResults: action.payload.toolResults,
         toolApprovals: action.payload.toolApprovals,
         isLoaded: true,
+      };
+
+    case "SET_SCREEN_STATUS": {
+      const { status, captureId, capturedAt, width, height, provider, error } = action.payload;
+      return {
+        ...state,
+        screenStatus: status,
+        screenCaptureId: captureId ?? state.screenCaptureId,
+        screenCapturedAt: capturedAt ?? state.screenCapturedAt,
+        screenWidth: width ?? state.screenWidth,
+        screenHeight: height ?? state.screenHeight,
+        screenProvider: provider ?? state.screenProvider,
+        screenError: error ?? undefined,
+      };
+    }
+
+    case "CLEAR_SCREEN_CONTEXT":
+      return {
+        ...state,
+        screenStatus: "idle",
+        screenCaptureId: undefined,
+        screenCapturedAt: undefined,
+        screenWidth: undefined,
+        screenHeight: undefined,
+        screenProvider: undefined,
+        screenError: undefined,
       };
 
     default:

@@ -29,6 +29,10 @@ voice-live = ["whisper", "audio-capture"]
 # Enable Windows-native SAPI TTS via PowerShell stdin pipe. No extra deps.
 # Build: cargo build --features tts-sapi
 tts-sapi = []
+# Enable manual local screen capture via PowerShell on Windows. No extra deps.
+# Manual user-initiated only — no background capture, no network, no OCR.
+# Build: cargo build --features screen-capture
+screen-capture = []
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

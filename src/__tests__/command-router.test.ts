@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { routeCommand, getDesktopActionGuardMessage, getVoiceCapabilityMessage } from "../core/command-router";
+import { routeCommand, getDesktopActionGuardMessage, getVoiceCapabilityMessage, getScreenCapabilityMessage } from "../core/command-router";
 
 describe("routeCommand — emergency_stop", () => {
   it("routes 'emergency stop'", () => {
@@ -242,8 +242,8 @@ describe("getDesktopActionGuardMessage — blocked commands", () => {
   it("blocks 'right-click the desktop'", () => {
     expect(getDesktopActionGuardMessage("right-click the desktop")).not.toBeNull();
   });
-  it("blocks 'capture the screen'", () => {
-    expect(getDesktopActionGuardMessage("capture the screen")).not.toBeNull();
+  it("does not block 'capture the screen' — Phase 4A explicit capture is allowed", () => {
+    expect(getDesktopActionGuardMessage("capture the screen")).toBeNull();
   });
   it("returns a message containing 'not implemented'", () => {
     const msg = getDesktopActionGuardMessage("open Steam and download a game");
@@ -825,6 +825,217 @@ describe("getVoiceCapabilityMessage — mic button missing troubleshooting", () 
 
   it("answers 'no mic button' phrase", () => {
     expect(getVoiceCapabilityMessage("no mic button is showing")).not.toBeNull();
+  });
+});
+
+// ─── Phase 4A — screen capture commands ──────────────────────────────────────
+
+describe("routeCommand — capture_screen (Phase 4A)", () => {
+  it("routes 'capture screen'", () => {
+    expect(routeCommand("capture screen").intent).toBe("capture_screen");
+  });
+
+  it("routes 'take screenshot'", () => {
+    expect(routeCommand("take screenshot").intent).toBe("capture_screen");
+  });
+
+  it("routes 'take a screenshot'", () => {
+    expect(routeCommand("take a screenshot").intent).toBe("capture_screen");
+  });
+
+  it("routes 'look at my screen'", () => {
+    expect(routeCommand("look at my screen").intent).toBe("capture_screen");
+  });
+
+  it("routes 'look at the screen'", () => {
+    expect(routeCommand("look at the screen").intent).toBe("capture_screen");
+  });
+
+  it("routes 'Lisa, capture screen' (with prefix)", () => {
+    expect(routeCommand("Lisa, capture screen").intent).toBe("capture_screen");
+  });
+
+  it("has high confidence", () => {
+    expect(routeCommand("capture screen").confidence).toBe("high");
+  });
+
+  it("returns a non-empty response", () => {
+    expect(routeCommand("capture screen").response).toBeTruthy();
+  });
+});
+
+describe("routeCommand — screen_what_can_you_see (Phase 4A)", () => {
+  it("routes 'what can you see'", () => {
+    expect(routeCommand("what can you see").intent).toBe("screen_what_can_you_see");
+  });
+
+  it("routes 'what do you see'", () => {
+    expect(routeCommand("what do you see").intent).toBe("screen_what_can_you_see");
+  });
+
+  it("routes 'describe screen context'", () => {
+    expect(routeCommand("describe screen context").intent).toBe("screen_what_can_you_see");
+  });
+
+  it("has high confidence", () => {
+    expect(routeCommand("what can you see").confidence).toBe("high");
+  });
+});
+
+describe("routeCommand — clear_screen_context (Phase 4A)", () => {
+  it("routes 'clear screen context'", () => {
+    expect(routeCommand("clear screen context").intent).toBe("clear_screen_context");
+  });
+
+  it("routes 'forget screen context'", () => {
+    expect(routeCommand("forget screen context").intent).toBe("clear_screen_context");
+  });
+
+  it("routes 'clear screen'", () => {
+    expect(routeCommand("clear screen").intent).toBe("clear_screen_context");
+  });
+
+  it("has high confidence", () => {
+    expect(routeCommand("clear screen context").confidence).toBe("high");
+  });
+});
+
+describe("routeCommand — screen_awareness_enable / screen_awareness_disable (Phase 4A)", () => {
+  it("routes 'enable screen awareness'", () => {
+    expect(routeCommand("enable screen awareness").intent).toBe("screen_awareness_enable");
+  });
+
+  it("routes 'turn on screen awareness'", () => {
+    expect(routeCommand("turn on screen awareness").intent).toBe("screen_awareness_enable");
+  });
+
+  it("routes 'disable screen awareness'", () => {
+    expect(routeCommand("disable screen awareness").intent).toBe("screen_awareness_disable");
+  });
+
+  it("routes 'turn off screen awareness'", () => {
+    expect(routeCommand("turn off screen awareness").intent).toBe("screen_awareness_disable");
+  });
+
+  it("all screen awareness commands have high confidence", () => {
+    const commands = ["enable screen awareness", "disable screen awareness", "turn on screen awareness"];
+    for (const cmd of commands) {
+      expect(routeCommand(cmd).confidence).toBe("high");
+    }
+  });
+});
+
+describe("getDesktopActionGuardMessage — Phase 4A OCR/read-screen still blocked", () => {
+  it("still blocks 'can you read my screen'", () => {
+    expect(getDesktopActionGuardMessage("can you read my screen")).not.toBeNull();
+  });
+
+  it("'capture screen' is not blocked — explicit Phase 4A command", () => {
+    expect(getDesktopActionGuardMessage("capture screen")).toBeNull();
+  });
+
+  it("'take screenshot' is not blocked", () => {
+    expect(getDesktopActionGuardMessage("take screenshot")).toBeNull();
+  });
+});
+
+describe("getScreenCapabilityMessage — background watching questions (Phase 4A)", () => {
+  it("answers 'can you watch my screen in the background'", () => {
+    const msg = getScreenCapabilityMessage("can you watch my screen in the background");
+    expect(msg).not.toBeNull();
+  });
+
+  it("answers 'do you have background screen monitoring'", () => {
+    expect(getScreenCapabilityMessage("do you have background screen monitoring")).not.toBeNull();
+  });
+
+  it("response says no background watching", () => {
+    const msg = getScreenCapabilityMessage("can you watch my screen in the background") ?? "";
+    expect(msg.toLowerCase()).toContain("no");
+    expect(msg.toLowerCase()).toContain("manual");
+  });
+
+  it("response mentions Phase 4A", () => {
+    const msg = getScreenCapabilityMessage("can you watch my screen in the background") ?? "";
+    expect(msg).toContain("Phase 4A");
+  });
+});
+
+describe("getScreenCapabilityMessage — OCR questions (Phase 4A)", () => {
+  it("answers 'can you do OCR'", () => {
+    const msg = getScreenCapabilityMessage("can you do OCR");
+    expect(msg).not.toBeNull();
+  });
+
+  it("answers 'can you read text from the screen'", () => {
+    expect(getScreenCapabilityMessage("can you read text from the screen")).not.toBeNull();
+  });
+
+  it("response states OCR is not implemented in Phase 4A", () => {
+    const msg = getScreenCapabilityMessage("can you do OCR") ?? "";
+    expect(msg.toLowerCase()).toContain("not implemented");
+    expect(msg.toLowerCase()).toContain("phase 4a");
+  });
+
+  it("response states metadata only", () => {
+    const msg = getScreenCapabilityMessage("can you read text from the screen") ?? "";
+    expect(msg.toLowerCase()).toContain("metadata");
+  });
+});
+
+describe("getScreenCapabilityMessage — screenshot upload questions (Phase 4A)", () => {
+  it("answers 'can you upload the screenshot'", () => {
+    const msg = getScreenCapabilityMessage("can you upload the screenshot");
+    expect(msg).not.toBeNull();
+  });
+
+  it("answers 'can you send the screenshot'", () => {
+    expect(getScreenCapabilityMessage("can you send the screenshot")).not.toBeNull();
+  });
+
+  it("response says local only — never uploaded", () => {
+    const msg = getScreenCapabilityMessage("can you upload the screenshot") ?? "";
+    expect(msg.toLowerCase()).toContain("local");
+    expect(msg.toLowerCase()).toContain("never");
+  });
+});
+
+describe("getScreenCapabilityMessage — general screen capability questions (Phase 4A)", () => {
+  it("answers 'do you have screen awareness'", () => {
+    const msg = getScreenCapabilityMessage("do you have screen awareness");
+    expect(msg).not.toBeNull();
+  });
+
+  it("answers 'can you see my screen'", () => {
+    expect(getScreenCapabilityMessage("can you see my screen")).not.toBeNull();
+  });
+
+  it("response mentions 'capture screen' command", () => {
+    const msg = getScreenCapabilityMessage("do you have screen awareness") ?? "";
+    expect(msg.toLowerCase()).toContain("capture screen");
+  });
+
+  it("response mentions no cloud upload", () => {
+    const msg = getScreenCapabilityMessage("do you have screen awareness") ?? "";
+    expect(msg.toLowerCase()).toContain("cloud");
+  });
+});
+
+describe("getScreenCapabilityMessage — unrelated questions pass through (Phase 4A)", () => {
+  it("passes 'what is the weather'", () => {
+    expect(getScreenCapabilityMessage("what is the weather")).toBeNull();
+  });
+
+  it("passes 'activate cyber mode'", () => {
+    expect(getScreenCapabilityMessage("activate cyber mode")).toBeNull();
+  });
+
+  it("passes 'emergency stop'", () => {
+    expect(getScreenCapabilityMessage("emergency stop")).toBeNull();
+  });
+
+  it("passes 'tell me about machine learning'", () => {
+    expect(getScreenCapabilityMessage("tell me about machine learning")).toBeNull();
   });
 });
 

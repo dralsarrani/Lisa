@@ -1130,6 +1130,111 @@ describe("Phase 2F — cleanOrphans on loadState", () => {
   });
 });
 
+// ─── Phase 4A — screen awareness settings migration ───────────────────────────
+
+describe("Phase 4A — screen awareness DEFAULT_SETTINGS", () => {
+  it("DEFAULT_SETTINGS.screenAwarenessEnabled is false", () => {
+    expect(DEFAULT_SETTINGS.screenAwarenessEnabled).toBe(false);
+  });
+
+  it("DEFAULT_SETTINGS.screenCaptureProvider is 'none'", () => {
+    expect(DEFAULT_SETTINGS.screenCaptureProvider).toBe("none");
+  });
+
+  it("DEFAULT_SETTINGS.screenContextEnabledForPrompt is false", () => {
+    expect(DEFAULT_SETTINGS.screenContextEnabledForPrompt).toBe(false);
+  });
+
+  it("DEFAULT_SETTINGS.screenSuppressInPrivacyModes is true", () => {
+    expect(DEFAULT_SETTINGS.screenSuppressInPrivacyModes).toBe(true);
+  });
+
+  it("default state includes all four screen settings", async () => {
+    const state = await loadState();
+    expect(state.settings.screenAwarenessEnabled).toBe(false);
+    expect(state.settings.screenCaptureProvider).toBe("none");
+    expect(state.settings.screenContextEnabledForPrompt).toBe(false);
+    expect(state.settings.screenSuppressInPrivacyModes).toBe(true);
+  });
+});
+
+describe("Phase 4A — screen settings backfill via DEFAULT_SETTINGS spread", () => {
+  it("v9 state without screenAwarenessEnabled gets false default", async () => {
+    localStorage.setItem("lisa_state_v1", JSON.stringify({
+      version: STATE_VERSION,
+      settings: { ollamaModel: "llama3.2:1b" },
+      missions: [], approvals: [], auditEvents: [],
+      conversationHistory: [], memoryNotes: [],
+      toolRequests: [], toolApprovals: [], toolResults: [],
+      savedAt: new Date().toISOString(),
+    }));
+    const state = await loadState();
+    expect(state.settings.screenAwarenessEnabled).toBe(false);
+  });
+
+  it("v9 state without screenCaptureProvider gets 'none' default", async () => {
+    localStorage.setItem("lisa_state_v1", JSON.stringify({
+      version: STATE_VERSION,
+      settings: { ollamaModel: "llama3.2:1b" },
+      missions: [], approvals: [], auditEvents: [],
+      conversationHistory: [], memoryNotes: [],
+      toolRequests: [], toolApprovals: [], toolResults: [],
+      savedAt: new Date().toISOString(),
+    }));
+    const state = await loadState();
+    expect(state.settings.screenCaptureProvider).toBe("none");
+  });
+
+  it("v9 state without screenSuppressInPrivacyModes gets true default", async () => {
+    localStorage.setItem("lisa_state_v1", JSON.stringify({
+      version: STATE_VERSION,
+      settings: { ollamaModel: "llama3.2:1b" },
+      missions: [], approvals: [], auditEvents: [],
+      conversationHistory: [], memoryNotes: [],
+      toolRequests: [], toolApprovals: [], toolResults: [],
+      savedAt: new Date().toISOString(),
+    }));
+    const state = await loadState();
+    expect(state.settings.screenSuppressInPrivacyModes).toBe(true);
+  });
+
+  it("existing settings are preserved when screen fields are added by spread", async () => {
+    localStorage.setItem("lisa_state_v1", JSON.stringify({
+      version: STATE_VERSION,
+      settings: { activeMode: "cyber", developerMode: true, ollamaModel: "llama3.2:1b" },
+      missions: [], approvals: [], auditEvents: [],
+      conversationHistory: [], memoryNotes: [],
+      toolRequests: [], toolApprovals: [], toolResults: [],
+      savedAt: new Date().toISOString(),
+    }));
+    const state = await loadState();
+    expect(state.settings.activeMode).toBe("cyber");
+    expect(state.settings.developerMode).toBe(true);
+    expect(state.settings.ollamaModel).toBe("llama3.2:1b");
+    expect(state.settings.screenAwarenessEnabled).toBe(false);
+  });
+
+  it("round-trip persists screenAwarenessEnabled: true", async () => {
+    await saveState({
+      ...BASE_SAVE,
+      settings: { ...DEFAULT_SETTINGS, screenAwarenessEnabled: true },
+      ...EMPTY_TOOLS,
+    });
+    const loaded = await loadState();
+    expect(loaded.settings.screenAwarenessEnabled).toBe(true);
+  });
+
+  it("round-trip persists screenContextEnabledForPrompt: true", async () => {
+    await saveState({
+      ...BASE_SAVE,
+      settings: { ...DEFAULT_SETTINGS, screenContextEnabledForPrompt: true },
+      ...EMPTY_TOOLS,
+    });
+    const loaded = await loadState();
+    expect(loaded.settings.screenContextEnabledForPrompt).toBe(true);
+  });
+});
+
 describe("Phase 3E — voice output settings migration", () => {
   it("state without voiceOutputEnabled gets false default", async () => {
     localStorage.setItem(

@@ -5,6 +5,7 @@ use stt::SttEngine;
 use stt::{validate_model_path, SttModelTestResult, SttModelValidationResult, SttTranscriptResult};
 
 mod audio;
+mod screen;
 mod tts;
 
 use futures::StreamExt;
@@ -1081,6 +1082,7 @@ pub fn run() {
         .manage(CancelState::new())
         .manage(VoiceCaptureManager::new())
         .manage(tts::TtsManager::new())
+        .manage(screen::ScreenManager::new())
         .invoke_handler(tauri::generate_handler![
             ping_backend,
             get_runtime_health,
@@ -1102,6 +1104,9 @@ pub fn run() {
             tts::get_tts_status,
             tts::speak_text,
             tts::stop_speaking,
+            screen::get_screen_capture_status,
+            screen::capture_screen,
+            screen::clear_screen_capture,
         ])
         .run(tauri::generate_context!())
         .expect("Error while running Lisa application");

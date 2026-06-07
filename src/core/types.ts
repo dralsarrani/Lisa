@@ -286,7 +286,13 @@ export type AuditEventType =
   | "voice_conversation_auto_send"
   | "voice_conversation_auto_send_blocked"
   | "voice_clarification_requested"
-  | "voice_reply_auto_speak_requested";
+  | "voice_reply_auto_speak_requested"
+  | "screen_capture_started"
+  | "screen_capture_completed"
+  | "screen_capture_failed"
+  | "screen_context_cleared"
+  | "screen_awareness_enabled"
+  | "screen_awareness_disabled";
 
 export interface AuditEvent {
   id: string;
@@ -356,6 +362,11 @@ export interface LisaSettings {
   voiceNoTranscriptAction: "clarify" | "silent";
   voiceAutoSpeakReplies: boolean;
   voiceConversationSuppressInPrivacyModes: boolean;
+  // Screen awareness — Phase 4A
+  screenAwarenessEnabled: boolean;
+  screenCaptureProvider: "windows_capture" | "none";
+  screenContextEnabledForPrompt: boolean;
+  screenSuppressInPrivacyModes: boolean;
 }
 
 export const DEFAULT_SETTINGS: LisaSettings = {
@@ -388,6 +399,11 @@ export const DEFAULT_SETTINGS: LisaSettings = {
   voiceNoTranscriptAction: "clarify",
   voiceAutoSpeakReplies: true,
   voiceConversationSuppressInPrivacyModes: true,
+  // Screen awareness defaults — disabled, suppress in sensitive modes, no prompt injection
+  screenAwarenessEnabled: false,
+  screenCaptureProvider: "none",
+  screenContextEnabledForPrompt: false,
+  screenSuppressInPrivacyModes: true,
 };
 
 // ─── Command Router ───────────────────────────────────────────────────────────
@@ -419,6 +435,11 @@ export type CommandIntent =
   | "tts_speak_again"
   | "voice_conversation_enable"
   | "voice_conversation_disable"
+  | "capture_screen"
+  | "clear_screen_context"
+  | "screen_awareness_enable"
+  | "screen_awareness_disable"
+  | "screen_what_can_you_see"
   | "unknown";
 
 export interface CommandRouteResult {
@@ -453,6 +474,7 @@ export interface LisaInteraction {
 export type VoiceStatus = "idle" | "recording" | "transcribing" | "preview" | "error" | "no_transcript";
 export type SttEngineStatus = "not_configured" | "ready" | "error";
 export type TtsUiStatus = "idle" | "checking" | "available" | "unavailable" | "speaking" | "error";
+export type ScreenStatus = "idle" | "capturing" | "available" | "error";
 
 export const INTERACTION_CAP = 25;
 export const CONVERSATION_HISTORY_CAP = 50;

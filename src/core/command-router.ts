@@ -314,6 +314,54 @@ export function routeCommand(raw: string): CommandRouteResult {
     return result("voice_conversation_disable", raw, normalized, {}, "high", "Voice conversation disabled. Returning to manual review mode.");
   }
 
+  // ── Screen awareness commands ──
+
+  // Capture screen — explicit user-triggered action.
+  if (
+    normalized === "capture screen" ||
+    normalized === "take screenshot" ||
+    normalized === "take a screenshot" ||
+    normalized === "look at my screen" ||
+    normalized === "look at the screen"
+  ) {
+    return result("capture_screen", raw, normalized, {}, "high", "Capturing screen context...");
+  }
+
+  // What can you see — honest response based on whether screen context exists.
+  if (
+    normalized === "what can you see" ||
+    normalized === "what do you see" ||
+    normalized === "describe screen context" ||
+    normalized === "describe what you see"
+  ) {
+    return result("screen_what_can_you_see", raw, normalized, {}, "high", "Checking screen context...");
+  }
+
+  // Clear screen context.
+  if (
+    normalized === "clear screen context" ||
+    normalized === "forget screen context" ||
+    normalized === "clear screen"
+  ) {
+    return result("clear_screen_context", raw, normalized, {}, "high", "Screen context cleared.");
+  }
+
+  // Enable screen awareness.
+  if (
+    normalized === "enable screen awareness" ||
+    normalized === "turn on screen awareness"
+  ) {
+    return result("screen_awareness_enable", raw, normalized, {}, "high", "Screen awareness enabled.");
+  }
+
+  // Disable screen awareness.
+  if (
+    normalized === "disable screen awareness" ||
+    normalized === "turn off screen awareness"
+  ) {
+    return result("screen_awareness_disable", raw, normalized, {}, "high", "Screen awareness disabled.");
+  }
+
   // Fallback: unknown command.
   return result(
     "unknown",
@@ -384,6 +432,44 @@ export function getVoiceCapabilityMessage(raw: string): string | null {
   return null;
 }
 
+// ─── Screen capability guard ─────────────────────────────────────────────────
+//
+// Returns a canned accurate message for screen-related questions forwarded to LLM.
+// Called before the LLM streaming path in CommandInput so small models cannot
+// hallucinate OCR, desktop control, or continuous watching.
+
+const SCREEN_CAPABILITY_QA: Array<[RegExp, string]> = [
+  // Background / continuous watching
+  [
+    /\bwatch(?:ing)?\s+(?:my\s+)?screen\b|\bcontinuous(?:ly)?\s+(?:watch|monitor|capture|watch)\s+screen\b|\bbackground\s+screen\b|\balways.on\s+screen\b/i,
+    "No. Lisa does not watch your screen in the background. Phase 4A screen awareness is manual-only: you trigger each capture with 'capture screen' or the button in Settings. There is no continuous monitoring.",
+  ],
+  // OCR / reading text from screen
+  [
+    /\bocr\b|\bread\s+text\s+(?:from|on|off)\s+(?:the\s+|my\s+)?screen\b|\bextract\s+text\s+from\s+(?:the\s+|my\s+)?screen\b/i,
+    "OCR (reading text from screenshots) is not implemented in Phase 4A. Lisa captures metadata only — resolution and timestamp. No text extraction, no optical character recognition.",
+  ],
+  // Screenshot upload / cloud
+  [
+    /\bupload\s+(?:the\s+)?screenshot\b|\bsend\s+(?:the\s+)?screenshot\b|\bshare\s+(?:the\s+)?screenshot\b/i,
+    "Screenshots are local only. Lisa never uploads, sends, or shares screenshots to any network service. All capture stays on your machine.",
+  ],
+  // General screen awareness capability
+  [
+    /\bscreen\s+(?:awareness|context|capture|screenshot)\b|\bcan\s+(?:you\s+)?see\s+(?:my\s+|the\s+)?screen\b|\bdo\s+you\s+have\s+screen\s+(?:access|context)\b/i,
+    "Phase 4A: Lisa has manual screen awareness. Use 'capture screen' or the button in Settings → Screen Awareness to take a snapshot. Lisa sees metadata only (resolution, timestamp) — no OCR, no image understanding, no cloud upload, no background watching. Enable 'Include Screen Context in AI' in settings to include metadata in local AI prompts.",
+  ],
+];
+
+export function getScreenCapabilityMessage(raw: string): string | null {
+  for (const [re, response] of SCREEN_CAPABILITY_QA) {
+    if (re.test(raw)) {
+      return response;
+    }
+  }
+  return null;
+}
+
 // ─── Desktop-action guard ─────────────────────────────────────────────────────
 //
 // Returns a safe refusal message if the raw input matches a known pattern for
@@ -398,9 +484,8 @@ const BLOCKED_DESKTOP_ACTIONS: RegExp[] = [
   /\b(?:move|click|drag)\s+(?:the\s+|my\s+)?(?:mouse|cursor)\b/i,
   /\bright[- ]?click\b/i,
   /\bdouble[- ]?click\b/i,
-  // Screen capture / reading
+  // Screen reading via OCR — not implemented
   /\bread\s+(?:my|the|your)\s+screen\b/i,
-  /\bcapture\s+(?:the\s+|my\s+)?screen\b/i,
   // File / script execution
   /\b(?:run|execute)\s+(?:this\s+)?(?:file|script|program|code|executable|\.exe|\.sh|\.ps1|\.bat)\b/i,
   /\brun\s+a\s+shell\s+command\b/i,

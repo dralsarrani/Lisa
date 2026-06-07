@@ -55,6 +55,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
   const [ttsTestResult, setTtsTestResult] = useState<{ accepted: boolean; error?: string } | null>(null);
   const [ttsStopping, setTtsStopping] = useState(false);
 
+  // Screen awareness local state
+  const [screenCapturing, setScreenCapturing] = useState(false);
+  const [screenCaptureError, setScreenCaptureError] = useState<string | null>(null);
+
   useEffect(() => {
     return () => {
       if (confirmResetRef.current) clearTimeout(confirmResetRef.current);
@@ -338,6 +342,111 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
       dispatch({ type: "SET_TTS_STATUS", payload: { status: "error", error } });
     }
     setTtsStopping(false);
+  }
+
+  async function handleCaptureScreen() {
+    const isInTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    const privacyModes = ["sleep", "privacy", "lockdown"];
+    if (settings.screenSuppressInPrivacyModes && privacyModes.includes(settings.activeMode)) {
+      setScreenCaptureError("Screen capture is suppressed in Sleep, Privacy, and Lockdown modes.");
+      return;
+    }
+    if (!settings.screenAwarenessEnabled) {
+      setScreenCaptureError("Enable Screen Awareness first.");
+      return;
+    }
+    setScreenCapturing(true);
+    setScreenCaptureError(null);
+    dispatch({ type: "SET_SCREEN_STATUS", payload: { status: "capturing" } });
+    addAudit({
+      eventType: "screen_capture_started",
+      source: "settings_panel",
+      summary: "Screen capture started.",
+      details: "source=manual_command",
+      severity: "info",
+    });
+    if (!isInTauri) {
+      dispatch({ type: "SET_SCREEN_STATUS", payload: { status: "error", error: "Screen capture requires the desktop app." } });
+      setScreenCaptureError("Screen capture requires the desktop app.");
+      setScreenCapturing(false);
+      return;
+    }
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const result = await invoke<{
+        accepted: boolean;
+        capture_id: string;
+        width: number | null;
+        height: number | null;
+        captured_at: number;
+        provider: string;
+        error: string | null;
+      }>("capture_screen");
+      if (result.accepted) {
+        dispatch({
+          type: "SET_SCREEN_STATUS",
+          payload: {
+            status: "available",
+            captureId: result.capture_id,
+            capturedAt: result.captured_at,
+            width: result.width ?? undefined,
+            height: result.height ?? undefined,
+            provider: result.provider,
+          },
+        });
+        dispatch({ type: "SET_SETTINGS", payload: { screenCaptureProvider: "windows_capture" } });
+        addAudit({
+          eventType: "screen_capture_completed",
+          source: "settings_panel",
+          summary: "Screen capture completed.",
+          details: `width=${result.width ?? "?"} height=${result.height ?? "?"} provider=${result.provider} source=manual_command`,
+          severity: "info",
+        });
+      } else {
+        dispatch({ type: "SET_SCREEN_STATUS", payload: { status: "error", error: result.error ?? "Capture failed." } });
+        setScreenCaptureError(result.error ?? "Capture failed.");
+        addAudit({
+          eventType: "screen_capture_failed",
+          source: "settings_panel",
+          summary: "Screen capture failed.",
+          details: result.error ?? "unknown error",
+          severity: "warning",
+        });
+      }
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      dispatch({ type: "SET_SCREEN_STATUS", payload: { status: "error", error } });
+      setScreenCaptureError(error);
+      addAudit({
+        eventType: "screen_capture_failed",
+        source: "settings_panel",
+        summary: "Screen capture failed.",
+        details: error,
+        severity: "warning",
+      });
+    }
+    setScreenCapturing(false);
+  }
+
+  async function handleClearScreenContext() {
+    const isInTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    if (isInTauri) {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        await invoke("clear_screen_capture");
+      } catch {
+        // Temp file cleanup failure is non-fatal — state is still cleared.
+      }
+    }
+    dispatch({ type: "CLEAR_SCREEN_CONTEXT" });
+    setScreenCaptureError(null);
+    addAudit({
+      eventType: "screen_context_cleared",
+      source: "settings_panel",
+      summary: "Screen context cleared.",
+      details: "source=manual_clear",
+      severity: "info",
+    });
   }
 
   function handleClearHistory() {
@@ -1022,6 +1131,116 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
 
         <p className="history-note" style={{ marginTop: "8px" }}>
           Phase 3G — Voice Conversation. Hold V to speak, release to transcribe. In Auto-Send mode the transcript submits automatically and Lisa speaks the reply. The microphone never opens automatically — hold V again for each new turn. No wake word, no background listening. Commands: "enable voice conversation" / "disable voice conversation".
+        </p>
+      </div>
+
+      {/* ── Screen Awareness ── */}
+      <div className="settings-section">
+        <div className="settings-section-label">Screen Awareness</div>
+
+        <div className="settings-toggle-row">
+          <span className="settings-toggle-label">Enable Screen Awareness</span>
+          <button
+            className={`settings-toggle ${settings.screenAwarenessEnabled ? "settings-toggle-on" : ""}`}
+            onClick={() => {
+              const next = !settings.screenAwarenessEnabled;
+              dispatch({ type: "SET_SETTINGS", payload: { screenAwarenessEnabled: next } });
+              addAudit({
+                eventType: next ? "screen_awareness_enabled" : "screen_awareness_disabled",
+                source: "settings_panel",
+                summary: next ? "Screen awareness enabled." : "Screen awareness disabled.",
+                severity: "info",
+              });
+            }}
+            aria-pressed={settings.screenAwarenessEnabled}
+          >
+            {settings.screenAwarenessEnabled ? "ON" : "OFF"}
+          </button>
+        </div>
+
+        {settings.screenAwarenessEnabled && (
+          <>
+            <div className="settings-toggle-row" style={{ marginTop: "10px" }}>
+              <span className="settings-toggle-label">Include Screen Context in Local AI</span>
+              <button
+                className={`settings-toggle ${settings.screenContextEnabledForPrompt ? "settings-toggle-on" : ""}`}
+                onClick={() =>
+                  dispatch({ type: "SET_SETTINGS", payload: { screenContextEnabledForPrompt: !settings.screenContextEnabledForPrompt } })
+                }
+                aria-pressed={settings.screenContextEnabledForPrompt}
+              >
+                {settings.screenContextEnabledForPrompt ? "ON" : "OFF"}
+              </button>
+            </div>
+
+            <div className="settings-toggle-row">
+              <span className="settings-toggle-label">Suppress in Sleep / Privacy / Lockdown</span>
+              <button
+                className={`settings-toggle ${settings.screenSuppressInPrivacyModes ? "settings-toggle-on" : ""}`}
+                onClick={() =>
+                  dispatch({ type: "SET_SETTINGS", payload: { screenSuppressInPrivacyModes: !settings.screenSuppressInPrivacyModes } })
+                }
+                aria-pressed={settings.screenSuppressInPrivacyModes}
+              >
+                {settings.screenSuppressInPrivacyModes ? "ON" : "OFF"}
+              </button>
+            </div>
+
+            <div className="settings-field" style={{ marginTop: "12px" }}>
+              <span className="settings-field-label">Status</span>
+              <span className={`ai-status-badge ${
+                state.screenStatus === "available" ? "ai-status-online" :
+                state.screenStatus === "capturing" ? "ai-status-checking" :
+                state.screenStatus === "error" ? "ai-status-error" :
+                "ai-status-offline"
+              }`}>
+                {state.screenStatus === "available"
+                  ? `Captured — ${state.screenWidth ?? "?"}×${state.screenHeight ?? "?"}`
+                  : state.screenStatus === "capturing"
+                  ? "Capturing…"
+                  : state.screenStatus === "error"
+                  ? "Error"
+                  : "No capture"}
+              </span>
+            </div>
+
+            {state.screenStatus === "available" && state.screenCapturedAt && (
+              <div className="settings-field">
+                <span className="settings-field-label">Captured at</span>
+                <span className="settings-field-value">
+                  {new Date(state.screenCapturedAt).toLocaleTimeString()}
+                </span>
+              </div>
+            )}
+
+            {screenCaptureError && (
+              <div className="stt-test-result stt-test-failed" style={{ marginTop: "8px" }}>
+                {screenCaptureError}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
+              <button
+                className="settings-action-btn"
+                onClick={handleCaptureScreen}
+                disabled={screenCapturing}
+              >
+                {screenCapturing ? "Capturing…" : "Capture Screen"}
+              </button>
+              {state.screenStatus === "available" && (
+                <button
+                  className="settings-action-btn"
+                  onClick={handleClearScreenContext}
+                >
+                  Clear Screen Context
+                </button>
+              )}
+            </div>
+          </>
+        )}
+
+        <p className="history-note" style={{ marginTop: "12px" }}>
+          Screen capture is manual only. Lisa does not watch your screen in the background. Screenshots are local and are not sent to any network service. No OCR or image understanding in Phase 4A. Commands: "capture screen" / "clear screen context" / "what can you see".
         </p>
       </div>
 
