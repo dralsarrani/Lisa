@@ -440,6 +440,7 @@ export type CommandIntent =
   | "screen_awareness_enable"
   | "screen_awareness_disable"
   | "screen_what_can_you_see"
+  | "repeat_last_response"
   | "unknown";
 
 export interface CommandRouteResult {

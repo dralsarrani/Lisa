@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useLisa } from "../../app/useLisa";
-import { routeCommand, getDesktopActionGuardMessage, getVoiceCapabilityMessage, getScreenCapabilityMessage, formatScreenContextResponse } from "../../core/command-router";
+import { routeCommand, getDesktopActionGuardMessage, getVoiceCapabilityMessage, getScreenCapabilityMessage, formatScreenContextResponse, findLastRepeatableResponse } from "../../core/command-router";
 import { createTestMission, applyApprovalDecision } from "../../core/mission-store";
 import { createAuditEvent } from "../../core/audit-store";
 import { getModeDisplayName } from "../../core/mode-store";
@@ -1089,6 +1089,26 @@ export const CommandInput: React.FC = () => {
         dispatch({
           type: "ADD_INTERACTION",
           payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: route.response ?? "Voice conversation disabled.", createdAt: now(), completedAt: now() },
+        });
+        break;
+      }
+
+      case "repeat_last_response": {
+        const lastResponse = findLastRepeatableResponse(state.interactions);
+        const repeatMsg = lastResponse
+          ? `Here is the last response again:\n\n${lastResponse}`
+          : "I do not have a previous response to repeat yet.";
+        dispatch({ type: "SET_COMMAND_RESPONSE", payload: repeatMsg });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: repeatMsg, createdAt: now(), completedAt: now() },
+        });
+        addAudit({
+          eventType: "command_routed",
+          source: "command_input",
+          summary: "Repeat last response executed deterministically.",
+          details: `intent=repeat_last_response response_chars=${lastResponse?.length ?? 0}`,
+          severity: "info",
         });
         break;
       }

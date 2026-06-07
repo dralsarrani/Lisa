@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { routeCommand, getDesktopActionGuardMessage, getVoiceCapabilityMessage, getScreenCapabilityMessage, formatScreenContextResponse } from "../core/command-router";
+import { routeCommand, getDesktopActionGuardMessage, getVoiceCapabilityMessage, getScreenCapabilityMessage, formatScreenContextResponse, findLastRepeatableResponse } from "../core/command-router";
 
 describe("routeCommand — emergency_stop", () => {
   it("routes 'emergency stop'", () => {
@@ -1076,8 +1076,8 @@ describe("routeCommand — TTS voice output commands (Phase 3E)", () => {
     expect(routeCommand("speak again").intent).toBe("tts_speak_again");
   });
 
-  it("routes 'repeat that'", () => {
-    expect(routeCommand("repeat that").intent).toBe("tts_speak_again");
+  it("'repeat that' now routes to repeat_last_response (text repeat), not tts_speak_again", () => {
+    expect(routeCommand("repeat that").intent).toBe("repeat_last_response");
   });
 
   it("all TTS commands return high confidence", () => {
@@ -1181,5 +1181,194 @@ describe("formatScreenContextResponse — with screen context (Phase 4A groundin
     const msg = formatScreenContextResponse({ ...baseState, screenWidth: 3840, screenHeight: 2160 });
     expect(msg).toContain("3840×2160");
     expect(msg).not.toContain("1280");
+  });
+});
+
+describe("routeCommand — repeat_last_response routing (hotfix)", () => {
+  it("routes 'say that again' to repeat_last_response", () => {
+    expect(routeCommand("say that again").intent).toBe("repeat_last_response");
+  });
+
+  it("routes 'say again' to repeat_last_response", () => {
+    expect(routeCommand("say again").intent).toBe("repeat_last_response");
+  });
+
+  it("routes 'repeat that' to repeat_last_response", () => {
+    expect(routeCommand("repeat that").intent).toBe("repeat_last_response");
+  });
+
+  it("routes 'repeat last response' to repeat_last_response", () => {
+    expect(routeCommand("repeat last response").intent).toBe("repeat_last_response");
+  });
+
+  it("routes 'repeat the last response' to repeat_last_response", () => {
+    expect(routeCommand("repeat the last response").intent).toBe("repeat_last_response");
+  });
+
+  it("routes 'repeat your last response' to repeat_last_response", () => {
+    expect(routeCommand("repeat your last response").intent).toBe("repeat_last_response");
+  });
+
+  it("routes 'show that again' to repeat_last_response", () => {
+    expect(routeCommand("show that again").intent).toBe("repeat_last_response");
+  });
+
+  it("routes 'show me that again' to repeat_last_response", () => {
+    expect(routeCommand("show me that again").intent).toBe("repeat_last_response");
+  });
+
+  it("routes 'Lisa, say that again' to repeat_last_response", () => {
+    expect(routeCommand("Lisa, say that again").intent).toBe("repeat_last_response");
+  });
+
+  it("all repeat phrases return high confidence", () => {
+    const phrases = ["say that again", "say again", "repeat that", "show that again"];
+    for (const p of phrases) {
+      expect(routeCommand(p).confidence).toBe("high");
+    }
+  });
+});
+
+describe("routeCommand — tts_speak_again routing preserved (hotfix)", () => {
+  it("still routes 'speak again' to tts_speak_again", () => {
+    expect(routeCommand("speak again").intent).toBe("tts_speak_again");
+  });
+
+  it("routes 'speak that again' to tts_speak_again", () => {
+    expect(routeCommand("speak that again").intent).toBe("tts_speak_again");
+  });
+
+  it("routes 'say it out loud again' to tts_speak_again", () => {
+    expect(routeCommand("say it out loud again").intent).toBe("tts_speak_again");
+  });
+
+  it("routes 'read that again' to tts_speak_again", () => {
+    expect(routeCommand("read that again").intent).toBe("tts_speak_again");
+  });
+
+  it("speak-again phrases do NOT route to repeat_last_response", () => {
+    expect(routeCommand("speak again").intent).not.toBe("repeat_last_response");
+    expect(routeCommand("speak that again").intent).not.toBe("repeat_last_response");
+  });
+});
+
+describe("findLastRepeatableResponse — helper (hotfix)", () => {
+  const makeInteraction = (
+    id: string,
+    kind: "command" | "local_ai" | "error" | "system",
+    status: "complete" | "failed" | "cancelled" | "thinking" | "streaming",
+    response: string
+  ) => ({
+    id,
+    kind,
+    status,
+    prompt: "test",
+    response,
+    createdAt: new Date().toISOString(),
+  });
+
+  it("returns latest completed command response", () => {
+    const interactions = [
+      makeInteraction("1", "command", "complete", "First response"),
+      makeInteraction("2", "command", "complete", "Second response"),
+    ];
+    expect(findLastRepeatableResponse(interactions)).toBe("Second response");
+  });
+
+  it("returns latest completed local_ai response", () => {
+    const interactions = [
+      makeInteraction("1", "local_ai", "complete", "AI response A"),
+      makeInteraction("2", "local_ai", "complete", "AI response B"),
+    ];
+    expect(findLastRepeatableResponse(interactions)).toBe("AI response B");
+  });
+
+  it("searches newest to oldest — returns last item first", () => {
+    const interactions = [
+      makeInteraction("1", "command", "complete", "Old response"),
+      makeInteraction("2", "local_ai", "complete", "New response"),
+    ];
+    expect(findLastRepeatableResponse(interactions)).toBe("New response");
+  });
+
+  it("skips failed interactions", () => {
+    const interactions = [
+      makeInteraction("1", "command", "complete", "Good response"),
+      makeInteraction("2", "command", "failed", "Error response"),
+    ];
+    expect(findLastRepeatableResponse(interactions)).toBe("Good response");
+  });
+
+  it("skips cancelled interactions", () => {
+    const interactions = [
+      makeInteraction("1", "command", "complete", "Good response"),
+      makeInteraction("2", "command", "cancelled", "Cancelled"),
+    ];
+    expect(findLastRepeatableResponse(interactions)).toBe("Good response");
+  });
+
+  it("skips streaming interactions", () => {
+    const interactions = [
+      makeInteraction("1", "command", "complete", "Good response"),
+      makeInteraction("2", "local_ai", "streaming", "Partial…"),
+    ];
+    expect(findLastRepeatableResponse(interactions)).toBe("Good response");
+  });
+
+  it("skips thinking interactions", () => {
+    const interactions = [
+      makeInteraction("1", "command", "complete", "Good response"),
+      makeInteraction("2", "local_ai", "thinking", ""),
+    ];
+    expect(findLastRepeatableResponse(interactions)).toBe("Good response");
+  });
+
+  it("skips empty responses", () => {
+    const interactions = [
+      makeInteraction("1", "command", "complete", "Real response"),
+      makeInteraction("2", "command", "complete", "   "),
+    ];
+    expect(findLastRepeatableResponse(interactions)).toBe("Real response");
+  });
+
+  it("skips system and error kind interactions", () => {
+    const interactions = [
+      makeInteraction("1", "command", "complete", "Good response"),
+      makeInteraction("2", "system", "complete", "System message"),
+      makeInteraction("3", "error", "complete", "Error message"),
+    ];
+    expect(findLastRepeatableResponse(interactions)).toBe("Good response");
+  });
+
+  it("returns null when no repeatable response exists", () => {
+    const interactions = [
+      makeInteraction("1", "system", "complete", "System message"),
+      makeInteraction("2", "command", "failed", "Failed"),
+    ];
+    expect(findLastRepeatableResponse(interactions)).toBeNull();
+  });
+
+  it("returns null for empty interactions array", () => {
+    expect(findLastRepeatableResponse([])).toBeNull();
+  });
+
+  it("preserves grounded screen response exactly — no fake metadata", () => {
+    const groundedResponse = [
+      "I have manual screen context from the latest capture:",
+      "- Resolution: 1280×720",
+      "- Provider: windows_capture",
+      "- Captured: 6:07:45 PM",
+      "",
+      "I only have metadata in Phase 4A. I cannot read text on the screen, inspect pixels, perform OCR, or control the desktop yet.",
+    ].join("\n");
+    const interactions = [makeInteraction("1", "command", "complete", groundedResponse)];
+    const result = findLastRepeatableResponse(interactions);
+    expect(result).toBe(groundedResponse);
+    expect(result).toContain("1280×720");
+    expect(result).toContain("windows_capture");
+    expect(result).not.toContain("1920");
+    expect(result).not.toContain("1080");
+    expect(result).not.toContain("2023-02-20");
+    expect(result).not.toMatch(/provider=Windows/i);
   });
 });

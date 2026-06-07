@@ -1,4 +1,4 @@
-import type { CommandIntent, CommandRouteResult, LisaModeId, ScreenStatus } from "./types";
+import type { CommandIntent, CommandRouteResult, LisaInteraction, LisaModeId, ScreenStatus } from "./types";
 
 // ─── Mode name → ID mappings ──────────────────────────────────────────────────
 
@@ -291,9 +291,28 @@ export function routeCommand(raw: string): CommandRouteResult {
     return result("tts_auto_speak_off", raw, normalized, {}, "high", "Auto-speak disabled.");
   }
 
-  // Speak again.
-  if (normalized === "speak again" || normalized === "repeat that") {
+  // Speak again — TTS voice path.
+  if (
+    normalized === "speak again" ||
+    normalized === "speak that again" ||
+    normalized === "say it out loud again" ||
+    normalized === "read that again"
+  ) {
     return result("tts_speak_again", raw, normalized, {}, "high", "Repeating last response…");
+  }
+
+  // Repeat last response — deterministic text repeat, no LLM.
+  if (
+    normalized === "say that again" ||
+    normalized === "say again" ||
+    normalized === "repeat that" ||
+    normalized === "repeat last response" ||
+    normalized === "repeat the last response" ||
+    normalized === "repeat your last response" ||
+    normalized === "show that again" ||
+    normalized === "show me that again"
+  ) {
+    return result("repeat_last_response", raw, normalized, {}, "high", "Repeating last response…");
   }
 
   // Enable voice conversation.
@@ -537,6 +556,25 @@ export function getDesktopActionGuardMessage(raw: string): string | null {
   for (const re of BLOCKED_DESKTOP_ACTIONS) {
     if (re.test(raw)) {
       return "That action is not implemented yet. Future tool execution requires explicit approval.";
+    }
+  }
+  return null;
+}
+
+// ─── Repeat helper ───────────────────────────────────────────────────────────
+//
+// Pure helper: finds the most recent repeatable response in interaction history.
+// Used by CommandInput for deterministic repeat_last_response — no LLM involved.
+
+export function findLastRepeatableResponse(interactions: LisaInteraction[]): string | null {
+  for (let i = interactions.length - 1; i >= 0; i--) {
+    const ix = interactions[i];
+    if (
+      (ix.kind === "local_ai" || ix.kind === "command") &&
+      ix.status === "complete" &&
+      ix.response?.trim()
+    ) {
+      return ix.response;
     }
   }
   return null;
