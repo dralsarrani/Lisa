@@ -94,3 +94,33 @@ export function buildTtsTestAuditDetails(opts: {
 }): string {
   return `chars=${opts.charCount} provider=${opts.provider} source=test_voice`;
 }
+
+// ─── Tauri invoke helpers ─────────────────────────────────────────────────────
+//
+// The Rust `speak_text` command requires the payload key to match its parameter
+// name: `request`. Centralising construction here prevents call-site drift.
+
+export interface SpeakTextResult {
+  accepted: boolean;
+  provider: string;
+  speaking: boolean;
+  text_chars: number;
+}
+
+export function buildSpeakTextInvokeArgs(input: {
+  text: string;
+  source: string;
+  voiceId?: string | null;
+  rate?: number | null;
+  volume?: number | null;
+}) {
+  return {
+    request: {
+      text: input.text,
+      voice_id: input.voiceId ?? null,
+      rate: input.rate ?? null,
+      volume: input.volume ?? null,
+      source: input.source,
+    },
+  };
+}

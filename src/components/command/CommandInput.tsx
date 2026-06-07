@@ -15,6 +15,7 @@ import { hasActiveToolRequest } from "../../core/tool-request-utils";
 import type { ToolSuggestion } from "../../core/types";
 import "./CommandInput.css";
 import { VoiceInputControl } from "../voice/VoiceInputControl";
+import { buildSpeakTextInvokeArgs, SpeakTextResult } from "../../core/tts";
 
 // ─── Pure formatter — exported for testing ────────────────────────────────────
 
@@ -990,14 +991,25 @@ export const CommandInput: React.FC = () => {
           const isTauriSpeak = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
           if (isTauriSpeak) {
             const { invoke } = await import("@tauri-apps/api/core");
-            const speakResult = await invoke<{ success: boolean; error?: string }>("speak_text", { text: lastEligible.response }).catch((e: unknown) => ({ success: false, error: String(e) }));
-            dispatch({ type: "CLEAR_TTS_STATE" });
-            addAudit({
-              eventType: speakResult.success ? "tts_speech_completed" : "tts_speech_failed",
-              source: "command_input",
-              summary: speakResult.success ? "TTS speak-again completed." : "TTS speak-again failed.",
-              severity: speakResult.success ? "info" : "error",
-            });
+            try {
+              const speakResult = await invoke<SpeakTextResult>("speak_text", buildSpeakTextInvokeArgs({ text: lastEligible.response, source: "command_speak_again" }));
+              dispatch({ type: "CLEAR_TTS_STATE" });
+              addAudit({
+                eventType: speakResult.accepted ? "tts_speech_completed" : "tts_speech_failed",
+                source: "command_input",
+                summary: speakResult.accepted ? "TTS speak-again completed." : "TTS speak-again failed.",
+                severity: speakResult.accepted ? "info" : "error",
+              });
+            } catch (e: unknown) {
+              dispatch({ type: "CLEAR_TTS_STATE" });
+              addAudit({
+                eventType: "tts_speech_failed",
+                source: "command_input",
+                summary: "TTS speak-again failed.",
+                details: e instanceof Error ? e.message : String(e),
+                severity: "error",
+              });
+            }
           }
         }
         break;

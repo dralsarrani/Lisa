@@ -5,6 +5,7 @@ import {
   shouldAutoSpeakInteraction,
   buildTtsSpeechAuditDetails,
   buildTtsTestAuditDetails,
+  buildSpeakTextInvokeArgs,
 } from "../core/tts";
 import type { LisaInteraction, LisaSettings } from "../core/types";
 
@@ -183,5 +184,50 @@ describe("buildTtsTestAuditDetails", () => {
   it("formats test audit details without spoken text", () => {
     const details = buildTtsTestAuditDetails({ charCount: 18, provider: "windows_sapi" });
     expect(details).toBe("chars=18 provider=windows_sapi source=test_voice");
+  });
+});
+
+// ─── buildSpeakTextInvokeArgs ─────────────────────────────────────────────────
+
+describe("buildSpeakTextInvokeArgs — wraps payload in `request` key", () => {
+  it("result has a `request` key", () => {
+    const args = buildSpeakTextInvokeArgs({ text: "Hello", source: "test" });
+    expect(args).toHaveProperty("request");
+  });
+
+  it("request.text matches input text", () => {
+    const args = buildSpeakTextInvokeArgs({ text: "Hello Lisa", source: "test" });
+    expect(args.request.text).toBe("Hello Lisa");
+  });
+
+  it("request.source matches input source", () => {
+    const args = buildSpeakTextInvokeArgs({ text: "x", source: "settings_test_voice" });
+    expect(args.request.source).toBe("settings_test_voice");
+  });
+
+  it("optional fields default to null when omitted", () => {
+    const args = buildSpeakTextInvokeArgs({ text: "x", source: "console_manual_speak" });
+    expect(args.request.voice_id).toBeNull();
+    expect(args.request.rate).toBeNull();
+    expect(args.request.volume).toBeNull();
+  });
+
+  it("optional fields are passed through when provided", () => {
+    const args = buildSpeakTextInvokeArgs({ text: "x", source: "test", voiceId: "Microsoft David", rate: 0, volume: 80 });
+    expect(args.request.voice_id).toBe("Microsoft David");
+    expect(args.request.rate).toBe(0);
+    expect(args.request.volume).toBe(80);
+  });
+
+  it("explicit null optional fields remain null", () => {
+    const args = buildSpeakTextInvokeArgs({ text: "x", source: "test", voiceId: null, rate: null, volume: null });
+    expect(args.request.voice_id).toBeNull();
+    expect(args.request.rate).toBeNull();
+    expect(args.request.volume).toBeNull();
+  });
+
+  it("does not include a top-level `text` key (old broken shape)", () => {
+    const args = buildSpeakTextInvokeArgs({ text: "Hello", source: "test" }) as Record<string, unknown>;
+    expect(args["text"]).toBeUndefined();
   });
 });

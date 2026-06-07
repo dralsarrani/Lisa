@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import type { LisaSettings, LisaModeId } from "../../core/types";
+import { buildSpeakTextInvokeArgs, SpeakTextResult } from "../../core/tts";
 import { CONVERSATION_HISTORY_CAP, MEMORY_NOTES_CAP, MEMORY_NOTE_CHAR_LIMIT } from "../../core/types";
 import { LISA_MODES } from "../../core/mode-store";
 import { useLisa } from "../../app/useLisa";
@@ -51,7 +52,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
   // TTS local state
   const [ttsStatusInfo, setTtsStatusInfo] = useState<{ available: boolean; provider: string; label: string } | null>(null);
   const [ttsTesting, setTtsTesting] = useState(false);
-  const [ttsTestResult, setTtsTestResult] = useState<{ success: boolean; error?: string } | null>(null);
+  const [ttsTestResult, setTtsTestResult] = useState<{ accepted: boolean; error?: string } | null>(null);
   const [ttsStopping, setTtsStopping] = useState(false);
 
   useEffect(() => {
@@ -279,7 +280,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
   async function handleTestVoice() {
     const isInTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
     if (!isInTauri) {
-      setTtsTestResult({ success: false, error: "Requires desktop app." });
+      setTtsTestResult({ accepted: false, error: "Requires desktop app." });
       return;
     }
     setTtsTesting(true);
@@ -294,18 +295,18 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
     });
     try {
       const { invoke } = await import("@tauri-apps/api/core");
-      const result = await invoke<{ success: boolean; error?: string }>("speak_text", { text: testPhrase });
-      setTtsTestResult(result);
+      const result = await invoke<SpeakTextResult>("speak_text", buildSpeakTextInvokeArgs({ text: testPhrase, source: "settings_test_voice" }));
+      setTtsTestResult({ accepted: result.accepted });
       addAudit({
-        eventType: result.success ? "tts_test_completed" : "tts_test_failed",
+        eventType: result.accepted ? "tts_test_completed" : "tts_test_failed",
         source: "settings_panel",
-        summary: result.success ? "TTS test completed." : "TTS test failed.",
-        details: result.success ? `chars=${testPhrase.length} provider=windows_sapi source=test_voice` : (result.error ?? "unknown error"),
-        severity: result.success ? "info" : "error",
+        summary: result.accepted ? "TTS test completed." : "TTS test failed.",
+        details: result.accepted ? `chars=${testPhrase.length} provider=${result.provider} source=test_voice` : `provider=${result.provider}`,
+        severity: result.accepted ? "info" : "error",
       });
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
-      setTtsTestResult({ success: false, error });
+      setTtsTestResult({ accepted: false, error });
       addAudit({
         eventType: "tts_test_failed",
         source: "settings_panel",
@@ -921,8 +922,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
         </div>
 
         {ttsTestResult && (
-          <div className={`ai-test-result ${ttsTestResult.success ? "ai-test-result-pass" : "ai-test-result-fail"}`}>
-            {ttsTestResult.success ? "✓ Voice test completed." : `✗ ${ttsTestResult.error ?? "Test failed"}`}
+          <div className={`ai-test-result ${ttsTestResult.accepted ? "ai-test-result-pass" : "ai-test-result-fail"}`}>
+            {ttsTestResult.accepted ? "✓ Voice test completed." : `✗ ${ttsTestResult.error ?? "Test failed"}`}
           </div>
         )}
 

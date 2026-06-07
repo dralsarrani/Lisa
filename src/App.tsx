@@ -13,7 +13,7 @@ import { getModeDisplayName } from "./core/mode-store";
 import { getToolDefinition } from "./core/tool-registry";
 import { hasActiveToolRequestForParams } from "./core/tool-request-utils";
 import { createAuditEvent } from "./core/audit-store";
-import { shouldAutoSpeakInteraction, buildTtsSpeechAuditDetails } from "./core/tts";
+import { shouldAutoSpeakInteraction, buildTtsSpeechAuditDetails, buildSpeakTextInvokeArgs, SpeakTextResult } from "./core/tts";
 import type { RuntimeHealth as RuntimeHealthData, ToolRequest, ToolApprovalContract, LisaInteraction } from "./core/types";
 import "./App.css";
 
@@ -207,16 +207,16 @@ function App() {
     });
     try {
       const { invoke } = await import("@tauri-apps/api/core");
-      const result = await invoke<{ success: boolean; error?: string }>("speak_text", { text: interaction.response });
+      const result = await invoke<SpeakTextResult>("speak_text", buildSpeakTextInvokeArgs({ text: interaction.response, source: "console_manual_speak" }));
       dispatch({ type: "CLEAR_TTS_STATE" });
       addAudit({
-        eventType: result.success ? "tts_speech_completed" : "tts_speech_failed",
+        eventType: result.accepted ? "tts_speech_completed" : "tts_speech_failed",
         source: "console_speak_button",
-        summary: result.success ? "TTS speech completed." : "TTS speech failed.",
-        details: result.success
-          ? buildTtsSpeechAuditDetails({ interactionId: interaction.id, charCount: interaction.response.length, provider: "windows_sapi", source: "manual" })
-          : (result.error ?? "unknown error"),
-        severity: result.success ? "info" : "error",
+        summary: result.accepted ? "TTS speech completed." : "TTS speech failed.",
+        details: result.accepted
+          ? buildTtsSpeechAuditDetails({ interactionId: interaction.id, charCount: interaction.response.length, provider: result.provider, source: "console_manual_speak" })
+          : `provider=${result.provider}`,
+        severity: result.accepted ? "info" : "error",
       });
     } catch (err) {
       dispatch({ type: "CLEAR_TTS_STATE" });
