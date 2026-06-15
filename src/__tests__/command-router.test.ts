@@ -230,8 +230,8 @@ describe("getDesktopActionGuardMessage — blocked commands", () => {
   it("blocks 'can you control my mouse'", () => {
     expect(getDesktopActionGuardMessage("can you control my mouse")).not.toBeNull();
   });
-  it("blocks 'can you read my screen'", () => {
-    expect(getDesktopActionGuardMessage("can you read my screen")).not.toBeNull();
+  it("does not block the Phase 4C OCR capability question", () => {
+    expect(getDesktopActionGuardMessage("can you read my screen")).toBeNull();
   });
   it("blocks 'launch Chrome'", () => {
     expect(getDesktopActionGuardMessage("launch Chrome")).not.toBeNull();
@@ -925,9 +925,9 @@ describe("routeCommand — screen_awareness_enable / screen_awareness_disable (P
   });
 });
 
-describe("getDesktopActionGuardMessage — Phase 4A OCR/read-screen still blocked", () => {
-  it("still blocks 'can you read my screen'", () => {
-    expect(getDesktopActionGuardMessage("can you read my screen")).not.toBeNull();
+describe("getDesktopActionGuardMessage — Phase 4C OCR commands are allowed", () => {
+  it("allows 'can you read my screen' to reach the capability guard", () => {
+    expect(getDesktopActionGuardMessage("can you read my screen")).toBeNull();
   });
 
   it("'capture screen' is not blocked — explicit Phase 4A command", () => {
@@ -969,6 +969,12 @@ describe("getScreenCapabilityMessage — OCR questions (Phase 4A)", () => {
 
   it("answers 'can you read text from the screen'", () => {
     expect(getScreenCapabilityMessage("can you read text from the screen")).not.toBeNull();
+  });
+
+  it("answers 'can you read my screen'", () => {
+    const msg = getScreenCapabilityMessage("can you read my screen") ?? "";
+    expect(msg).toContain("Phase 4C");
+    expect(msg.toLowerCase()).toContain("read screen text");
   });
 
   it("response describes Phase 4C OCR capability", () => {
@@ -1155,20 +1161,20 @@ describe("formatScreenContextResponse — with screen context (Phase 4A groundin
     expect(msg).not.toContain("2023-02-20");
   });
 
-  it("states metadata-only limitation — no OCR, no pixels", () => {
+  it("distinguishes metadata response from manually requested OCR", () => {
     const msg = formatScreenContextResponse(baseState);
-    expect(msg).toContain("OCR");
+    expect(msg).toContain("read screen text");
     expect(msg).toContain("metadata");
   });
 
-  it("states phase limitation accurately", () => {
+  it("states the manual OCR boundary", () => {
     const msg = formatScreenContextResponse(baseState);
-    expect(msg).toMatch(/Phase 4[AB]/);
+    expect(msg).toContain("manually run 'read screen text'");
   });
 
-  it("states cannot read text on screen", () => {
+  it("directs screen text questions to the deterministic OCR command", () => {
     const msg = formatScreenContextResponse(baseState);
-    expect(msg).toContain("cannot read text");
+    expect(msg).toContain("what can you read");
   });
 
   it("uses different provider when state says different provider", () => {
@@ -1359,7 +1365,7 @@ describe("findLastRepeatableResponse — helper (hotfix)", () => {
       "- Provider: windows_capture",
       "- Captured: 6:07:45 PM",
       "",
-      "I only have metadata in Phase 4A. I cannot read text on the screen, inspect pixels, perform OCR, or control the desktop yet.",
+      "I can report capture metadata here. Screen text is available only after you manually run 'read screen text' and ask 'what can you read'. I cannot infer other visual details or control the desktop.",
     ].join("\n");
     const interactions = [makeInteraction("1", "command", "complete", groundedResponse)];
     const result = findLastRepeatableResponse(interactions);

@@ -694,7 +694,7 @@ describe("buildLisaSystemPrompt — Phase 4A screen awareness boundary", () => {
     expect(buildLisaSystemPrompt().toLowerCase()).toContain("background");
   });
 
-  it("states metadata only — no OCR", () => {
+  it("states capture metadata is distinct from OCR text", () => {
     expect(buildLisaSystemPrompt().toLowerCase()).toContain("metadata only");
   });
 
@@ -702,7 +702,7 @@ describe("buildLisaSystemPrompt — Phase 4A screen awareness boundary", () => {
     expect(buildLisaSystemPrompt().toLowerCase()).toContain("local only");
   });
 
-  it("states cannot read text visible on screen unless future OCR phase", () => {
+  it("states it cannot read screen text when no OCR text is in context", () => {
     expect(buildLisaSystemPrompt().toLowerCase()).toContain("cannot read text");
   });
 

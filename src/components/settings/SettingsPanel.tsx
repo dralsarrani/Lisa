@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import type { LisaSettings, LisaModeId } from "../../core/types";
 import { buildSpeakTextInvokeArgs, SpeakTextResult, buildTtsStatusLabel } from "../../core/tts";
+import { getOcrPreconditionMessage } from "../../core/ocr";
 import { CONVERSATION_HISTORY_CAP, MEMORY_NOTES_CAP, MEMORY_NOTE_CHAR_LIMIT } from "../../core/types";
 import { LISA_MODES } from "../../core/mode-store";
 import { useLisa } from "../../app/useLisa";
@@ -384,6 +385,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
         captured_at: number;
         provider: string;
         error: string | null;
+        file_path?: string;
       }>("capture_screen");
       if (result.accepted) {
         dispatch({
@@ -395,6 +397,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
             width: result.width ?? undefined,
             height: result.height ?? undefined,
             provider: result.provider,
+            filePath: result.file_path,
           },
         });
         dispatch({ type: "SET_SETTINGS", payload: { screenCaptureProvider: "windows_capture" } });
@@ -463,8 +466,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
       setOcrError("Enable OCR / Screen Text Understanding first.");
       return;
     }
-    if (state.screenStatus !== "available" || !state.screenFilePath) {
-      setOcrError("Capture the screen first, then run OCR.");
+    const preconditionMessage = getOcrPreconditionMessage(state);
+    if (preconditionMessage) {
+      setOcrError(preconditionMessage);
       return;
     }
     setOcrRunning(true);
@@ -534,7 +538,16 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
     setOcrRunning(false);
   }
 
-  function handleClearScreenText() {
+  async function handleClearScreenText() {
+    const isInTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    if (isInTauri) {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        await invoke("clear_screen_text");
+      } catch {
+        // Backend cleanup is best-effort; transient frontend state must still clear.
+      }
+    }
     dispatch({ type: "CLEAR_SCREEN_TEXT" });
     setOcrError(null);
     addAudit({
@@ -1263,13 +1276,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
                 className={`settings-toggle ${settings.showScreenPreview ? "settings-toggle-on" : ""}`}
                 onClick={() => dispatch({ type: "SET_SETTINGS", payload: { showScreenPreview: !settings.showScreenPreview } })}
                 aria-pressed={settings.showScreenPreview}
-                title="Show a local screenshot thumbnail in the Console panel after each capture. Preview only — no OCR, not uploaded."
+                title="Show a local screenshot thumbnail in the Console panel after each capture. OCR runs only when manually requested."
               >
                 {settings.showScreenPreview ? "ON" : "OFF"}
               </button>
             </div>
             <p className="settings-description" style={{ marginTop: 4, marginBottom: 8 }}>
-              Preview is local only · Not uploaded · No OCR · Temp file deleted on Clear
+              Preview is local only · Not uploaded · OCR only when manually requested · Temp file deleted on Clear
             </p>
             <div className="settings-toggle-row">
               <span className="settings-toggle-label">Include Screen Context in Local AI</span>
@@ -1460,12 +1473,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
           </button>
         </div>
         <div className="settings-toggle-row settings-toggle-row-disabled">
-          <span className="settings-toggle-label">Screen Awareness (Phase 2)</span>
-          <span className="settings-coming-soon">Phase 2</span>
+          <span className="settings-toggle-label">Screen Awareness — active foundation</span>
+          <span className="settings-coming-soon">Active</span>
         </div>
         <div className="settings-toggle-row settings-toggle-row-disabled">
-          <span className="settings-toggle-label">Desktop Control (Phase 2)</span>
-          <span className="settings-coming-soon">Phase 2</span>
+          <span className="settings-toggle-label">Desktop Control — not yet implemented</span>
+          <span className="settings-coming-soon">Not yet</span>
         </div>
         <div className="settings-toggle-row settings-toggle-row-disabled">
           <span className="settings-toggle-label">Vault (Post-Phase 0)</span>
@@ -1540,7 +1553,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
         <div className="settings-build-info">
           <div className="settings-field">
             <span className="settings-field-label">Phase</span>
-            <span className="settings-field-value">3G — Voice-First Conversation Flow</span>
+            <span className="settings-field-value">4C — Local OCR Screen Text</span>
           </div>
           <div className="settings-field">
             <span className="settings-field-label">Version</span>

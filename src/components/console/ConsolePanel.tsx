@@ -117,8 +117,8 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
           )}
           <div className="console-screen-context-note">
             {screenFilePath && settings.showScreenPreview
-              ? "Preview only · Local · No OCR · Not uploaded"
-              : "Metadata only · Local · No OCR · Not uploaded"}
+              ? "Preview only · Local · OCR only when manually requested · Not uploaded"
+              : "Metadata only · Local · OCR only when manually requested · Not uploaded"}
           </div>
         </div>
       )}

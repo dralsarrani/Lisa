@@ -796,7 +796,15 @@ describe("Phase 4A — SET_SCREEN_STATUS", () => {
   it("sets screenStatus to available with all metadata", () => {
     const next = lisaReducer(initialState, {
       type: "SET_SCREEN_STATUS",
-      payload: { status: "available", captureId: "sc_123", capturedAt: 1700000000000, width: 1920, height: 1080, provider: "windows_capture" },
+      payload: {
+        status: "available",
+        captureId: "sc_123",
+        capturedAt: 1700000000000,
+        width: 1920,
+        height: 1080,
+        provider: "windows_capture",
+        filePath: "C:\\Temp\\lisa_screen_1700000000000.png",
+      },
     });
     expect(next.screenStatus).toBe("available");
     expect(next.screenCaptureId).toBe("sc_123");
@@ -804,6 +812,7 @@ describe("Phase 4A — SET_SCREEN_STATUS", () => {
     expect(next.screenWidth).toBe(1920);
     expect(next.screenHeight).toBe(1080);
     expect(next.screenProvider).toBe("windows_capture");
+    expect(next.screenFilePath).toBe("C:\\Temp\\lisa_screen_1700000000000.png");
     expect(next.screenError).toBeUndefined();
   });
 
@@ -855,6 +864,15 @@ describe("Phase 4A — CLEAR_SCREEN_CONTEXT", () => {
     expect(next.screenWidth).toBeUndefined();
     expect(next.screenHeight).toBeUndefined();
     expect(next.screenProvider).toBeUndefined();
+  });
+
+  it("clears screenFilePath", () => {
+    const state = lisaReducer(initialState, {
+      type: "SET_SCREEN_STATUS",
+      payload: { status: "available", filePath: "C:\\Temp\\lisa_screen_1.png" },
+    });
+    const next = lisaReducer(state, { type: "CLEAR_SCREEN_CONTEXT" });
+    expect(next.screenFilePath).toBeUndefined();
   });
 
   it("clears screenError", () => {
@@ -1043,6 +1061,25 @@ describe("Phase 4C — CLEAR_SCREEN_TEXT", () => {
     expect(state.screenOcrProvider).toBeUndefined();
     expect(state.screenOcrError).toBeUndefined();
     expect(state.screenOcrCapturedAt).toBeUndefined();
+  });
+
+  it("preserves screen capture state and file path", () => {
+    let state = lisaReducer(initialState, {
+      type: "SET_SCREEN_STATUS",
+      payload: {
+        status: "available",
+        captureId: "sc_ocr",
+        filePath: "C:\\Temp\\lisa_screen_ocr.png",
+      },
+    });
+    state = lisaReducer(state, {
+      type: "SET_SCREEN_OCR_STATUS",
+      payload: { status: "available", text: "Hello", chars: 5, lines: 1 },
+    });
+    state = lisaReducer(state, { type: "CLEAR_SCREEN_TEXT" });
+    expect(state.screenStatus).toBe("available");
+    expect(state.screenCaptureId).toBe("sc_ocr");
+    expect(state.screenFilePath).toBe("C:\\Temp\\lisa_screen_ocr.png");
   });
 });
 

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useLisa } from "../../app/useLisa";
-import { routeCommand, getDesktopActionGuardMessage, getVoiceCapabilityMessage, getScreenCapabilityMessage, formatScreenContextResponse, findLastRepeatableResponse } from "../../core/command-router";
+import { routeCommand, getDesktopActionGuardMessage, getVoiceCapabilityMessage, getScreenCapabilityMessage, formatScreenContextResponse, formatOcrResponse, findLastRepeatableResponse } from "../../core/command-router";
 import { createTestMission, applyApprovalDecision } from "../../core/mission-store";
 import { createAuditEvent } from "../../core/audit-store";
 import { getModeDisplayName } from "../../core/mode-store";
@@ -17,6 +17,14 @@ import "./CommandInput.css";
 import { VoiceInputControl } from "../voice/VoiceInputControl";
 import { buildSpeakTextInvokeArgs, SpeakTextResult } from "../../core/tts";
 import { shouldAutoSpeakVoiceReply } from "../../core/voice-conversation";
+import {
+  buildOcrAuditDetails,
+  buildRunScreenOcrInvokeArgs,
+  formatOcrStatusResponse,
+  formatOcrSuccessResponse,
+  getOcrPreconditionMessage,
+  type OcrStatusResult,
+} from "../../core/ocr";
 
 // ─── Pure formatter — exported for testing ────────────────────────────────────
 
@@ -1252,6 +1260,230 @@ export const CommandInput: React.FC = () => {
           payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response: route.response ?? "Screen awareness disabled.", createdAt: now(), completedAt: now() },
         });
         addAudit({ eventType: "screen_awareness_disabled", source: "command_input", summary: "Screen awareness disabled by user command.", severity: "info" });
+        break;
+      }
+
+      case "run_screen_ocr": {
+        const suppressedModes = ["sleep", "privacy", "lockdown"];
+        let response: string;
+
+        if (
+          state.settings.screenOcrSuppressInPrivacyModes &&
+          suppressedModes.includes(state.settings.activeMode)
+        ) {
+          response = "OCR is suppressed in Sleep, Privacy, and Lockdown modes.";
+          addAudit({
+            eventType: "ocr_failed",
+            source: "command_input",
+            summary: "OCR blocked by privacy mode suppression.",
+            details: buildOcrAuditDetails({ source: "command", outcome: "failed" }),
+            severity: "warning",
+          });
+        } else if (!state.settings.screenOcrEnabled) {
+          response = "OCR / Screen Text is disabled. Enable it in Settings → Screen Awareness first.";
+          addAudit({
+            eventType: "ocr_failed",
+            source: "command_input",
+            summary: "OCR blocked because screen text is disabled.",
+            details: buildOcrAuditDetails({ source: "command", outcome: "failed" }),
+            severity: "warning",
+          });
+        } else {
+          const preconditionMessage = getOcrPreconditionMessage(state);
+          if (preconditionMessage) {
+            response = preconditionMessage;
+            addAudit({
+              eventType: "ocr_failed",
+              source: "command_input",
+              summary: "OCR blocked because no usable screen capture file is available.",
+              details: buildOcrAuditDetails({ source: "command", outcome: "failed" }),
+              severity: "warning",
+            });
+          } else {
+            dispatch({ type: "SET_SCREEN_OCR_STATUS", payload: { status: "running" } });
+            addAudit({
+              eventType: "ocr_started",
+              source: "command_input",
+              summary: "OCR started on latest screen capture.",
+              details: "source=command",
+              severity: "info",
+            });
+
+            const isTauriOcr = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+            if (!isTauriOcr) {
+              response = "OCR could not run: OCR is only available in the desktop app.";
+              dispatch({ type: "SET_SCREEN_OCR_STATUS", payload: { status: "error", error: response } });
+              addAudit({
+                eventType: "ocr_failed",
+                source: "command_input",
+                summary: "OCR failed because the desktop backend is unavailable.",
+                details: buildOcrAuditDetails({ source: "command", outcome: "failed" }),
+                severity: "warning",
+              });
+            } else {
+              try {
+                const { invoke } = await import("@tauri-apps/api/core");
+                const result = await invoke<{
+                  accepted: boolean;
+                  provider: string;
+                  text?: string;
+                  chars: number;
+                  lines: number;
+                  error?: string;
+                }>("run_screen_ocr", buildRunScreenOcrInvokeArgs(state.screenFilePath!));
+
+                if (result.accepted && result.text !== undefined) {
+                  dispatch({
+                    type: "SET_SCREEN_OCR_STATUS",
+                    payload: {
+                      status: "available",
+                      text: result.text,
+                      chars: result.chars,
+                      lines: result.lines,
+                      provider: result.provider,
+                      capturedAt: Date.now(),
+                    },
+                  });
+                  response = formatOcrSuccessResponse(result);
+                  addAudit({
+                    eventType: "ocr_completed",
+                    source: "command_input",
+                    summary: "OCR completed from user command.",
+                    details: buildOcrAuditDetails({
+                      source: "command",
+                      outcome: "completed",
+                      provider: result.provider,
+                      chars: result.chars,
+                      lines: result.lines,
+                    }),
+                    severity: "info",
+                  });
+                } else {
+                  const error = result.error ?? "OCR failed.";
+                  response = `OCR could not run: ${error}`;
+                  dispatch({ type: "SET_SCREEN_OCR_STATUS", payload: { status: "error", error } });
+                  addAudit({
+                    eventType: "ocr_failed",
+                    source: "command_input",
+                    summary: "OCR backend rejected the request.",
+                    details: buildOcrAuditDetails({
+                      source: "command",
+                      outcome: "failed",
+                      provider: result.provider,
+                    }),
+                    severity: "warning",
+                  });
+                }
+              } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                response = `OCR could not run: ${message}`;
+                dispatch({ type: "SET_SCREEN_OCR_STATUS", payload: { status: "error", error: message } });
+                addAudit({
+                  eventType: "ocr_failed",
+                  source: "command_input",
+                  summary: "OCR command invocation failed.",
+                  details: buildOcrAuditDetails({ source: "command", outcome: "failed" }),
+                  severity: "warning",
+                });
+              }
+            }
+          }
+        }
+
+        dispatch({ type: "SET_COMMAND_RESPONSE", payload: response });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response, createdAt: now(), completedAt: now() },
+        });
+        break;
+      }
+
+      case "screen_what_can_you_read": {
+        const response = formatOcrResponse(state);
+        dispatch({ type: "SET_COMMAND_RESPONSE", payload: response });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response, createdAt: now(), completedAt: now() },
+        });
+        addAudit({
+          eventType: "command_routed",
+          source: "command_input",
+          summary: "Screen text query answered deterministically.",
+          details: buildOcrAuditDetails({
+            source: "command",
+            outcome: "queried",
+            provider: state.screenOcrProvider,
+            chars: state.screenOcrChars,
+            lines: state.screenOcrLines,
+          }),
+          severity: "info",
+        });
+        break;
+      }
+
+      case "clear_screen_text": {
+        const isTauriClearText = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+        if (isTauriClearText) {
+          const { invoke } = await import("@tauri-apps/api/core");
+          await invoke("clear_screen_text").catch(() => {});
+        }
+        dispatch({ type: "CLEAR_SCREEN_TEXT" });
+        const response = "Screen text cleared.";
+        dispatch({ type: "SET_COMMAND_RESPONSE", payload: response });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response, createdAt: now(), completedAt: now() },
+        });
+        addAudit({
+          eventType: "screen_text_cleared",
+          source: "command_input",
+          summary: "Screen text cleared by user command.",
+          details: buildOcrAuditDetails({ source: "command", outcome: "cleared" }),
+          severity: "info",
+        });
+        break;
+      }
+
+      case "check_ocr_status": {
+        const isTauriOcrStatus = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+        let status: OcrStatusResult;
+        if (isTauriOcrStatus) {
+          try {
+            const { invoke } = await import("@tauri-apps/api/core");
+            status = await invoke<OcrStatusResult>("get_ocr_status");
+          } catch (error) {
+            status = {
+              available: false,
+              configured: false,
+              provider: "unavailable",
+              error: error instanceof Error ? error.message : String(error),
+            };
+          }
+        } else {
+          status = {
+            available: false,
+            configured: false,
+            provider: "browser",
+            error: "OCR status is only available in the desktop app.",
+          };
+        }
+        const response = formatOcrStatusResponse(status);
+        dispatch({ type: "SET_COMMAND_RESPONSE", payload: response });
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: { id: makeId(), kind: "command", prompt: raw, status: "complete", response, createdAt: now(), completedAt: now() },
+        });
+        addAudit({
+          eventType: "command_routed",
+          source: "command_input",
+          summary: "OCR status checked deterministically.",
+          details: buildOcrAuditDetails({
+            source: "command",
+            outcome: "queried",
+            provider: status.provider,
+          }),
+          severity: status.available ? "info" : "warning",
+        });
         break;
       }
 

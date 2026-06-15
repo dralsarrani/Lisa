@@ -507,7 +507,7 @@ const SCREEN_CAPABILITY_QA: Array<[RegExp, string]> = [
   ],
   // OCR / reading text from screen
   [
-    /\bocr\b|\bread\s+text\s+(?:from|on|off)\s+(?:the\s+|my\s+)?screen\b|\bextract\s+text\s+from\s+(?:the\s+|my\s+)?screen\b/i,
+    /\bocr\b|\bcan\s+(?:you\s+)?read\s+(?:my\s+|the\s+)?screen\b|\bread\s+text\s+(?:from|on|off)\s+(?:the\s+|my\s+)?screen\b|\bextract\s+text\s+from\s+(?:the\s+|my\s+)?screen\b/i,
     "Phase 4C: Local OCR is available. Capture the screen first with 'capture screen', then type 'read screen text' to extract visible text using the Windows built-in OCR engine. Type 'what can you read' to see the extracted text. OCR is manual, local-only, and may be imperfect. No cloud upload, no background OCR, no desktop control.",
   ],
   // Screenshot upload / cloud
@@ -518,7 +518,7 @@ const SCREEN_CAPABILITY_QA: Array<[RegExp, string]> = [
   // General screen awareness capability
   [
     /\bscreen\s+(?:awareness|context|capture|screenshot)\b|\bcan\s+(?:you\s+)?see\s+(?:my\s+|the\s+)?screen\b|\bdo\s+you\s+have\s+screen\s+(?:access|context)\b/i,
-    "Phase 4A: Lisa has manual screen awareness. Use 'capture screen' or the button in Settings → Screen Awareness to take a snapshot. Lisa sees metadata only (resolution, timestamp) — no OCR, no image understanding, no cloud upload, no background watching. Enable 'Include Screen Context in AI' in settings to include metadata in local AI prompts.",
+    "Phase 4C: Lisa has manual screen awareness and local OCR. Use 'capture screen' for a local preview and metadata, then 'read screen text' to run OCR explicitly. There is no image understanding, cloud upload, background watching, or desktop control.",
   ],
 ];
 
@@ -558,9 +558,12 @@ export function formatScreenContextResponse(screenState: {
     `- Captured: ${capturedAt}`,
   ];
   if (screenFilePath) {
-    lines.push("- Preview: Available in Console (local file · not uploaded · no OCR)");
+    lines.push("- Preview: Available in Console (local file · not uploaded)");
   }
-  lines.push("", "I only have metadata in Phase 4B. I cannot read text on the screen, inspect pixels, perform OCR, or control the desktop yet.");
+  lines.push(
+    "",
+    "I can report capture metadata here. Screen text is available only after you manually run 'read screen text' and ask 'what can you read'. I cannot infer other visual details or control the desktop."
+  );
   return lines.join("\n");
 }
 
@@ -578,8 +581,6 @@ const BLOCKED_DESKTOP_ACTIONS: RegExp[] = [
   /\b(?:move|click|drag)\s+(?:the\s+|my\s+)?(?:mouse|cursor)\b/i,
   /\bright[- ]?click\b/i,
   /\bdouble[- ]?click\b/i,
-  // Screen reading via OCR — not implemented
-  /\bread\s+(?:my|the|your)\s+screen\b/i,
   // File / script execution
   /\b(?:run|execute)\s+(?:this\s+)?(?:file|script|program|code|executable|\.exe|\.sh|\.ps1|\.bat)\b/i,
   /\brun\s+a\s+shell\s+command\b/i,
