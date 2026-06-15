@@ -812,6 +812,13 @@ describe("buildLisaSystemPrompt — OCR / screen text boundaries", () => {
     expect(prompt).toContain("what can you see");
     expect(prompt).toContain("what can you read");
   });
+
+  it("declares the Phase 4D grounded reasoning boundary", () => {
+    const prompt = buildLisaSystemPrompt();
+    expect(prompt).toContain("Phase 4D grounded screen reasoning");
+    expect(prompt).toContain("does not capture the screen or run OCR automatically");
+    expect(prompt).toContain("must use only the supplied OCR text");
+  });
 });
 
 describe("formatOcrTextForContext", () => {

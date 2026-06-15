@@ -6,7 +6,7 @@ import { createAuditEvent } from "../../core/audit-store";
 import { getModeDisplayName } from "../../core/mode-store";
 import { fetchRuntimeHealth } from "../../core/runtime-health";
 import { buildOllamaMessages, trimConversationHistory, filterToolResultsByPolicy, TOOL_RESULT_CONTEXT_CAP } from "../../core/llm-context";
-import type { LisaConversationTurn } from "../../core/llm-context";
+import type { LisaChatMessage, LisaConversationTurn } from "../../core/llm-context";
 import { MEMORY_NOTES_CAP, MEMORY_NOTE_CHAR_LIMIT } from "../../core/types";
 import { classifyOllamaError } from "../../core/ollama-error";
 import { getToolDefinition, getEnabledToolDefinitions, getAllToolDefinitions } from "../../core/tool-registry";
@@ -26,6 +26,12 @@ import {
   getOcrPreconditionMessage,
   type OcrStatusResult,
 } from "../../core/ocr";
+import {
+  SCREEN_REASONING_LOCAL_AI_UNAVAILABLE_MESSAGE,
+  hasUsableOcrText,
+  isScreenReasoningIntent,
+  prepareScreenReasoning,
+} from "../../core/screen-reasoning";
 
 // ─── Pure formatter — exported for testing ────────────────────────────────────
 
@@ -109,11 +115,20 @@ export const CommandInput: React.FC = () => {
     model: string,
     maxContextTurns: number,
     interactionId: string,
-    interactionSource: "typed" | "voice"
+    interactionSource: "typed" | "voice",
+    options: {
+      messages?: LisaChatMessage[];
+      persistConversation?: boolean;
+      allowToolSuggestions?: boolean;
+      failureMessage?: string;
+      failureAuditDetails?: string;
+    } = {}
   ): Promise<void> {
     const isInTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
     if (!isInTauri) {
-      const msg = "Local AI is only available in the desktop app (Tauri).";
+      const msg =
+        options.failureMessage ??
+        "Local AI is only available in the desktop app (Tauri).";
       dispatch({ type: "SET_COMMAND_RESPONSE", payload: msg });
       dispatch({
         type: "UPDATE_INTERACTION",
@@ -122,44 +137,53 @@ export const CommandInput: React.FC = () => {
       return;
     }
 
-    const trimmedHistory = trimConversationHistory(
-      conversationHistoryRef.current,
-      Math.max(0, maxContextTurns - 1)
-    );
-    const { eligible, excluded, disabled } = filterToolResultsByPolicy(
-      state.toolResults,
-      getAllToolDefinitions(),
-      state.settings.toolResultContextEnabled
-    );
-    const messages = buildOllamaMessages(trimmedHistory, raw, state.memoryNotes, eligible);
-    const actuallyInjected = eligible.filter((r) => r.outputSummary).slice(-TOOL_RESULT_CONTEXT_CAP);
-    if (actuallyInjected.length > 0) {
-      addAudit({
-        eventType: "llm_tool_context_injected",
-        source: "command_input",
-        summary: `Tool result context injected: ${actuallyInjected.length} result(s)`,
-        details: `count=${actuallyInjected.length} tool_ids=${actuallyInjected.map((r) => r.toolId).join(",")}`,
-        severity: "info",
-      });
-    }
-    if (disabled) {
-      const suppressedCount = state.toolResults.filter((r) => r.outputSummary).length;
-      addAudit({
-        eventType: "llm_tool_context_disabled",
-        source: "command_input",
-        summary: "Tool result context injection suppressed — global setting is off",
-        details: `count=${suppressedCount}`,
-        severity: "info",
-      });
-    }
-    if (excluded.length > 0) {
-      addAudit({
-        eventType: "llm_tool_context_excluded",
-        source: "command_input",
-        summary: `Tool result context excluded by policy: ${excluded.length} result(s)`,
-        details: `count=${excluded.length} tool_ids=${excluded.map((r) => r.toolId).join(",")} reason=policy`,
-        severity: "info",
-      });
+    const persistConversation = options.persistConversation ?? true;
+    const allowToolSuggestions = options.allowToolSuggestions ?? true;
+    let trimmedHistory: LisaConversationTurn[] = [];
+    let messages: LisaChatMessage[];
+
+    if (options.messages) {
+      messages = options.messages;
+    } else {
+      trimmedHistory = trimConversationHistory(
+        conversationHistoryRef.current,
+        Math.max(0, maxContextTurns - 1)
+      );
+      const { eligible, excluded, disabled } = filterToolResultsByPolicy(
+        state.toolResults,
+        getAllToolDefinitions(),
+        state.settings.toolResultContextEnabled
+      );
+      messages = buildOllamaMessages(trimmedHistory, raw, state.memoryNotes, eligible);
+      const actuallyInjected = eligible.filter((r) => r.outputSummary).slice(-TOOL_RESULT_CONTEXT_CAP);
+      if (actuallyInjected.length > 0) {
+        addAudit({
+          eventType: "llm_tool_context_injected",
+          source: "command_input",
+          summary: `Tool result context injected: ${actuallyInjected.length} result(s)`,
+          details: `count=${actuallyInjected.length} tool_ids=${actuallyInjected.map((r) => r.toolId).join(",")}`,
+          severity: "info",
+        });
+      }
+      if (disabled) {
+        const suppressedCount = state.toolResults.filter((r) => r.outputSummary).length;
+        addAudit({
+          eventType: "llm_tool_context_disabled",
+          source: "command_input",
+          summary: "Tool result context injection suppressed — global setting is off",
+          details: `count=${suppressedCount}`,
+          severity: "info",
+        });
+      }
+      if (excluded.length > 0) {
+        addAudit({
+          eventType: "llm_tool_context_excluded",
+          source: "command_input",
+          summary: `Tool result context excluded by policy: ${excluded.length} result(s)`,
+          details: `count=${excluded.length} tool_ids=${excluded.map((r) => r.toolId).join(",")} reason=policy`,
+          severity: "info",
+        });
+      }
     }
 
     dispatch({ type: "SET_ORB_STATE", payload: "thinking" });
@@ -234,11 +258,13 @@ export const CommandInput: React.FC = () => {
               details: `response_chars=${accumulatedResponse.length} latency_ms=${ev.payload.latency_ms}`,
               severity: "info",
             });
-            const completedTurn = { userInput: raw, assistantResponse: accumulatedResponse, timestamp: now(), model };
-            conversationHistoryRef.current = [...trimmedHistory, completedTurn];
-            dispatch({ type: "APPEND_CONVERSATION_TURN", payload: completedTurn });
+            if (persistConversation) {
+              const completedTurn = { userInput: raw, assistantResponse: accumulatedResponse, timestamp: now(), model };
+              conversationHistoryRef.current = [...trimmedHistory, completedTurn];
+              dispatch({ type: "APPEND_CONVERSATION_TURN", payload: completedTurn });
+            }
             // Attach deterministic tool suggestion if user input matches known patterns
-            if (accumulatedResponse) {
+            if (accumulatedResponse && allowToolSuggestions) {
               const suggestionCore = detectToolSuggestion(raw, getEnabledToolDefinitions(), state.toolRequests);
               if (suggestionCore) {
                 const suggestion: ToolSuggestion = {
@@ -319,19 +345,21 @@ export const CommandInput: React.FC = () => {
               payload: {
                 id: interactionId,
                 status: "failed",
-                error: ev.payload.error,
+                error: options.failureMessage ?? ev.payload.error,
                 completedAt: now(),
               },
             });
             dispatch({
               type: "SET_COMMAND_RESPONSE",
-              payload: `Lisa could not respond: ${ev.payload.error}`,
+              payload:
+                options.failureMessage ??
+                `Lisa could not respond: ${ev.payload.error}`,
             });
             addAudit({
               eventType: "llm_stream_failed",
               source: "command_input",
               summary: `LLM stream failed — model: "${model}" in ${ev.payload.latency_ms}ms`,
-              details: ev.payload.error,
+              details: options.failureAuditDetails ?? ev.payload.error,
               severity: "error",
             });
             setTimeout(() => dispatch({ type: "SET_ORB_STATE", payload: "idle" }), 2000);
@@ -374,14 +402,24 @@ export const CommandInput: React.FC = () => {
             dispatch({ type: "SET_ORB_STATE", payload: "error" });
             dispatch({
               type: "UPDATE_INTERACTION",
-              payload: { id: interactionId, status: "failed", error: friendlyMsg, completedAt: now() },
+              payload: {
+                id: interactionId,
+                status: "failed",
+                error: options.failureMessage ?? friendlyMsg,
+                completedAt: now(),
+              },
             });
-            dispatch({ type: "SET_COMMAND_RESPONSE", payload: `LLM stream failed: ${friendlyMsg}` });
+            dispatch({
+              type: "SET_COMMAND_RESPONSE",
+              payload:
+                options.failureMessage ??
+                `LLM stream failed: ${friendlyMsg}`,
+            });
             addAudit({
               eventType: "llm_stream_failed",
               source: "command_input",
               summary: "LLM stream invoke failed.",
-              details: errMsg,
+              details: options.failureAuditDetails ?? errMsg,
               severity: "error",
             });
             setTimeout(() => dispatch({ type: "SET_ORB_STATE", payload: "idle" }), 2000);
@@ -393,14 +431,24 @@ export const CommandInput: React.FC = () => {
           dispatch({ type: "SET_ORB_STATE", payload: "error" });
           dispatch({
             type: "UPDATE_INTERACTION",
-            payload: { id: interactionId, status: "failed", error: errMsg, completedAt: now() },
+            payload: {
+              id: interactionId,
+              status: "failed",
+              error: options.failureMessage ?? errMsg,
+              completedAt: now(),
+            },
           });
-          dispatch({ type: "SET_COMMAND_RESPONSE", payload: `LLM stream setup failed: ${errMsg}` });
+          dispatch({
+            type: "SET_COMMAND_RESPONSE",
+            payload:
+              options.failureMessage ??
+              `LLM stream setup failed: ${errMsg}`,
+          });
           addAudit({
             eventType: "llm_stream_failed",
             source: "command_input",
             summary: "LLM stream listener setup failed.",
-            details: errMsg,
+            details: options.failureAuditDetails ?? errMsg,
             severity: "error",
           });
           setTimeout(() => dispatch({ type: "SET_ORB_STATE", payload: "idle" }), 2000);
@@ -421,7 +469,9 @@ export const CommandInput: React.FC = () => {
       severity: "info",
     });
 
-    const route = routeCommand(raw);
+    const route = routeCommand(raw, {
+      hasUsableOcrText: hasUsableOcrText(state.screenOcrText),
+    });
 
     addAudit({
       eventType: route.intent === "unknown" ? "command_unknown" : "command_routed",
@@ -1485,6 +1535,94 @@ export const CommandInput: React.FC = () => {
           }),
           severity: status.available ? "info" : "warning",
         });
+        break;
+      }
+
+      case "screen_explain":
+      case "screen_summarize":
+      case "screen_next_steps":
+      case "screen_find_errors":
+      case "screen_extract_action_items":
+      case "screen_page_about": {
+        if (!isScreenReasoningIntent(route.intent)) break;
+        const privacyModes = ["sleep", "privacy", "lockdown"];
+        const isInTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+        const preparation = prepareScreenReasoning({
+          intent: route.intent,
+          userRequest: raw,
+          ocrText: state.screenOcrText,
+          ocrChars: state.screenOcrChars,
+          ocrLines: state.screenOcrLines,
+          capturedAt: state.screenOcrCapturedAt,
+          provider: state.screenOcrProvider,
+          localAiAvailable:
+            isInTauri &&
+            state.settings.enableLocalAi &&
+            Boolean(state.settings.ollamaModel),
+          suppressed:
+            state.settings.screenOcrSuppressInPrivacyModes &&
+            privacyModes.includes(state.settings.activeMode),
+        });
+
+        if (preparation.status === "blocked") {
+          dispatch({ type: "SET_COMMAND_RESPONSE", payload: preparation.message });
+          dispatch({
+            type: "ADD_INTERACTION",
+            payload: {
+              id: makeId(),
+              kind: "command",
+              prompt: raw,
+              status: "complete",
+              response: preparation.message,
+              createdAt: now(),
+              completedAt: now(),
+            },
+          });
+          addAudit({
+            eventType: "command_routed",
+            source: "command_input",
+            summary: `Grounded screen reasoning blocked: ${preparation.reason}.`,
+            details: `intent=${route.intent} reason=${preparation.reason}`,
+            severity: preparation.reason === "privacy" ? "warning" : "info",
+          });
+          break;
+        }
+
+        const interactionId = makeId();
+        dispatch({
+          type: "ADD_INTERACTION",
+          payload: {
+            id: interactionId,
+            kind: "local_ai",
+            prompt: raw,
+            status: "thinking",
+            response: "",
+            model: state.settings.ollamaModel,
+            createdAt: now(),
+            source,
+          },
+        });
+        addAudit({
+          eventType: "command_routed",
+          source: "command_input",
+          summary: "Grounded screen reasoning request sent to Local AI.",
+          details: preparation.auditDetails,
+          severity: "info",
+        });
+        await handleStreamingLlmQuery(
+          raw,
+          state.settings.ollamaModel,
+          0,
+          interactionId,
+          source,
+          {
+            messages: preparation.messages,
+            persistConversation: false,
+            allowToolSuggestions: false,
+            failureMessage: SCREEN_REASONING_LOCAL_AI_UNAVAILABLE_MESSAGE,
+            failureAuditDetails: `${preparation.auditDetails} reason=local_ai_failure`,
+          }
+        );
         break;
       }
 

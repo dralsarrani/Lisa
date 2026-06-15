@@ -1338,3 +1338,16 @@ describe("Phase 4C — OCR settings defaults", () => {
     expect((state as unknown as Record<string, unknown>).screenOcrStatus).toBeUndefined();
   });
 });
+
+describe("Phase 4D — grounded screen reasoning remains transient", () => {
+  it("does not persist transient OCR text passed alongside saveable state", async () => {
+    await saveState({
+      ...BASE_SAVE,
+      ...EMPTY_TOOLS,
+      screenOcrText: "SENSITIVE OCR BODY",
+    } as Parameters<typeof saveState>[0] & { screenOcrText: string });
+    const raw = localStorage.getItem("lisa_state_v1") ?? "";
+    expect(raw).not.toContain("SENSITIVE OCR BODY");
+    expect(raw).not.toContain("screenOcrText");
+  });
+});

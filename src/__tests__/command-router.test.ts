@@ -1429,6 +1429,56 @@ describe("routeCommand — screen_what_can_you_read", () => {
   });
 });
 
+describe("routeCommand — Phase 4D grounded screen reasoning", () => {
+  const cases = [
+    ["explain what you read", "screen_explain"],
+    ["explain the screen text", "screen_explain"],
+    ["explain this screen", "screen_explain"],
+    ["explain what is on my screen", "screen_explain"],
+    ["explain the visible text", "screen_explain"],
+    ["summarize this screen", "screen_summarize"],
+    ["summarize the screen", "screen_summarize"],
+    ["summarize screen text", "screen_summarize"],
+    ["summarize what you read", "screen_summarize"],
+    ["give me a summary of the screen", "screen_summarize"],
+    ["what is this page about", "screen_page_about"],
+    ["what is this screen about", "screen_page_about"],
+    ["what am I looking at", "screen_page_about"],
+    ["what is open on my screen", "screen_page_about"],
+    ["what should I do next based on the screen", "screen_next_steps"],
+    ["suggest next steps from the screen", "screen_next_steps"],
+    ["help me with this screen", "screen_next_steps"],
+    ["guide me through this screen", "screen_next_steps"],
+    ["is there an error on the screen", "screen_find_errors"],
+    ["find errors on the screen", "screen_find_errors"],
+    ["explain the error on the screen", "screen_find_errors"],
+    ["what error do you see", "screen_find_errors"],
+    ["extract action items from the screen", "screen_extract_action_items"],
+    ["find tasks on the screen", "screen_extract_action_items"],
+    ["what are the action items", "screen_extract_action_items"],
+  ] as const;
+
+  it.each(cases)("routes '%s' to %s", (command, intent) => {
+    const result = routeCommand(command);
+    expect(result.intent).toBe(intent);
+    expect(result.confidence).toBe("high");
+  });
+
+  it("routes ambiguous next-step wording only when OCR context exists", () => {
+    expect(routeCommand("what should I do next").intent).toBe("unknown");
+    expect(
+      routeCommand("what should I do next", { hasUsableOcrText: true }).intent
+    ).toBe("screen_next_steps");
+  });
+
+  it.each(["what should I eat", "what should I do with my life", "yo", "hello"])(
+    "does not over-route casual message '%s'",
+    (command) => {
+      expect(routeCommand(command).intent).not.toMatch(/^screen_/);
+    }
+  );
+});
+
 describe("routeCommand — clear_screen_text", () => {
   it("routes 'clear screen text'", () => {
     expect(routeCommand("clear screen text").intent).toBe("clear_screen_text");

@@ -1445,6 +1445,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
         <p className="history-note" style={{ marginTop: "12px" }}>
           OCR is manual and local. Lisa does not read the screen continuously, does not upload screenshots or text, and may make OCR mistakes. Commands: "capture screen" · "read screen text" · "what can you read" · "clear screen text" · "what can you see".
         </p>
+        <p className="history-note" style={{ marginTop: "6px" }}>
+          Phase 4D grounded screen reasoning uses only the latest manually extracted OCR text. It does not watch the screen continuously and cannot control the desktop.
+        </p>
       </div>
 
       {/* ── Phase Flags ── */}
@@ -1558,7 +1561,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
         <div className="settings-build-info">
           <div className="settings-field">
             <span className="settings-field-label">Phase</span>
-            <span className="settings-field-value">4C — Local OCR Screen Text</span>
+            <span className="settings-field-value">4D — Grounded Screen Reasoning</span>
           </div>
           <div className="settings-field">
             <span className="settings-field-label">Version</span>

@@ -1,5 +1,9 @@
 import type { CommandIntent, CommandRouteResult, LisaInteraction, LisaModeId, ScreenStatus, ScreenOcrStatus } from "./types";
 
+export interface CommandRoutingContext {
+  hasUsableOcrText?: boolean;
+}
+
 // ─── Mode name → ID mappings ──────────────────────────────────────────────────
 
 const MODE_NAME_MAP: Record<string, LisaModeId> = {
@@ -50,7 +54,10 @@ function modeResponse(modeId: LisaModeId): string {
 
 // ─── Router ───────────────────────────────────────────────────────────────────
 
-export function routeCommand(raw: string): CommandRouteResult {
+export function routeCommand(
+  raw: string,
+  context: CommandRoutingContext = {}
+): CommandRouteResult {
   const normalized = normalize(raw);
 
   // Emergency stop — highest priority.
@@ -427,6 +434,64 @@ export function routeCommand(raw: string): CommandRouteResult {
     normalized === "ocr status"
   ) {
     return result("check_ocr_status", raw, normalized, {}, "high", "Checking OCR status...");
+  }
+
+  // ── Grounded screen reasoning commands (Phase 4D) ──
+
+  if (
+    normalized === "explain what you read" ||
+    normalized === "explain the screen text" ||
+    normalized === "explain this screen" ||
+    normalized === "explain what is on my screen" ||
+    normalized === "explain the visible text"
+  ) {
+    return result("screen_explain", raw, normalized, {}, "high", "Reasoning over extracted screen text...");
+  }
+
+  if (
+    normalized === "summarize this screen" ||
+    normalized === "summarize the screen" ||
+    normalized === "summarize screen text" ||
+    normalized === "summarize what you read" ||
+    normalized === "give me a summary of the screen"
+  ) {
+    return result("screen_summarize", raw, normalized, {}, "high", "Summarizing extracted screen text...");
+  }
+
+  if (
+    normalized === "what is this page about" ||
+    normalized === "what is this screen about" ||
+    normalized === "what am i looking at" ||
+    normalized === "what is open on my screen"
+  ) {
+    return result("screen_page_about", raw, normalized, {}, "high", "Reasoning about the extracted page text...");
+  }
+
+  if (
+    normalized === "what should i do next based on the screen" ||
+    normalized === "suggest next steps from the screen" ||
+    normalized === "help me with this screen" ||
+    normalized === "guide me through this screen" ||
+    (normalized === "what should i do next" && context.hasUsableOcrText === true)
+  ) {
+    return result("screen_next_steps", raw, normalized, {}, "high", "Finding grounded next steps from screen text...");
+  }
+
+  if (
+    normalized === "is there an error on the screen" ||
+    normalized === "find errors on the screen" ||
+    normalized === "explain the error on the screen" ||
+    normalized === "what error do you see"
+  ) {
+    return result("screen_find_errors", raw, normalized, {}, "high", "Checking extracted screen text for errors...");
+  }
+
+  if (
+    normalized === "extract action items from the screen" ||
+    normalized === "find tasks on the screen" ||
+    normalized === "what are the action items"
+  ) {
+    return result("screen_extract_action_items", raw, normalized, {}, "high", "Extracting action items from screen text...");
   }
 
   // Fallback: unknown command.

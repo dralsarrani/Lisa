@@ -462,6 +462,12 @@ export type CommandIntent =
   | "screen_what_can_you_read"
   | "clear_screen_text"
   | "check_ocr_status"
+  | "screen_explain"
+  | "screen_summarize"
+  | "screen_next_steps"
+  | "screen_find_errors"
+  | "screen_extract_action_items"
+  | "screen_page_about"
   | "repeat_last_response"
   | "unknown";
 
