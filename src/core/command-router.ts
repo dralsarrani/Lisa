@@ -397,10 +397,16 @@ export function routeCommand(raw: string): CommandRouteResult {
   // What can you read — grounded OCR text response, no LLM.
   if (
     normalized === "what can you read" ||
+    normalized === "what you can read" ||
+    normalized === "what do you read" ||
+    normalized === "what did you read" ||
+    normalized === "what can you read from the screen" ||
+    normalized === "what text can you read" ||
     normalized === "what text is on my screen" ||
     normalized === "what text can you see" ||
     normalized === "read screen" ||
-    normalized === "show screen text"
+    normalized === "show screen text" ||
+    normalized === "read extracted screen text"
   ) {
     return result("screen_what_can_you_read", raw, normalized, {}, "high", "Checking extracted screen text...");
   }

@@ -17,6 +17,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 use serde::{Deserialize, Serialize};
+#[cfg(any(test, all(windows, feature = "ocr")))]
+use std::ffi::OsString;
+#[cfg(any(test, all(windows, feature = "ocr")))]
+use std::path::Path;
+#[cfg(all(windows, feature = "ocr"))]
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 // ─── Public data types ────────────────────────────────────────────────────────
@@ -81,6 +87,177 @@ pub const OCR_PROVIDER_NOT_COMPILED: &str = "not_compiled";
 #[cfg(all(not(windows), feature = "ocr"))]
 pub const OCR_PROVIDER_UNSUPPORTED: &str = "unsupported";
 
+#[cfg(any(test, all(windows, feature = "ocr")))]
+const WINDOWS_OCR_SCRIPT: &str = r#"param(
+    [Parameter(Mandatory = $true, Position = 0)]
+    [string]$ImagePath
+)
+$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+$OutputEncoding = [Console]::OutputEncoding
+
+try {
+    Add-Type -AssemblyName System.Runtime.WindowsRuntime
+    $null = [Windows.Media.Ocr.OcrEngine,Windows.Foundation,ContentType=WindowsRuntime]
+    $null = [Windows.Storage.StorageFile,Windows.Foundation,ContentType=WindowsRuntime]
+    $null = [Windows.Storage.Streams.IRandomAccessStream,Windows.Foundation,ContentType=WindowsRuntime]
+    $null = [Windows.Graphics.Imaging.BitmapDecoder,Windows.Foundation,ContentType=WindowsRuntime]
+    $null = [Windows.Graphics.Imaging.SoftwareBitmap,Windows.Foundation,ContentType=WindowsRuntime]
+    $null = [Windows.Media.Ocr.OcrResult,Windows.Foundation,ContentType=WindowsRuntime]
+
+    $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
+        $_.Name -eq 'AsTask' -and
+        $_.IsGenericMethod -and
+        $_.GetParameters().Count -eq 1 -and
+        $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1'
+    } | Select-Object -First 1)
+
+    function Await-Operation($Operation, [Type]$ResultType) {
+        $task = $asTaskGeneric.MakeGenericMethod($ResultType).Invoke($null, @($Operation))
+        $task.GetAwaiter().GetResult()
+    }
+
+    $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages()
+    if ($null -eq $engine) {
+        throw 'LISA_OCR_ENGINE_UNAVAILABLE'
+    }
+
+    $file = Await-Operation ([Windows.Storage.StorageFile]::GetFileFromPathAsync($ImagePath)) ([Windows.Storage.StorageFile])
+    $stream = Await-Operation ($file.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])
+    $decoder = Await-Operation ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream)) ([Windows.Graphics.Imaging.BitmapDecoder])
+    $bitmap = Await-Operation ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
+    $result = Await-Operation ($engine.RecognizeAsync($bitmap)) ([Windows.Media.Ocr.OcrResult])
+
+    [PSCustomObject]@{
+        ok = $true
+        text = [string]$result.Text
+    } | ConvertTo-Json -Compress
+} catch {
+    $code = if ($_.Exception.Message -like '*LISA_OCR_ENGINE_UNAVAILABLE*') {
+        'OCR_ENGINE_UNAVAILABLE'
+    } elseif (
+        $_.Exception.Message -like '*cannot find*' -or
+        $_.Exception.Message -like '*not found*' -or
+        $_.Exception.Message -like '*access*'
+    ) {
+        'IMAGE_ACCESS_ERROR'
+    } else {
+        'OCR_RUNTIME_ERROR'
+    }
+
+    [PSCustomObject]@{
+        ok = $false
+        code = $code
+    } | ConvertTo-Json -Compress
+    exit 1
+}
+"#;
+
+#[cfg(any(test, all(windows, feature = "ocr")))]
+#[derive(Debug, Deserialize)]
+struct PowerShellOcrResponse {
+    ok: bool,
+    #[serde(default)]
+    text: Option<String>,
+    #[serde(default)]
+    code: Option<String>,
+}
+
+#[cfg(any(test, all(windows, feature = "ocr")))]
+fn build_powershell_ocr_args(script_path: &Path, image_path: &str) -> Vec<OsString> {
+    vec![
+        OsString::from("-NoProfile"),
+        OsString::from("-NonInteractive"),
+        OsString::from("-ExecutionPolicy"),
+        OsString::from("Bypass"),
+        OsString::from("-File"),
+        script_path.as_os_str().to_os_string(),
+        OsString::from(image_path),
+    ]
+}
+
+#[cfg(any(test, all(windows, feature = "ocr")))]
+fn safe_ocr_error_for_code(code: Option<&str>) -> String {
+    match code {
+        Some("OCR_ENGINE_UNAVAILABLE") => {
+            "OCR failed: Windows OCR engine is unavailable on this system.".to_string()
+        }
+        Some("IMAGE_ACCESS_ERROR") => {
+            "OCR failed: screenshot file is missing or not accessible. Capture the screen again."
+                .to_string()
+        }
+        _ => "OCR failed: Windows OCR engine returned a PowerShell error. See terminal logs for details."
+            .to_string(),
+    }
+}
+
+#[cfg(any(test, all(windows, feature = "ocr")))]
+fn sanitize_powershell_failure(stderr: &str) -> String {
+    let lower = stderr.to_ascii_lowercase();
+    if lower.contains("parsererror")
+        || lower.contains("unexpected token")
+        || lower.contains("missing closing")
+        || lower.contains("terminatorexpectedatendofstring")
+    {
+        return "OCR failed: PowerShell script parse error. The local OCR helper could not be parsed."
+            .to_string();
+    }
+    if lower.contains("ocr_engine_unavailable") {
+        return safe_ocr_error_for_code(Some("OCR_ENGINE_UNAVAILABLE"));
+    }
+    if lower.contains("cannot find")
+        || lower.contains("not found")
+        || lower.contains("access is denied")
+    {
+        return safe_ocr_error_for_code(Some("IMAGE_ACCESS_ERROR"));
+    }
+    safe_ocr_error_for_code(None)
+}
+
+#[cfg(any(test, all(windows, feature = "ocr")))]
+fn parse_powershell_ocr_output(
+    stdout: &str,
+    stderr: &str,
+    process_succeeded: bool,
+) -> Result<String, String> {
+    let json = stdout.trim().trim_start_matches('\u{feff}');
+    match serde_json::from_str::<PowerShellOcrResponse>(json) {
+        Ok(response) if response.ok && process_succeeded => Ok(response.text.unwrap_or_default()),
+        Ok(response) if !response.ok => Err(safe_ocr_error_for_code(response.code.as_deref())),
+        Ok(_) => Err(safe_ocr_error_for_code(None)),
+        Err(_) if !process_succeeded => Err(sanitize_powershell_failure(stderr)),
+        Err(_) => Err("OCR failed: Windows OCR engine returned an invalid response.".to_string()),
+    }
+}
+
+#[cfg(any(test, all(windows, feature = "ocr")))]
+fn text_counts(text: &str) -> (usize, usize) {
+    let chars = text.chars().count();
+    let lines = if text.is_empty() {
+        0
+    } else {
+        text.lines().count()
+    };
+    (chars, lines)
+}
+
+#[cfg(all(windows, feature = "ocr"))]
+fn write_windows_ocr_script() -> Result<PathBuf, String> {
+    use std::io::Write;
+
+    let script_path = std::env::temp_dir().join(format!("lisa_ocr_{}.ps1", uuid::Uuid::new_v4()));
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&script_path)
+        .map_err(|_| "OCR failed: could not prepare the local Windows OCR helper.".to_string())?;
+    file.write_all(WINDOWS_OCR_SCRIPT.as_bytes()).map_err(|_| {
+        let _ = std::fs::remove_file(&script_path);
+        "OCR failed: could not prepare the local Windows OCR helper.".to_string()
+    })?;
+    Ok(script_path)
+}
+
 /// Path validation: only allow Lisa-managed temp screenshots.
 /// Rejects arbitrary user-supplied file paths to prevent path traversal.
 pub fn is_lisa_managed_screenshot(path: &str) -> bool {
@@ -118,9 +295,7 @@ pub fn get_ocr_status(manager: tauri::State<'_, OcrManager>) -> OcrStatus {
             available: false,
             provider: OCR_PROVIDER_UNSUPPORTED.to_string(),
             configured: false,
-            error: Some(
-                "OCR is only supported on Windows in this build.".to_string(),
-            ),
+            error: Some("OCR is only supported on Windows in this build.".to_string()),
         }
     }
     #[cfg(not(feature = "ocr"))]
@@ -139,10 +314,7 @@ pub fn get_ocr_status(manager: tauri::State<'_, OcrManager>) -> OcrStatus {
 }
 
 #[tauri::command]
-pub fn run_screen_ocr(
-    image_path: String,
-    manager: tauri::State<'_, OcrManager>,
-) -> OcrResult {
+pub fn run_screen_ocr(image_path: String, manager: tauri::State<'_, OcrManager>) -> OcrResult {
     // Path validation — reject anything that is not a Lisa-managed screenshot.
     if !is_lisa_managed_screenshot(&image_path) {
         return OcrResult {
@@ -165,7 +337,10 @@ pub fn run_screen_ocr(
             text: None,
             chars: 0,
             lines: 0,
-            error: Some("OCR rejected: screenshot file not found.".to_string()),
+            error: Some(
+                "OCR failed: screenshot file is missing or not accessible. Capture the screen again."
+                    .to_string(),
+            ),
         };
     }
 
@@ -203,52 +378,27 @@ pub fn run_screen_ocr(
 }
 
 #[cfg(all(windows, feature = "ocr"))]
-fn run_windows_ocr(
-    image_path: &str,
-    manager: tauri::State<'_, OcrManager>,
-) -> OcrResult {
+fn run_windows_ocr(image_path: &str, manager: tauri::State<'_, OcrManager>) -> OcrResult {
     use std::process::Command;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    // Escape single quotes in path for PowerShell. Path is already validated to be a
-    // Lisa-managed temp file, so injection surface is minimal, but we still escape.
-    let safe_path = image_path.replace('\'', "''");
-
-    // PowerShell script using Windows built-in WinRT OCR engine.
-    // The engine is available on Windows 10 1803+ with at least one language pack.
-    // We print a sentinel so we can distinguish an empty page from a failed run.
-    let script = format!(
-        r#"
-try {{
-    Add-Type -AssemblyName System.Runtime.WindowsRuntime
-    $null = [Windows.Media.Ocr.OcrEngine,Windows.Foundation,ContentType=WindowsRuntime]
-    $null = [Windows.Storage.StorageFile,Windows.Foundation,ContentType=WindowsRuntime]
-    $null = [Windows.Graphics.Imaging.BitmapDecoder,Windows.Foundation,ContentType=WindowsRuntime]
-    function AwaitTask($task) {{ $task.GetAwaiter().GetResult() }}
-    $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages()
-    if ($null -eq $engine) {{
-        Write-Error 'OCR_ENGINE_UNAVAILABLE: No OCR language pack found'
-        exit 1
-    }}
-    $file = AwaitTask([Windows.Storage.StorageFile]::GetFileFromPathAsync('{path}'))
-    $stream = AwaitTask($file.OpenAsync([Windows.Storage.FileAccessMode]::Read))
-    $decoder = AwaitTask([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream))
-    $bitmap = AwaitTask($decoder.GetSoftwareBitmapAsync())
-    $result = AwaitTask($engine.RecognizeAsync($bitmap))
-    $text = $result.Text
-    Write-Output $text
-    Write-Output 'LISA_OCR_DONE'
-}} catch {{
-    Write-Error $_.Exception.Message
-    exit 1
-}}
-"#,
-        path = safe_path
-    );
-
-    let output = Command::new("powershell")
-        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+    let script_path = match write_windows_ocr_script() {
+        Ok(path) => path,
+        Err(error) => {
+            return OcrResult {
+                accepted: false,
+                provider: OCR_PROVIDER_WINDOWS.to_string(),
+                text: None,
+                chars: 0,
+                lines: 0,
+                error: Some(error),
+            };
+        }
+    };
+    let output = Command::new("powershell.exe")
+        .args(build_powershell_ocr_args(&script_path, image_path))
         .output();
+    let _ = std::fs::remove_file(&script_path);
 
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -256,26 +406,49 @@ try {{
         .unwrap_or(0);
 
     match output {
-        Ok(o) if o.status.success() => {
-            let stdout = String::from_utf8_lossy(&o.stdout).to_string();
-            // Strip the sentinel marker.
-            let text = stdout
-                .trim_end_matches("LISA_OCR_DONE")
-                .trim_end_matches('\n')
-                .trim_end_matches('\r')
-                .to_string();
-
-            let chars = text.chars().count();
-            let lines = if text.is_empty() { 0 } else { text.lines().count() };
+        Ok(o) => {
+            let stdout = String::from_utf8_lossy(&o.stdout);
+            let stderr = String::from_utf8_lossy(&o.stderr);
+            let text = match parse_powershell_ocr_output(&stdout, &stderr, o.status.success()) {
+                Ok(text) => text,
+                Err(error) => {
+                    eprintln!(
+                        "Windows OCR process failed: exit_success={} error_class=safe_ocr_failure",
+                        o.status.success()
+                    );
+                    return OcrResult {
+                        accepted: false,
+                        provider: OCR_PROVIDER_WINDOWS.to_string(),
+                        text: None,
+                        chars: 0,
+                        lines: 0,
+                        error: Some(error),
+                    };
+                }
+            };
+            let (chars, lines) = text_counts(&text);
 
             // Store in manager (transient — not persisted).
-            *manager.last_ocr_text.lock().unwrap_or_else(|e| e.into_inner()) =
-                Some(text.clone());
-            *manager.last_ocr_chars.lock().unwrap_or_else(|e| e.into_inner()) = chars;
-            *manager.last_ocr_lines.lock().unwrap_or_else(|e| e.into_inner()) = lines;
-            *manager.last_ocr_provider.lock().unwrap_or_else(|e| e.into_inner()) =
-                Some(OCR_PROVIDER_WINDOWS.to_string());
-            *manager.last_ocr_at.lock().unwrap_or_else(|e| e.into_inner()) = Some(now);
+            *manager
+                .last_ocr_text
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = Some(text.clone());
+            *manager
+                .last_ocr_chars
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = chars;
+            *manager
+                .last_ocr_lines
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = lines;
+            *manager
+                .last_ocr_provider
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = Some(OCR_PROVIDER_WINDOWS.to_string());
+            *manager
+                .last_ocr_at
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = Some(now);
 
             OcrResult {
                 accepted: true,
@@ -286,43 +459,41 @@ try {{
                 error: None,
             }
         }
-        Ok(o) => {
-            // stderr contains error reason — never contains OCR text body.
-            let stderr = String::from_utf8_lossy(&o.stderr).to_string();
-            // Truncate and sanitize the error so it cannot leak OCR text.
-            let short_err = stderr.lines().next().unwrap_or("OCR failed").trim();
-            let safe_err = if short_err.len() > 200 {
-                format!("{}…", &short_err[..200])
-            } else {
-                short_err.to_string()
-            };
-            OcrResult {
-                accepted: false,
-                provider: OCR_PROVIDER_WINDOWS.to_string(),
-                text: None,
-                chars: 0,
-                lines: 0,
-                error: Some(format!("OCR failed: {safe_err}")),
-            }
-        }
-        Err(e) => OcrResult {
+        Err(_) => OcrResult {
             accepted: false,
             provider: OCR_PROVIDER_WINDOWS.to_string(),
             text: None,
             chars: 0,
             lines: 0,
-            error: Some(format!("Failed to launch OCR process: {e}")),
+            error: Some(
+                "OCR failed: Windows PowerShell could not be started on this system.".to_string(),
+            ),
         },
     }
 }
 
 #[tauri::command]
 pub fn clear_screen_text(manager: tauri::State<'_, OcrManager>) -> bool {
-    *manager.last_ocr_text.lock().unwrap_or_else(|e| e.into_inner()) = None;
-    *manager.last_ocr_chars.lock().unwrap_or_else(|e| e.into_inner()) = 0;
-    *manager.last_ocr_lines.lock().unwrap_or_else(|e| e.into_inner()) = 0;
-    *manager.last_ocr_provider.lock().unwrap_or_else(|e| e.into_inner()) = None;
-    *manager.last_ocr_at.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    *manager
+        .last_ocr_text
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = None;
+    *manager
+        .last_ocr_chars
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = 0;
+    *manager
+        .last_ocr_lines
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = 0;
+    *manager
+        .last_ocr_provider
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = None;
+    *manager
+        .last_ocr_at
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = None;
     true
 }
 
@@ -497,23 +668,91 @@ mod tests {
 
     #[test]
     fn path_validation_rejects_empty_path() {
-        assert!(!is_lisa_managed_screenshot(""), "empty path must be rejected");
+        assert!(
+            !is_lisa_managed_screenshot(""),
+            "empty path must be rejected"
+        );
     }
 
     #[test]
     fn line_count_matches_text_content() {
         let text = "line one\nline two\nline three";
-        let lines = text.lines().count();
+        let (chars, lines) = text_counts(text);
         assert_eq!(lines, 3);
-        let chars = text.chars().count();
         assert_eq!(chars, 28);
     }
 
     #[test]
     fn line_count_empty_text_is_zero() {
-        let text = "";
-        let lines = if text.is_empty() { 0 } else { text.lines().count() };
+        let (chars, lines) = text_counts("");
         assert_eq!(lines, 0);
+        assert_eq!(chars, 0);
+    }
+
+    #[test]
+    fn powershell_args_pass_image_path_as_a_separate_argument() {
+        let script_path = Path::new("C:/Temp/lisa_ocr_helper.ps1");
+        let image_path = "C:/Temp/lisa_screen_'quoted'.png";
+        let args = build_powershell_ocr_args(script_path, image_path);
+        assert_eq!(args.last().unwrap(), image_path);
+        assert!(WINDOWS_OCR_SCRIPT.contains("$ImagePath"));
+        assert!(!WINDOWS_OCR_SCRIPT.contains(image_path));
+        assert!(WINDOWS_OCR_SCRIPT.contains("System.Text.UTF8Encoding"));
+    }
+
+    #[test]
+    fn parses_valid_ocr_json_and_counts_text() {
+        let text =
+            parse_powershell_ocr_output(r#"{"ok":true,"text":"Hello\nWorld"}"#, "", true).unwrap();
+        assert_eq!(text, "Hello\nWorld");
+        assert_eq!(text_counts(&text), (11, 2));
+    }
+
+    #[test]
+    fn parses_valid_empty_ocr_json() {
+        let text = parse_powershell_ocr_output(r#"{"ok":true,"text":""}"#, "", true).unwrap();
+        assert!(text.is_empty());
+        assert_eq!(text_counts(&text), (0, 0));
+    }
+
+    #[test]
+    fn rejects_invalid_success_stdout() {
+        let error = parse_powershell_ocr_output("not json", "", true).unwrap_err();
+        assert_eq!(
+            error,
+            "OCR failed: Windows OCR engine returned an invalid response."
+        );
+    }
+
+    #[test]
+    fn classifies_powershell_parse_failure_without_echoing_source() {
+        let stderr = "try {\nAt helper.ps1:1 char:1\n+ CategoryInfo : ParserError";
+        let error = parse_powershell_ocr_output("", stderr, false).unwrap_err();
+        assert!(error.contains("PowerShell script parse error"));
+        assert!(!error.contains("try {"));
+    }
+
+    #[test]
+    fn raw_try_line_never_becomes_the_user_error() {
+        let error = sanitize_powershell_failure("try {");
+        assert_ne!(error, "OCR failed: try {");
+        assert!(error.contains("PowerShell error"));
+    }
+
+    #[test]
+    fn maps_structured_engine_and_path_errors() {
+        let unavailable = parse_powershell_ocr_output(
+            r#"{"ok":false,"code":"OCR_ENGINE_UNAVAILABLE"}"#,
+            "",
+            false,
+        )
+        .unwrap_err();
+        assert!(unavailable.contains("unavailable on this system"));
+
+        let path_error =
+            parse_powershell_ocr_output(r#"{"ok":false,"code":"IMAGE_ACCESS_ERROR"}"#, "", false)
+                .unwrap_err();
+        assert!(path_error.contains("Capture the screen again"));
     }
 
     #[cfg(not(feature = "ocr"))]

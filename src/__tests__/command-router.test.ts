@@ -1406,17 +1406,23 @@ describe("routeCommand — run_screen_ocr", () => {
 });
 
 describe("routeCommand — screen_what_can_you_read", () => {
-  it("routes 'what can you read'", () => {
-    expect(routeCommand("what can you read").intent).toBe("screen_what_can_you_read");
-  });
-  it("routes 'what text is on my screen'", () => {
-    expect(routeCommand("what text is on my screen").intent).toBe("screen_what_can_you_read");
-  });
-  it("routes 'what text can you see'", () => {
-    expect(routeCommand("what text can you see").intent).toBe("screen_what_can_you_read");
-  });
-  it("routes 'show screen text'", () => {
-    expect(routeCommand("show screen text").intent).toBe("screen_what_can_you_read");
+  const aliases = [
+    "what can you read",
+    "what you can read",
+    "what do you read",
+    "what did you read",
+    "what can you read from the screen",
+    "what text can you read",
+    "what text is on my screen",
+    "what text can you see",
+    "show screen text",
+    "read extracted screen text",
+  ];
+
+  it.each(aliases)("routes '%s' deterministically", (command) => {
+    const route = routeCommand(command);
+    expect(route.intent).toBe("screen_what_can_you_read");
+    expect(route.intent).not.toBe("unknown");
   });
   it("has high confidence", () => {
     expect(routeCommand("what can you read").confidence).toBe("high");

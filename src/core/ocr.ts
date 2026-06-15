@@ -29,6 +29,9 @@ export function formatOcrSuccessResponse(result: {
   chars: number;
   provider: string;
 }): string {
+  if (result.chars === 0) {
+    return "OCR completed but no readable text was detected.";
+  }
   return [
     "Screen text extracted locally.",
     `- Lines: ${result.lines}`,
@@ -37,6 +40,29 @@ export function formatOcrSuccessResponse(result: {
     "",
     'Type "what can you read" to view the extracted text.',
   ].join("\n");
+}
+
+export function formatOcrErrorMessage(error?: unknown): string {
+  const message = typeof error === "string"
+    ? error.trim()
+    : error instanceof Error
+      ? error.message.trim()
+      : "";
+
+  if (!message || /^(?:try|catch)\s*\{/i.test(message)) {
+    return "OCR failed: Windows OCR engine returned an unexpected error. See terminal logs for details.";
+  }
+  if (message.startsWith("OCR failed:")) {
+    return message;
+  }
+  if (
+    message.startsWith("OCR not compiled") ||
+    message.startsWith("OCR is only supported") ||
+    message.startsWith("OCR rejected:")
+  ) {
+    return `OCR failed: ${message}`;
+  }
+  return "OCR failed: Windows OCR engine returned an unexpected error. See terminal logs for details.";
 }
 
 export function formatOcrStatusResponse(status: OcrStatusResult): string {

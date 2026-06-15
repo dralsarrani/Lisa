@@ -20,6 +20,7 @@ import { shouldAutoSpeakVoiceReply } from "../../core/voice-conversation";
 import {
   buildOcrAuditDetails,
   buildRunScreenOcrInvokeArgs,
+  formatOcrErrorMessage,
   formatOcrStatusResponse,
   formatOcrSuccessResponse,
   getOcrPreconditionMessage,
@@ -1359,8 +1360,8 @@ export const CommandInput: React.FC = () => {
                     severity: "info",
                   });
                 } else {
-                  const error = result.error ?? "OCR failed.";
-                  response = `OCR could not run: ${error}`;
+                  const error = formatOcrErrorMessage(result.error);
+                  response = error;
                   dispatch({ type: "SET_SCREEN_OCR_STATUS", payload: { status: "error", error } });
                   addAudit({
                     eventType: "ocr_failed",
@@ -1375,8 +1376,8 @@ export const CommandInput: React.FC = () => {
                   });
                 }
               } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                response = `OCR could not run: ${message}`;
+                const message = formatOcrErrorMessage(error);
+                response = message;
                 dispatch({ type: "SET_SCREEN_OCR_STATUS", payload: { status: "error", error: message } });
                 addAudit({
                   eventType: "ocr_failed",

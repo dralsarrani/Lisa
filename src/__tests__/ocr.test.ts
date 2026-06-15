@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildOcrAuditDetails,
   buildRunScreenOcrInvokeArgs,
+  formatOcrErrorMessage,
   formatOcrStatusResponse,
   formatOcrSuccessResponse,
   getOcrPreconditionMessage,
@@ -47,6 +48,28 @@ describe("OCR command helpers", () => {
     expect(response).toContain("Lines: 3");
     expect(response).toContain('Type "what can you read"');
     expect(response).not.toContain("sensitive OCR body");
+  });
+
+  it("formats empty OCR output as a completed scan with no readable text", () => {
+    expect(
+      formatOcrSuccessResponse({ lines: 0, chars: 0, provider: "windows_ocr" })
+    ).toBe("OCR completed but no readable text was detected.");
+  });
+
+  it("does not expose an echoed PowerShell source line as the OCR error", () => {
+    const error = formatOcrErrorMessage("try {");
+    expect(error).toContain("unexpected error");
+    expect(error).not.toContain("try {");
+  });
+
+  it("preserves safe actionable backend OCR errors", () => {
+    expect(
+      formatOcrErrorMessage(
+        "OCR failed: screenshot file is missing or not accessible. Capture the screen again."
+      )
+    ).toBe(
+      "OCR failed: screenshot file is missing or not accessible. Capture the screen again."
+    );
   });
 
   it("formats deterministic OCR status", () => {

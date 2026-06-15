@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import type { LisaSettings, LisaModeId } from "../../core/types";
 import { buildSpeakTextInvokeArgs, SpeakTextResult, buildTtsStatusLabel } from "../../core/tts";
-import { getOcrPreconditionMessage } from "../../core/ocr";
+import { buildOcrAuditDetails, formatOcrErrorMessage, getOcrPreconditionMessage } from "../../core/ocr";
 import { CONVERSATION_HISTORY_CAP, MEMORY_NOTES_CAP, MEMORY_NOTE_CHAR_LIMIT } from "../../core/types";
 import { LISA_MODES } from "../../core/mode-store";
 import { useLisa } from "../../app/useLisa";
@@ -509,25 +509,30 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings }) => {
             severity: "info",
           });
         } else {
-          dispatch({ type: "SET_SCREEN_OCR_STATUS", payload: { status: "error", error: result.error } });
-          setOcrError(result.error ?? "OCR failed.");
+          const error = formatOcrErrorMessage(result.error);
+          dispatch({ type: "SET_SCREEN_OCR_STATUS", payload: { status: "error", error } });
+          setOcrError(error);
           addAudit({
             eventType: "ocr_failed",
             source: "settings_panel",
             summary: "OCR failed.",
-            details: `reason=${result.error ?? "unknown"}`,
+            details: buildOcrAuditDetails({
+              source: "manual_button",
+              outcome: "failed",
+              provider: result.provider,
+            }),
             severity: "warning",
           });
         }
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        dispatch({ type: "SET_SCREEN_OCR_STATUS", payload: { status: "error", error: msg } });
-        setOcrError(msg);
+        const error = formatOcrErrorMessage(e);
+        dispatch({ type: "SET_SCREEN_OCR_STATUS", payload: { status: "error", error } });
+        setOcrError(error);
         addAudit({
           eventType: "ocr_failed",
           source: "settings_panel",
           summary: "OCR failed.",
-          details: `reason=${msg}`,
+          details: buildOcrAuditDetails({ source: "manual_button", outcome: "failed" }),
           severity: "warning",
         });
       }
